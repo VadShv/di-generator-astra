@@ -1,0 +1,228 @@
+'use client'
+
+import { useEffect, useState, useCallback } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { useToast } from '@/hooks/use-toast'
+import { Plus, Trash2, GitBranch } from 'lucide-react'
+
+interface Department { id: string; name: string; code: string }
+interface Position { id: string; title: string; code: string; departmentId: string; department: Department }
+interface GeneratedDI { id: string; positionId: string; title: string; status: string; position: Position; trackings: DITracking[]; createdAt: string; updatedAt: string }
+interface DITracking { id: string; generatedDIId: string; status: string; assignee: string | null; notes: string | null; createdAt: string; generatedDI?: GeneratedDI }
+
+const STATUSES = [
+  { value: 'draft', label: 'Черновик', color: 'bg-slate-200 text-slate-800' },
+  { value: 'sent_for_review', label: 'На рассмотрении', color: 'bg-amber-100 text-amber-800' },
+  { value: 'returned_with_comments', label: 'Возвращена с комментариями', color: 'bg-orange-100 text-orange-800' },
+  { value: 'approved', label: 'Согласована', color: 'bg-emerald-100 text-emerald-800' },
+  { value: 'rejected', label: 'Отклонена', color: 'bg-red-100 text-red-800' },
+  { value: 'signed', label: 'Подписана', color: 'bg-teal-100 text-teal-800' },
+  { value: 'cancelled', label: 'Отменена', color: 'bg-gray-100 text-gray-800' },
+]
+
+function getStatusInfo(status: string) { return STATUSES.find(s => s.value === status) ?? STATUSES[0] }
+
+export function TrackingModule() {
+  const { toast } = useToast()
+  const [trackings, setTrackings] = useState<DITracking[]>([])
+  const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Dialogs
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false)
+  const [timelineDialogOpen, setTimelineDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+
+  // Form
+  const [formDIId, setFormDIId] = useState('')
+  const [formStatus, setFormStatus] = useState('sent_for_review')
+  const [formAssignee, setFormAssignee] = useState('')
+  const [formNotes, setFormNotes] = useState('')
+  const [selectedTracking, setSelectedTracking] = useState<DITracking | null>(null)
+  const [timelineDIId, setTimelineDIId] = useState<string | null>(null)
+
+  const fetchTrackings = useCallback(async () => {
+    try {
+      const params = new URLSearchParams()
+      if (filterStatus && filterStatus !== 'all') params.set('status', filterStatus)
+      const res = await fetch(`/api/tracking?${params.toString()}`)
+      if (!res.ok) throw new Error()
+      setTrackings(await res.json())
+    } catch { toast({ title: 'Ошибка', description: 'Не удалось загрузить данные', variant: 'destructive' }) }
+  }, [filterStatus, toast])
+
+  const fetchDIs = useCallback(async () => {
+    try { const res = await fetch('/api/generated-di'); if (!res.ok) throw new Error(); setGeneratedDIs(await res.json()) } catch { /* silent */ }
+  }, [])
+
+  useEffect(() => { (async () => { setLoading(true); await Promise.all([fetchTrackings(), fetchDIs()]); setLoading(false) })() }, [fetchTrackings, fetchDIs])
+
+  const resetForm = () => { setFormDIId(''); setFormStatus('sent_for_review'); setFormAssignee(''); setFormNotes('') }
+
+  const handleCreate = async () => {
+    if (!formDIId || !formStatus) { toast({ title: 'Ошибка', description: 'Выберите ДИ и статус', variant: 'destructive' }); return }
+    try {
+      const res = await fetch('/api/tracking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ generatedDIId: formDIId, status: formStatus, assignee: formAssignee || null, notes: formNotes || null }) })
+      if (!res.ok) throw new Error()
+      toast({ title: 'Успешно', description: 'Запись добавлена' }); resetForm(); setAddDialogOpen(false); fetchTrackings(); fetchDIs()
+    } catch { toast({ title: 'Ошибка', description: 'Не удалось создать запись', variant: 'destructive' }) }
+  }
+
+  const handleStatusChange = async () => {
+    if (!selectedTracking) return
+    try {
+      const res = await fetch('/api/tracking', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: selectedTracking.id, status: formStatus, assignee: formAssignee || selectedTracking.assignee, notes: formNotes || selectedTracking.notes }) })
+      if (!res.ok) throw new Error()
+      toast({ title: 'Успешно', description: 'Статус обновлён' }); setStatusDialogOpen(false); setSelectedTracking(null); resetForm(); fetchTrackings(); fetchDIs()
+    } catch { toast({ title: 'Ошибка', description: 'Не удалось обновить', variant: 'destructive' }) }
+  }
+
+  const handleDelete = async () => {
+    if (!selectedTracking) return
+    try {
+      const res = await fetch('/api/tracking', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: selectedTracking.id }) })
+      if (!res.ok) throw new Error()
+      toast({ title: 'Удалено' }); setDeleteDialogOpen(false); setSelectedTracking(null); fetchTrackings()
+    } catch { toast({ title: 'Ошибка', description: 'Не удалось удалить', variant: 'destructive' }) }
+  }
+
+  const handleUpdateDIStatus = async (diId: string, status: string) => {
+    try {
+      const res = await fetch('/api/tracking/update-di-status', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ generatedDIId: diId, status }) })
+      if (!res.ok) throw new Error()
+      toast({ title: 'Статус ДИ обновлён' }); fetchDIs()
+    } catch { toast({ title: 'Ошибка', description: 'Не удалось обновить статус ДИ', variant: 'destructive' }) }
+  }
+
+  // Get latest tracking per DI
+  const latestPerDI: Record<string, DITracking> = {}
+  for (const t of trackings) { if (!latestPerDI[t.generatedDIId] || new Date(t.createdAt) > new Date(latestPerDI[t.generatedDIId].createdAt)) latestPerDI[t.generatedDIId] = t }
+
+  const disWithTracking = generatedDIs.filter(di => latestPerDI[di.id]).map(di => ({ ...di, latestTracking: latestPerDI[di.id] }))
+  const filteredDIs = disWithTracking.filter(di => {
+    if (searchQuery) { const q = searchQuery.toLowerCase(); return di.title.toLowerCase().includes(q) || di.position?.title?.toLowerCase().includes(q) || (di.latestTracking.assignee && di.latestTracking.assignee.toLowerCase().includes(q)) }
+    return true
+  })
+
+  // Kanban columns
+  const kanbanColumns = STATUSES.map(s => ({ ...s, items: filteredDIs.filter(di => di.latestTracking.status === s.value) }))
+
+  // Stats
+  const stats = STATUSES.map(s => ({ ...s, count: disWithTracking.filter(di => di.latestTracking.status === s.value).length }))
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div><h1 className="text-2xl font-bold flex items-center gap-2"><GitBranch className="h-6 w-6" /> Отслеживание</h1><p className="text-sm text-muted-foreground">Согласование и подписание ДИ</p></div>
+        <Button onClick={() => { resetForm(); setAddDialogOpen(true) }}><Plus className="h-4 w-4 mr-1" /> Добавить запись</Button>
+      </div>
+
+      {/* Stats */}
+      <div className="flex flex-wrap gap-2">{stats.map(s => s.count > 0 && <Badge key={s.value} className={`${s.color} border-0`}>{s.label}: {s.count}</Badge>)}</div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2">
+        <Input placeholder="Поиск..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="max-w-xs" />
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Статус" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">Все статусы</SelectItem>{STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
+
+      {loading ? <p className="text-center py-8 text-muted-foreground">Загрузка...</p> : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {kanbanColumns.map(col => col.items.length > 0 && (
+            <div key={col.value}>
+              <div className="flex items-center gap-2 mb-2"><Badge className={`${col.color} border-0`}>{col.label}</Badge><span className="text-sm text-muted-foreground">{col.items.length}</span></div>
+              <div className="space-y-2">
+                {col.items.map(di => (
+                  <Card key={di.id} className="cursor-pointer hover:shadow-sm" onClick={() => { setTimelineDIId(di.id); setTimelineDialogOpen(true) }}>
+                    <CardContent className="p-3">
+                      <p className="font-medium text-sm">{di.title}</p>
+                      <p className="text-xs text-muted-foreground">{di.position?.title}</p>
+                      {di.latestTracking.assignee && <p className="text-xs mt-1">Исполнитель: {di.latestTracking.assignee}</p>}
+                      <p className="text-xs text-muted-foreground mt-1">{new Date(di.latestTracking.createdAt).toLocaleDateString('ru-RU')}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Dialog */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent><DialogHeader><DialogTitle>Добавить запись отслеживания</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>ДИ *</Label><Select value={formDIId} onValueChange={setFormDIId}><SelectTrigger><SelectValue placeholder="Выберите ДИ" /></SelectTrigger><SelectContent>{generatedDIs.map(di => <SelectItem key={di.id} value={di.id}>{di.title}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Статус *</Label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger /><SelectContent>{STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Исполнитель</Label><Input value={formAssignee} onChange={e => setFormAssignee(e.target.value)} /></div>
+            <div><Label>Примечание</Label><Textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} className="min-h-[60px]" /></div>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setAddDialogOpen(false)}>Отмена</Button><Button onClick={handleCreate}>Добавить</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Status Change Dialog */}
+      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+        <DialogContent><DialogHeader><DialogTitle>Изменить статус</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Новый статус</Label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger /><SelectContent>{STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Исполнитель</Label><Input value={formAssignee} onChange={e => setFormAssignee(e.target.value)} /></div>
+            <div><Label>Примечание</Label><Textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} className="min-h-[60px]" /></div>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setStatusDialogOpen(false)}>Отмена</Button><Button onClick={handleStatusChange}>Обновить</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Timeline Dialog */}
+      <Dialog open={timelineDialogOpen} onOpenChange={setTimelineDialogOpen}>
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>История согласования</DialogTitle></DialogHeader>
+          <div className="space-y-2">
+            {timelineDIId && trackings.filter(t => t.generatedDIId === timelineDIId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(t => (
+              <div key={t.id} className="border rounded-lg p-3 space-y-1">
+                <div className="flex items-center justify-between"><Badge className={`${getStatusInfo(t.status).color} border-0`}>{getStatusInfo(t.status).label}</Badge><span className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleDateString('ru-RU')}</span></div>
+                {t.assignee && <p className="text-sm">Исполнитель: {t.assignee}</p>}
+                {t.notes && <p className="text-sm text-muted-foreground">{t.notes}</p>}
+                <div className="flex gap-1 mt-1">
+                  <Button variant="outline" size="sm" onClick={() => { setSelectedTracking(t); setFormStatus(t.status); setFormAssignee(t.assignee || ''); setFormNotes(''); setStatusDialogOpen(true) }}>Изменить</Button>
+                  <Button variant="outline" size="sm" className="text-destructive" onClick={() => { setSelectedTracking(t); setDeleteDialogOpen(true) }}>Удалить</Button>
+                </div>
+              </div>
+            ))}
+            {timelineDIId && (
+              <Button className="mt-2" size="sm" onClick={() => { setTimelineDialogOpen(false); handleUpdateDIStatus(timelineDIId, 'approved') }}>Утвердить ДИ</Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Удалить запись?</AlertDialogTitle></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Отмена</AlertDialogCancel><AlertDialogAction onClick={handleDelete}>Удалить</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}

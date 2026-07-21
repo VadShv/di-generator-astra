@@ -1,0 +1,1578 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useCallback, useMemo } from 'react'
+     4→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+     5→import { Button } from '@/components/ui/button'
+     6→import { Input } from '@/components/ui/input'
+     7→import { Label } from '@/components/ui/label'
+     8→import { Textarea } from '@/components/ui/textarea'
+     9→import { Badge } from '@/components/ui/badge'
+    10→import { Checkbox } from '@/components/ui/checkbox'
+    11→import {
+    12→  Table,
+    13→  TableBody,
+    14→  TableCell,
+    15→  TableHead,
+    16→  TableHeader,
+    17→  TableRow,
+    18→} from '@/components/ui/table'
+    19→import {
+    20→  Dialog,
+    21→  DialogContent,
+    22→  DialogDescription,
+    23→  DialogFooter,
+    24→  DialogHeader,
+    25→  DialogTitle,
+    26→} from '@/components/ui/dialog'
+    27→import {
+    28→  AlertDialog,
+    29→  AlertDialogAction,
+    30→  AlertDialogCancel,
+    31→  AlertDialogContent,
+    32→  AlertDialogDescription,
+    33→  AlertDialogFooter,
+    34→  AlertDialogHeader,
+    35→  AlertDialogTitle,
+    36→} from '@/components/ui/alert-dialog'
+    37→import {
+    38→  Select,
+    39→  SelectContent,
+    40→  SelectItem,
+    41→  SelectTrigger,
+    42→  SelectValue,
+    43→} from '@/components/ui/select'
+    44→import {
+    45→  Accordion,
+    46→  AccordionContent,
+    47→  AccordionItem,
+    48→  AccordionTrigger,
+    49→} from '@/components/ui/accordion'
+    50→import { ScrollArea } from '@/components/ui/scroll-area'
+    51→import { Separator } from '@/components/ui/separator'
+    52→import { Switch } from '@/components/ui/switch'
+    53→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    54→import { useToast } from '@/hooks/use-toast'
+    55→import {
+    56→  Brain,
+    57→  Plus,
+    58→  Search,
+    59→  Eye,
+    60→  Pencil,
+    61→  Trash2,
+    62→  GitBranch,
+    63→  Copy,
+    64→  CheckCircle2,
+    65→  XCircle,
+    66→  Layers,
+    67→  Filter,
+    68→  ArrowRight,
+    69→  FileText,
+    70→  Sparkles,
+    71→  ChevronDown,
+    72→  AlertCircle,
+    73→  Activity,
+    74→} from 'lucide-react'
+    75→
+    76→// ============================================
+    77→// Types
+    78→// ============================================
+    79→
+    80→interface Department {
+    81→  id: string
+    82→  name: string
+    83→  code: string
+    84→}
+    85→
+    86→interface MasterPrompt {
+    87→  id: string
+    88→  name: string
+    89→  content: string
+    90→  version: number
+    91→  isActive: boolean
+    92→  departmentId: string | null
+    93→  department: Department | null
+    94→  domain: string | null
+    95→  grade: string | null
+    96→  functionType: string | null
+    97→  description: string | null
+    98→  createdAt: string
+    99→  updatedAt: string
+   100→}
+   101→
+   102→interface Position {
+   103→  id: string
+   104→  title: string
+   105→  code: string
+   106→  departmentId: string
+   107→  department: Department
+   108→  grade: string | null
+   109→  domain: string | null
+   110→  functions: string | null
+   111→}
+   112→
+   113→interface PromptGroup {
+   114→  name: string
+   115→  prompts: MasterPrompt[]
+   116→  activeVersion: MasterPrompt | undefined
+   117→  latestVersion: MasterPrompt
+   118→}
+   119→
+   120→// ============================================
+   121→// Main Component
+   122→// ============================================
+   123→
+   124→export function MasterPromptsModule() {
+   125→  const { toast } = useToast()
+   126→
+   127→  // Data state
+   128→  const [prompts, setPrompts] = useState<MasterPrompt[]>([])
+   129→  const [departments, setDepartments] = useState<Department[]>([])
+   130→  const [positions, setPositions] = useState<Position[]>([])
+   131→  const [loading, setLoading] = useState(true)
+   132→
+   133→  // Filter state
+   134→  const [filterName, setFilterName] = useState('')
+   135→  const [filterDepartmentId, setFilterDepartmentId] = useState('all')
+   136→  const [filterDomain, setFilterDomain] = useState('')
+   137→  const [filterGrade, setFilterGrade] = useState('')
+   138→  const [filterFunctionType, setFilterFunctionType] = useState('')
+   139→  const [filterIsActive, setFilterIsActive] = useState<string>('all')
+   140→  const [showFilters, setShowFilters] = useState(false)
+   141→
+   142→  // Dialog states
+   143→  const [editDialogOpen, setEditDialogOpen] = useState(false)
+   144→  const [viewDialogOpen, setViewDialogOpen] = useState(false)
+   145→  const [versionDialogOpen, setVersionDialogOpen] = useState(false)
+   146→  const [diffDialogOpen, setDiffDialogOpen] = useState(false)
+   147→  const [resolverDialogOpen, setResolverDialogOpen] = useState(false)
+   148→  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+   149→
+   150→  // Form state
+   151→  const [editingPrompt, setEditingPrompt] = useState<MasterPrompt | null>(null)
+   152→  const [viewingPrompt, setViewingPrompt] = useState<MasterPrompt | null>(null)
+   153→  const [versionPromptName, setVersionPromptName] = useState('')
+   154→  const [versionHistory, setVersionHistory] = useState<MasterPrompt[]>([])
+   155→  const [deletingPrompt, setDeletingPrompt] = useState<MasterPrompt | null>(null)
+   156→
+   157→  // Form fields
+   158→  const [formName, setFormName] = useState('')
+   159→  const [formContent, setFormContent] = useState('')
+   160→  const [formDescription, setFormDescription] = useState('')
+   161→  const [formDepartmentId, setFormDepartmentId] = useState('')
+   162→  const [formDomain, setFormDomain] = useState('')
+   163→  const [formGrade, setFormGrade] = useState('')
+   164→  const [formFunctionType, setFormFunctionType] = useState('')
+   165→  const [formCreateNewVersion, setFormCreateNewVersion] = useState(false)
+   166→
+   167→  // Diff state
+   168→  const [diffLeftVersion, setDiffLeftVersion] = useState<MasterPrompt | null>(null)
+   169→  const [diffRightVersion, setDiffRightVersion] = useState<MasterPrompt | null>(null)
+   170→
+   171→  // Resolver state
+   172→  const [resolverPositionId, setResolverPositionId] = useState('')
+   173→  const [resolverResult, setResolverResult] = useState<{
+   174→    prompt: MasterPrompt | null
+   175→    resolution: {
+   176→      score: number
+   177→      matchDetails: string[]
+   178→      position: {
+   179→        id: string
+   180→        title: string
+   181→        departmentId: string
+   182→        departmentName: string | undefined
+   183→        domain: string | null
+   184→        grade: string | null
+   185→        functions: string | null
+   186→      }
+   187→      evaluatedPrompts: {
+   188→        id: string
+   189→        name: string
+   190→        version: number
+   191→        score: number
+   192→        matchDetails: string[]
+   193→      }[]
+   194→    } | null
+   195→  } | null>(null)
+   196→  const [resolverLoading, setResolverLoading] = useState(false)
+   197→
+   198→  // Existing domain suggestions
+   199→  const [domainSuggestions, setDomainSuggestions] = useState<string[]>([])
+   200→  const [gradeSuggestions, setGradeSuggestions] = useState<string[]>([])
+   201→  const [functionTypeSuggestions, setFunctionTypeSuggestions] = useState<string[]>([])
+   202→
+   203→  // ============================================
+   204→  // Data fetching
+   205→  // ============================================
+   206→
+   207→  const fetchPrompts = useCallback(async () => {
+   208→    try {
+   209→      setLoading(true)
+   210→      const params = new URLSearchParams()
+   211→      if (filterName) params.set('name', filterName)
+   212→      if (filterDepartmentId && filterDepartmentId !== 'all') params.set('departmentId', filterDepartmentId)
+   213→      if (filterDomain) params.set('domain', filterDomain)
+   214→      if (filterGrade) params.set('grade', filterGrade)
+   215→      if (filterFunctionType) params.set('functionType', filterFunctionType)
+   216→      if (filterIsActive !== 'all') params.set('isActive', filterIsActive)
+   217→
+   218→      const res = await fetch(`/api/master-prompts?${params.toString()}`)
+   219→      if (!res.ok) throw new Error('Failed to fetch')
+   220→      const data = await res.json()
+   221→      setPrompts(data)
+   222→
+   223→      // Extract suggestions
+   224→      const domains = [...new Set(data.filter((p: MasterPrompt) => p.domain).map((p: MasterPrompt) => p.domain as string))]
+   225→      const grades = [...new Set(data.filter((p: MasterPrompt) => p.grade).map((p: MasterPrompt) => p.grade as string))]
+   226→      const funcTypes = [...new Set(data.filter((p: MasterPrompt) => p.functionType).map((p: MasterPrompt) => p.functionType as string))]
+   227→      setDomainSuggestions(domains)
+   228→      setGradeSuggestions(grades)
+   229→      setFunctionTypeSuggestions(funcTypes)
+   230→    } catch {
+   231→      toast({ title: 'Ошибка', description: 'Не удалось загрузить мастер-промпты', variant: 'destructive' })
+   232→    } finally {
+   233→      setLoading(false)
+   234→    }
+   235→  }, [filterName, filterDepartmentId, filterDomain, filterGrade, filterFunctionType, filterIsActive, toast])
+   236→
+   237→  const fetchDepartments = useCallback(async () => {
+   238→    try {
+   239→      const res = await fetch('/api/departments')
+   240→      if (!res.ok) throw new Error('Failed to fetch')
+   241→      const data = await res.json()
+   242→      setDepartments(data)
+   243→    } catch {
+   244→      toast({ title: 'Ошибка', description: 'Не удалось загрузить подразделения', variant: 'destructive' })
+   245→    }
+   246→  }, [toast])
+   247→
+   248→  const fetchPositions = useCallback(async () => {
+   249→    try {
+   250→      const res = await fetch('/api/positions')
+   251→      if (!res.ok) throw new Error('Failed to fetch')
+   252→      const data = await res.json()
+   253→      setPositions(data)
+   254→    } catch {
+   255→      toast({ title: 'Ошибка', description: 'Не удалось загрузить должности', variant: 'destructive' })
+   256→    }
+   257→  }, [toast])
+   258→
+   259→  useEffect(() => {
+   260→    fetchPrompts()
+   261→  }, [fetchPrompts])
+   262→
+   263→  useEffect(() => {
+   264→    fetchDepartments()
+   265→    fetchPositions()
+   266→  }, [fetchDepartments, fetchPositions])
+   267→
+   268→  // ============================================
+   269→  // Computed data
+   270→  // ============================================
+   271→
+   272→  const groupedPrompts = useMemo(() => {
+   273→    const groups: Record<string, MasterPrompt[]> = {}
+   274→    for (const prompt of prompts) {
+   275→      if (!groups[prompt.name]) groups[prompt.name] = []
+   276→      groups[prompt.name].push(prompt)
+   277→    }
+   278→    const result: PromptGroup[] = Object.entries(groups).map(([name, promptList]) => ({
+   279→      name,
+   280→      prompts: promptList.sort((a, b) => b.version - a.version),
+   281→      activeVersion: promptList.find((p) => p.isActive),
+   282→      latestVersion: promptList.sort((a, b) => b.version - a.version)[0],
+   283→    }))
+   284→    return result.sort((a, b) => a.name.localeCompare(b.name))
+   285→  }, [prompts])
+   286→
+   287→  // ============================================
+   288→  // Handlers
+   289→  // ============================================
+   290→
+   291→  const openCreateDialog = () => {
+   292→    setEditingPrompt(null)
+   293→    setFormName('')
+   294→    setFormContent('')
+   295→    setFormDescription('')
+   296→    setFormDepartmentId('')
+   297→    setFormDomain('')
+   298→    setFormGrade('')
+   299→    setFormFunctionType('')
+   300→    setFormCreateNewVersion(false)
+   301→    setEditDialogOpen(true)
+   302→  }
+   303→
+   304→  const openEditDialog = (prompt: MasterPrompt) => {
+   305→    setEditingPrompt(prompt)
+   306→    setFormName(prompt.name)
+   307→    setFormContent(prompt.content)
+   308→    setFormDescription(prompt.description || '')
+   309→    setFormDepartmentId(prompt.departmentId || '')
+   310→    setFormDomain(prompt.domain || '')
+   311→    setFormGrade(prompt.grade || '')
+   312→    setFormFunctionType(prompt.functionType || '')
+   313→    setFormCreateNewVersion(false)
+   314→    setEditDialogOpen(true)
+   315→  }
+   316→
+   317→  const openViewDialog = (prompt: MasterPrompt) => {
+   318→    setViewingPrompt(prompt)
+   319→    setViewDialogOpen(true)
+   320→  }
+   321→
+   322→  const openVersionDialog = async (name: string) => {
+   323→    setVersionPromptName(name)
+   324→    try {
+   325→      const res = await fetch(`/api/master-prompts/versions?name=${encodeURIComponent(name)}`)
+   326→      if (!res.ok) throw new Error('Failed to fetch')
+   327→      const data = await res.json()
+   328→      setVersionHistory(data)
+   329→      setVersionDialogOpen(true)
+   330→    } catch {
+   331→      toast({ title: 'Ошибка', description: 'Не удалось загрузить версии', variant: 'destructive' })
+   332→    }
+   333→  }
+   334→
+   335→  const openDiffDialog = (left: MasterPrompt, right: MasterPrompt) => {
+   336→    setDiffLeftVersion(left)
+   337→    setDiffRightVersion(right)
+   338→    setDiffDialogOpen(true)
+   339→  }
+   340→
+   341→  const openDeleteDialog = (prompt: MasterPrompt) => {
+   342→    setDeletingPrompt(prompt)
+   343→    setDeleteDialogOpen(true)
+   344→  }
+   345→
+   346→  const handleSave = async () => {
+   347→    if (!formName.trim() || !formContent.trim()) {
+   348→      toast({ title: 'Ошибка', description: 'Название и содержимое обязательны', variant: 'destructive' })
+   349→      return
+   350→    }
+   351→
+   352→    try {
+   353→      if (editingPrompt && !formCreateNewVersion) {
+   354→        // Update existing
+   355→        const res = await fetch('/api/master-prompts', {
+   356→          method: 'PUT',
+   357→          headers: { 'Content-Type': 'application/json' },
+   358→          body: JSON.stringify({
+   359→            id: editingPrompt.id,
+   360→            name: formName,
+   361→            content: formContent,
+   362→            description: formDescription,
+   363→            departmentId: formDepartmentId || null,
+   364→            domain: formDomain || null,
+   365→            grade: formGrade || null,
+   366→            functionType: formFunctionType || null,
+   367→          }),
+   368→        })
+   369→        if (!res.ok) throw new Error('Failed to update')
+   370→        toast({ title: 'Успешно', description: 'Мастер-промпт обновлён' })
+   371→      } else if (editingPrompt && formCreateNewVersion) {
+   372→        // Create new version
+   373→        const res = await fetch('/api/master-prompts', {
+   374→          method: 'POST',
+   375→          headers: { 'Content-Type': 'application/json' },
+   376→          body: JSON.stringify({
+   377→            name: formName,
+   378→            content: formContent,
+   379→            description: formDescription,
+   380→            departmentId: formDepartmentId || null,
+   381→            domain: formDomain || null,
+   382→            grade: formGrade || null,
+   383→            functionType: formFunctionType || null,
+   384→          }),
+   385→        })
+   386→        if (!res.ok) throw new Error('Failed to create')
+   387→        toast({ title: 'Успешно', description: 'Новая версия мастер-промпта создана' })
+   388→      } else {
+   389→        // Create new
+   390→        const res = await fetch('/api/master-prompts', {
+   391→          method: 'POST',
+   392→          headers: { 'Content-Type': 'application/json' },
+   393→          body: JSON.stringify({
+   394→            name: formName,
+   395→            content: formContent,
+   396→            description: formDescription,
+   397→            departmentId: formDepartmentId || null,
+   398→            domain: formDomain || null,
+   399→            grade: formGrade || null,
+   400→            functionType: formFunctionType || null,
+   401→          }),
+   402→        })
+   403→        if (!res.ok) throw new Error('Failed to create')
+   404→        toast({ title: 'Успешно', description: 'Мастер-промпт создан' })
+   405→      }
+   406→
+   407→      setEditDialogOpen(false)
+   408→      fetchPrompts()
+   409→    } catch {
+   410→      toast({ title: 'Ошибка', description: 'Не удалось сохранить мастер-промпт', variant: 'destructive' })
+   411→    }
+   412→  }
+   413→
+   414→  const handleDelete = async () => {
+   415→    if (!deletingPrompt) return
+   416→    try {
+   417→      const res = await fetch('/api/master-prompts', {
+   418→        method: 'DELETE',
+   419→        headers: { 'Content-Type': 'application/json' },
+   420→        body: JSON.stringify({ id: deletingPrompt.id }),
+   421→      })
+   422→      if (!res.ok) throw new Error('Failed to delete')
+   423→      toast({ title: 'Успешно', description: 'Мастер-промпт удалён' })
+   424→      setDeleteDialogOpen(false)
+   425→      fetchPrompts()
+   426→    } catch {
+   427→      toast({ title: 'Ошибка', description: 'Не удалось удалить мастер-промпт', variant: 'destructive' })
+   428→    }
+   429→  }
+   430→
+   431→  const handleToggleActive = async (prompt: MasterPrompt) => {
+   432→    try {
+   433→      const res = await fetch('/api/master-prompts', {
+   434→        method: 'PUT',
+   435→        headers: { 'Content-Type': 'application/json' },
+   436→        body: JSON.stringify({ id: prompt.id, isActive: !prompt.isActive }),
+   437→      })
+   438→      if (!res.ok) throw new Error('Failed to toggle')
+   439→      toast({
+   440→        title: 'Успешно',
+   441→        description: prompt.isActive ? 'Версия деактивирована' : 'Версия активирована',
+   442→      })
+   443→      fetchPrompts()
+   444→    } catch {
+   445→      toast({ title: 'Ошибка', description: 'Не удалось изменить статус', variant: 'destructive' })
+   446→    }
+   447→  }
+   448→
+   449→  const handleResolve = async () => {
+   450→    if (!resolverPositionId) {
+   451→      toast({ title: 'Ошибка', description: 'Выберите должность', variant: 'destructive' })
+   452→      return
+   453→    }
+   454→    setResolverLoading(true)
+   455→    try {
+   456→      const res = await fetch('/api/master-prompts/resolve', {
+   457→        method: 'POST',
+   458→        headers: { 'Content-Type': 'application/json' },
+   459→        body: JSON.stringify({ positionId: resolverPositionId }),
+   460→      })
+   461→      if (!res.ok) throw new Error('Failed to resolve')
+   462→      const data = await res.json()
+   463→      setResolverResult(data)
+   464→    } catch {
+   465→      toast({ title: 'Ошибка', description: 'Не удалось разрешить промпт', variant: 'destructive' })
+   466→    } finally {
+   467→      setResolverLoading(false)
+   468→    }
+   469→  }
+   470→
+   471→  const handleDuplicatePrompt = (prompt: MasterPrompt) => {
+   472→    setEditingPrompt(null)
+   473→    setFormName(prompt.name)
+   474→    setFormContent(prompt.content)
+   475→    setFormDescription(`Копия версии ${prompt.version}`)
+   476→    setFormDepartmentId(prompt.departmentId || '')
+   477→    setFormDomain(prompt.domain || '')
+   478→    setFormGrade(prompt.grade || '')
+   479→    setFormFunctionType(prompt.functionType || '')
+   480→    setFormCreateNewVersion(false)
+   481→    setEditDialogOpen(true)
+   482→  }
+   483→
+   484→  // ============================================
+   485→  // Diff computation
+   486→  // ============================================
+   487→
+   488→  const computeDiff = (left: string, right: string) => {
+   489→    const leftLines = left.split('\n')
+   490→    const rightLines = right.split('\n')
+   491→    const maxLen = Math.max(leftLines.length, rightLines.length)
+   492→    const result: { left: string; right: string; type: 'same' | 'added' | 'removed' | 'changed' }[] = []
+   493→
+   494→    for (let i = 0; i < maxLen; i++) {
+   495→      const lLine = i < leftLines.length ? leftLines[i] : undefined
+   496→      const rLine = i < rightLines.length ? rightLines[i] : undefined
+   497→
+   498→      if (lLine === rLine) {
+   499→        result.push({ left: lLine || '', right: rLine || '', type: 'same' })
+   500→      } else if (lLine === undefined) {
+   501→        result.push({ left: '', right: rLine || '', type: 'added' })
+   502→      } else if (rLine === undefined) {
+   503→        result.push({ left: lLine, right: '', type: 'removed' })
+   504→      } else {
+   505→        result.push({ left: lLine, right: rLine, type: 'changed' })
+   506→      }
+   507→    }
+   508→    return result
+   509→  }
+   510→
+   511→  // ============================================
+   512→  // Stats
+   513→  // ============================================
+   514→
+   515→  const stats = useMemo(() => ({
+   516→    total: prompts.length,
+   517→    active: prompts.filter((p) => p.isActive).length,
+   518→    groups: groupedPrompts.length,
+   519→    withDepartment: prompts.filter((p) => p.departmentId).length,
+   520→  }), [prompts, groupedPrompts])
+   521→
+   522→  // ============================================
+   523→  // Render
+   524→  // ============================================
+   525→
+   526→  return (
+   527→    <div className="space-y-6">
+   528→      {/* Header */}
+   529→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   530→        <div>
+   531→          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+   532→            <Brain className="h-8 w-8 text-primary" />
+   533→            Мастер-промпты
+   534→          </h1>
+   535→          <p className="text-muted-foreground mt-1">
+   536→            Управление промптами для генерации должностных инструкций с версионированием
+   537→          </p>
+   538→        </div>
+   539→        <div className="flex gap-2">
+   540→          <Button variant="outline" onClick={() => setResolverDialogOpen(true)}>
+   541→            <Sparkles className="h-4 w-4 mr-2" />
+   542→            Тест резолвера
+   543→          </Button>
+   544→          <Button onClick={openCreateDialog}>
+   545→            <Plus className="h-4 w-4 mr-2" />
+   546→            Создать промпт
+   547→          </Button>
+   548→        </div>
+   549→      </div>
+   550→
+   551→      {/* Stats */}
+   552→      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   553→        <Card>
+   554→          <CardContent className="p-4">
+   555→            <div className="flex items-center gap-3">
+   556→              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+   557→                <FileText className="h-5 w-5 text-primary" />
+   558→              </div>
+   559→              <div>
+   560→                <p className="text-2xl font-bold">{stats.total}</p>
+   561→                <p className="text-xs text-muted-foreground">Всего версий</p>
+   562→              </div>
+   563→            </div>
+   564→          </CardContent>
+   565→        </Card>
+   566→        <Card>
+   567→          <CardContent className="p-4">
+   568→            <div className="flex items-center gap-3">
+   569→              <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+   570→                <CheckCircle2 className="h-5 w-5 text-green-600" />
+   571→              </div>
+   572→              <div>
+   573→                <p className="text-2xl font-bold">{stats.active}</p>
+   574→                <p className="text-xs text-muted-foreground">Активных</p>
+   575→              </div>
+   576→            </div>
+   577→          </CardContent>
+   578→        </Card>
+   579→        <Card>
+   580→          <CardContent className="p-4">
+   581→            <div className="flex items-center gap-3">
+   582→              <div className="h-10 w-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
+   583→                <Layers className="h-5 w-5 text-orange-600" />
+   584→              </div>
+   585→              <div>
+   586→                <p className="text-2xl font-bold">{stats.groups}</p>
+   587→                <p className="text-xs text-muted-foreground">Групп промптов</p>
+   588→              </div>
+   589→            </div>
+   590→          </CardContent>
+   591→        </Card>
+   592→        <Card>
+   593→          <CardContent className="p-4">
+   594→            <div className="flex items-center gap-3">
+   595→              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+   596→                <Activity className="h-5 w-5 text-blue-600" />
+   597→              </div>
+   598→              <div>
+   599→                <p className="text-2xl font-bold">{stats.withDepartment}</p>
+   600→                <p className="text-xs text-muted-foreground">С привязкой</p>
+   601→              </div>
+   602→            </div>
+   603→          </CardContent>
+   604→        </Card>
+   605→      </div>
+   606→
+   607→      {/* Filters */}
+   608→      <Card>
+   609→        <CardContent className="p-4">
+   610→          <div className="flex items-center justify-between mb-3">
+   611→            <div className="flex items-center gap-2">
+   612→              <Filter className="h-4 w-4 text-muted-foreground" />
+   613→              <span className="text-sm font-medium">Фильтры</span>
+   614→            </div>
+   615→            <Button variant="ghost" size="sm" onClick={() => setShowFilters(!showFilters)}>
+   616→              <ChevronDown className={`h-4 w-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+   617→            </Button>
+   618→          </div>
+   619→
+   620→          {/* Quick search */}
+   621→          <div className="flex gap-2 mb-3">
+   622→            <div className="relative flex-1">
+   623→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   624→              <Input
+   625→                placeholder="Поиск по названию..."
+   626→                value={filterName}
+   627→                onChange={(e) => setFilterName(e.target.value)}
+   628→                className="pl-9"
+   629→              />
+   630→            </div>
+   631→            <Select value={filterIsActive} onValueChange={setFilterIsActive}>
+   632→              <SelectTrigger className="w-[140px]">
+   633→                <SelectValue placeholder="Статус" />
+   634→              </SelectTrigger>
+   635→              <SelectContent>
+   636→                <SelectItem value="all">Все статусы</SelectItem>
+   637→                <SelectItem value="true">Активные</SelectItem>
+   638→                <SelectItem value="false">Неактивные</SelectItem>
+   639→              </SelectContent>
+   640→            </Select>
+   641→          </div>
+   642→
+   643→          {/* Extended filters */}
+   644→          {showFilters && (
+   645→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t">
+   646→              <div>
+   647→                <Label className="text-xs mb-1 block">Подразделение</Label>
+   648→                <Select value={filterDepartmentId} onValueChange={setFilterDepartmentId}>
+   649→                  <SelectTrigger>
+   650→                    <SelectValue placeholder="Все подразделения" />
+   651→                  </SelectTrigger>
+   652→                  <SelectContent>
+   653→                    <SelectItem value="all">Все подразделения</SelectItem>
+   654→                    {departments.map((d) => (
+   655→                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+   656→                    ))}
+   657→                  </SelectContent>
+   658→                </Select>
+   659→              </div>
+   660→              <div>
+   661→                <Label className="text-xs mb-1 block">Домен</Label>
+   662→                <Input
+   663→                  placeholder="Домен..."
+   664→                  value={filterDomain}
+   665→                  onChange={(e) => setFilterDomain(e.target.value)}
+   666→                />
+   667→              </div>
+   668→              <div>
+   669→                <Label className="text-xs mb-1 block">Грейд</Label>
+   670→                <Input
+   671→                  placeholder="Грейд..."
+   672→                  value={filterGrade}
+   673→                  onChange={(e) => setFilterGrade(e.target.value)}
+   674→                />
+   675→              </div>
+   676→              <div>
+   677→                <Label className="text-xs mb-1 block">Функция</Label>
+   678→                <Input
+   679→                  placeholder="Функция..."
+   680→                  value={filterFunctionType}
+   681→                  onChange={(e) => setFilterFunctionType(e.target.value)}
+   682→                />
+   683→              </div>
+   684→            </div>
+   685→          )}
+   686→        </CardContent>
+   687→      </Card>
+   688→
+   689→      {/* Prompt Groups (Accordions) */}
+   690→      {loading ? (
+   691→        <div className="space-y-3">
+   692→          {[1, 2, 3].map((i) => (
+   693→            <Card key={i}>
+   694→              <CardContent className="p-6">
+   695→                <div className="animate-pulse space-y-3">
+   696→                  <div className="h-5 bg-muted rounded w-1/3" />
+   697→                  <div className="h-4 bg-muted rounded w-2/3" />
+   698→                </div>
+   699→              </CardContent>
+   700→            </Card>
+   701→          ))}
+   702→        </div>
+   703→      ) : groupedPrompts.length === 0 ? (
+   704→        <Card>
+   705→          <CardContent className="p-12">
+   706→            <div className="text-center text-muted-foreground">
+   707→              <Brain className="h-12 w-12 mx-auto mb-4 opacity-50" />
+   708→              <h3 className="text-lg font-medium mb-1">Нет мастер-промптов</h3>
+   709→              <p className="text-sm mb-4">Создайте первый мастер-промпт для генерации ДИ</p>
+   710→              <Button onClick={openCreateDialog}>
+   711→                <Plus className="h-4 w-4 mr-2" />
+   712→                Создать промпт
+   713→              </Button>
+   714→            </div>
+   715→          </CardContent>
+   716→        </Card>
+   717→      ) : (
+   718→        <Accordion type="multiple" className="space-y-3">
+   719→          {groupedPrompts.map((group) => (
+   720→            <AccordionItem key={group.name} value={group.name} className="border rounded-lg">
+   721→              <AccordionTrigger className="px-4 py-3 hover:no-underline">
+   722→                <div className="flex items-center gap-3 flex-1 text-left">
+   723→                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+   724→                    <Brain className="h-4 w-4 text-primary" />
+   725→                  </div>
+   726→                  <div className="flex-1 min-w-0">
+   727→                    <div className="flex items-center gap-2 flex-wrap">
+   728→                      <span className="font-semibold">{group.name}</span>
+   729→                      <Badge variant="secondary" className="text-xs">
+   730→                        v{group.latestVersion.version}
+   731→                      </Badge>
+   732→                      {group.activeVersion && (
+   733→                        <Badge variant="default" className="text-xs bg-green-600">
+   734→                          Активна v{group.activeVersion.version}
+   735→                        </Badge>
+   736→                      )}
+   737→                      {!group.activeVersion && (
+   738→                        <Badge variant="destructive" className="text-xs">
+   739→                          Нет активной
+   740→                        </Badge>
+   741→                      )}
+   742→                      <Badge variant="outline" className="text-xs">
+   743→                        {group.prompts.length} {group.prompts.length === 1 ? 'версия' : group.prompts.length < 5 ? 'версии' : 'версий'}
+   744→                      </Badge>
+   745→                    </div>
+   746→                    <div className="flex gap-2 mt-1">
+   747→                      {group.latestVersion.domain && (
+   748→                        <Badge variant="outline" className="text-xs">{group.latestVersion.domain}</Badge>
+   749→                      )}
+   750→                      {group.latestVersion.grade && (
+   751→                        <Badge variant="outline" className="text-xs">{group.latestVersion.grade}</Badge>
+   752→                      )}
+   753→                      {group.latestVersion.functionType && (
+   754→                        <Badge variant="outline" className="text-xs">{group.latestVersion.functionType}</Badge>
+   755→                      )}
+   756→                      {group.latestVersion.department && (
+   757→                        <Badge variant="outline" className="text-xs">{group.latestVersion.department.name}</Badge>
+   758→                      )}
+   759→                    </div>
+   760→                  </div>
+   761→                </div>
+   762→              </AccordionTrigger>
+   763→              <AccordionContent className="px-4 pb-4">
+   764→                <Table>
+   765→                  <TableHeader>
+   766→                    <TableRow>
+   767→                      <TableHead>Версия</TableHead>
+   768→                      <TableHead>Подразделение</TableHead>
+   769→                      <TableHead>Домен</TableHead>
+   770→                      <TableHead>Грейд</TableHead>
+   771→                      <TableHead>Функция</TableHead>
+   772→                      <TableHead>Статус</TableHead>
+   773→                      <TableHead>Описание</TableHead>
+   774→                      <TableHead>Дата</TableHead>
+   775→                      <TableHead className="text-right">Действия</TableHead>
+   776→                    </TableRow>
+   777→                  </TableHeader>
+   778→                  <TableBody>
+   779→                    {group.prompts.map((prompt) => (
+   780→                      <TableRow key={prompt.id} className={!prompt.isActive ? 'opacity-60' : ''}>
+   781→                        <TableCell>
+   782→                          <Badge variant="secondary">v{prompt.version}</Badge>
+   783→                        </TableCell>
+   784→                        <TableCell className="text-sm">
+   785→                          {prompt.department?.name || <span className="text-muted-foreground">Все</span>}
+   786→                        </TableCell>
+   787→                        <TableCell className="text-sm">
+   788→                          {prompt.domain || <span className="text-muted-foreground">Все</span>}
+   789→                        </TableCell>
+   790→                        <TableCell className="text-sm">
+   791→                          {prompt.grade || <span className="text-muted-foreground">Все</span>}
+   792→                        </TableCell>
+   793→                        <TableCell className="text-sm">
+   794→                          {prompt.functionType || <span className="text-muted-foreground">Все</span>}
+   795→                        </TableCell>
+   796→                        <TableCell>
+   797→                          {prompt.isActive ? (
+   798→                            <Badge className="bg-green-600 text-white">
+   799→                              <CheckCircle2 className="h-3 w-3 mr-1" />
+   800→                              Активна
+   801→                            </Badge>
+   802→                          ) : (
+   803→                            <Badge variant="secondary">
+   804→                              <XCircle className="h-3 w-3 mr-1" />
+   805→                              Неактивна
+   806→                            </Badge>
+   807→                          )}
+   808→                        </TableCell>
+   809→                        <TableCell className="text-sm max-w-[200px] truncate">
+   810→                          {prompt.description || '—'}
+   811→                        </TableCell>
+   812→                        <TableCell className="text-sm text-muted-foreground">
+   813→                          {new Date(prompt.createdAt).toLocaleDateString('ru-RU')}
+   814→                        </TableCell>
+   815→                        <TableCell>
+   816→                          <div className="flex items-center justify-end gap-1">
+   817→                            <Button
+   818→                              variant="ghost"
+   819→                              size="icon"
+   820→                              className="h-8 w-8"
+   821→                              onClick={() => openViewDialog(prompt)}
+   822→                              title="Просмотр"
+   823→                            >
+   824→                              <Eye className="h-4 w-4" />
+   825→                            </Button>
+   826→                            <Button
+   827→                              variant="ghost"
+   828→                              size="icon"
+   829→                              className="h-8 w-8"
+   830→                              onClick={() => openEditDialog(prompt)}
+   831→                              title="Редактировать"
+   832→                            >
+   833→                              <Pencil className="h-4 w-4" />
+   834→                            </Button>
+   835→                            <Button
+   836→                              variant="ghost"
+   837→                              size="icon"
+   838→                              className="h-8 w-8"
+   839→                              onClick={() => handleToggleActive(prompt)}
+   840→                              title={prompt.isActive ? 'Деактивировать' : 'Активировать'}
+   841→                            >
+   842→                              {prompt.isActive ? <XCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+   843→                            </Button>
+   844→                            <Button
+   845→                              variant="ghost"
+   846→                              size="icon"
+   847→                              className="h-8 w-8"
+   848→                              onClick={() => handleDuplicatePrompt(prompt)}
+   849→                              title="Дублировать"
+   850→                            >
+   851→                              <Copy className="h-4 w-4" />
+   852→                            </Button>
+   853→                            <Button
+   854→                              variant="ghost"
+   855→                              size="icon"
+   856→                              className="h-8 w-8 text-destructive"
+   857→                              onClick={() => openDeleteDialog(prompt)}
+   858→                              title="Удалить"
+   859→                            >
+   860→                              <Trash2 className="h-4 w-4" />
+   861→                            </Button>
+   862→                          </div>
+   863→                        </TableCell>
+   864→                      </TableRow>
+   865→                    ))}
+   866→                  </TableBody>
+   867→                </Table>
+   868→
+   869→                {/* Version management buttons */}
+   870→                <div className="flex gap-2 mt-3 pt-3 border-t">
+   871→                  <Button variant="outline" size="sm" onClick={() => openVersionDialog(group.name)}>
+   872→                    <GitBranch className="h-4 w-4 mr-2" />
+   873→                    История версий
+   874→                  </Button>
+   875→                  {group.prompts.length >= 2 && (
+   876→                    <Button variant="outline" size="sm" onClick={() => openDiffDialog(group.prompts[0], group.prompts[1])}>
+   877→                      Сравнить версии
+   878→                    </Button>
+   879→                  )}
+   880→                </div>
+   881→              </AccordionContent>
+   882→            </AccordionItem>
+   883→          ))}
+   884→        </Accordion>
+   885→      )}
+   886→
+   887→      {/* ============================================ */}
+   888→      {/* Create/Edit Dialog */}
+   889→      {/* ============================================ */}
+   890→      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+   891→        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+   892→          <DialogHeader>
+   893→            <DialogTitle>
+   894→              {editingPrompt && !formCreateNewVersion ? 'Редактировать промпт' : 'Создать промпт'}
+   895→            </DialogTitle>
+   896→            <DialogDescription>
+   897→              {editingPrompt && !formCreateNewVersion
+   898→                ? 'Измените параметры мастер-промпта'
+   899→                : 'Заполните параметры для нового мастер-промпта'}
+   900→            </DialogDescription>
+   901→          </DialogHeader>
+   902→          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+   903→            {/* Name */}
+   904→            <div className="space-y-2">
+   905→              <Label htmlFor="prompt-name">Название *</Label>
+   906→              <Input
+   907→                id="prompt-name"
+   908→                value={formName}
+   909→                onChange={(e) => setFormName(e.target.value)}
+   910→                placeholder="Название промпта"
+   911→              />
+   912→            </div>
+   913→
+   914→            {/* Content */}
+   915→            <div className="space-y-2">
+   916→              <Label htmlFor="prompt-content">Содержимое промпта *</Label>
+   917→              <Textarea
+   918→                id="prompt-content"
+   919→                value={formContent}
+   920→                onChange={(e) => setFormContent(e.target.value)}
+   921→                placeholder="Введите текст промпта для генерации ДИ..."
+   922→                className="min-h-[250px] font-mono text-sm"
+   923→              />
+   924→            </div>
+   925→
+   926→            {/* Description */}
+   927→            <div className="space-y-2">
+   928→              <Label htmlFor="prompt-description">Описание версии</Label>
+   929→              <Input
+   930→                id="prompt-description"
+   931→                value={formDescription}
+   932→                onChange={(e) => setFormDescription(e.target.value)}
+   933→                placeholder="Описание этой версии"
+   934→              />
+   935→            </div>
+   936→
+   937→            <Separator />
+   938→
+   939→            {/* Applicability rules */}
+   940→            <div>
+   941→              <h4 className="text-sm font-medium mb-3">Правила применимости</h4>
+   942→              <p className="text-xs text-muted-foreground mb-3">
+   943→                Укажите, к каким должностям применяется промпт. Пустые поля означают &quot;все&quot;.
+   944→              </p>
+   945→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   946→                <div className="space-y-2">
+   947→                  <Label className="text-xs">Подразделение</Label>
+   948→                  <Select value={formDepartmentId} onValueChange={setFormDepartmentId}>
+   949→                    <SelectTrigger>
+   950→                      <SelectValue placeholder="Все подразделения" />
+   951→                    </SelectTrigger>
+   952→                    <SelectContent>
+   953→                      <SelectItem value="_none">Все подразделения</SelectItem>
+   954→                      {departments.map((d) => (
+   955→                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+   956→                      ))}
+   957→                    </SelectContent>
+   958→                  </Select>
+   959→                </div>
+   960→                <div className="space-y-2">
+   961→                  <Label className="text-xs">Домен</Label>
+   962→                  <Input
+   963→                    value={formDomain}
+   964→                    onChange={(e) => setFormDomain(e.target.value)}
+   965→                    placeholder="Например: IT, Финансы, HR..."
+   966→                    list="domain-suggestions"
+   967→                  />
+   968→                  <datalist id="domain-suggestions">
+   969→                    {domainSuggestions.map((d) => (
+   970→                      <option key={d} value={d} />
+   971→                    ))}
+   972→                  </datalist>
+   973→                </div>
+   974→                <div className="space-y-2">
+   975→                  <Label className="text-xs">Грейд</Label>
+   976→                  <Input
+   977→                    value={formGrade}
+   978→                    onChange={(e) => setFormGrade(e.target.value)}
+   979→                    placeholder="Например: G1, G2, G3..."
+   980→                    list="grade-suggestions"
+   981→                  />
+   982→                  <datalist id="grade-suggestions">
+   983→                    {gradeSuggestions.map((g) => (
+   984→                      <option key={g} value={g} />
+   985→                    ))}
+   986→                  </datalist>
+   987→                </div>
+   988→                <div className="space-y-2">
+   989→                  <Label className="text-xs">Тип функции</Label>
+   990→                  <Input
+   991→                    value={formFunctionType}
+   992→                    onChange={(e) => setFormFunctionType(e.target.value)}
+   993→                    placeholder="Например: Разработка, Аналитика..."
+   994→                    list="function-suggestions"
+   995→                  />
+   996→                  <datalist id="function-suggestions">
+   997→                    {functionTypeSuggestions.map((f) => (
+   998→                      <option key={f} value={f} />
+   999→                    ))}
+  1000→                  </datalist>
+  1001→                </div>
+  1002→              </div>
+  1003→
+  1004→              {/* Priority visualization */}
+  1005→              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+  1006→                <p className="text-xs font-medium mb-2">Приоритет резолвера:</p>
+  1007→                <div className="flex items-center gap-1 text-xs flex-wrap">
+  1008→                  <Badge variant="default" className="text-xs">Подразделение</Badge>
+  1009→                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+  1010→                  <Badge variant="secondary" className="text-xs">Домен</Badge>
+  1011→                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+  1012→                  <Badge variant="secondary" className="text-xs">Грейд</Badge>
+  1013→                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+  1014→                  <Badge variant="secondary" className="text-xs">Функция</Badge>
+  1015→                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+  1016→                  <Badge variant="outline" className="text-xs">Глобальный</Badge>
+  1017→                </div>
+  1018→              </div>
+  1019→            </div>
+  1020→
+  1021→            {/* New version checkbox */}
+  1022→            {editingPrompt && (
+  1023→              <>
+  1024→                <Separator />
+  1025→                <div className="flex items-center gap-3 p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
+  1026→                  <Checkbox
+  1027→                    id="new-version"
+  1028→                    checked={formCreateNewVersion}
+  1029→                    onCheckedChange={(checked) => setFormCreateNewVersion(checked === true)}
+  1030→                  />
+  1031→                  <div>
+  1032→                    <Label htmlFor="new-version" className="text-sm font-medium cursor-pointer">
+  1033→                      Создать новую версию
+  1034→                    </Label>
+  1035→                    <p className="text-xs text-muted-foreground">
+  1036→                      Вместо изменения текущей версии будет создана новая версия промпта &quot;{editingPrompt.name}&quot;
+  1037→                    </p>
+  1038→                  </div>
+  1039→                </div>
+  1040→              </>
+  1041→            )}
+  1042→          </div>
+  1043→          <DialogFooter>
+  1044→            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+  1045→              Отмена
+  1046→            </Button>
+  1047→            <Button onClick={handleSave}>
+  1048→              {editingPrompt && !formCreateNewVersion ? 'Сохранить' : 'Создать'}
+  1049→            </Button>
+  1050→          </DialogFooter>
+  1051→        </DialogContent>
+  1052→      </Dialog>
+  1053→
+  1054→      {/* ============================================ */}
+  1055→      {/* View Dialog */}
+  1056→      {/* ============================================ */}
+  1057→      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+  1058→        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+  1059→          <DialogHeader>
+  1060→            <DialogTitle>
+  1061→              {viewingPrompt?.name} — v{viewingPrompt?.version}
+  1062→            </DialogTitle>
+  1063→            <DialogDescription>
+  1064→              {viewingPrompt?.description || 'Просмотр мастер-промпта'}
+  1065→            </DialogDescription>
+  1066→          </DialogHeader>
+  1067→          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+  1068→            {/* Applicability badges */}
+  1069→            <div className="flex flex-wrap gap-2">
+  1070→              {viewingPrompt?.department && (
+  1071→                <Badge variant="default">{viewingPrompt.department.name}</Badge>
+  1072→              )}
+  1073→              {viewingPrompt?.domain && (
+  1074→                <Badge variant="secondary">{viewingPrompt.domain}</Badge>
+  1075→              )}
+  1076→              {viewingPrompt?.grade && (
+  1077→                <Badge variant="secondary">{viewingPrompt.grade}</Badge>
+  1078→              )}
+  1079→              {viewingPrompt?.functionType && (
+  1080→                <Badge variant="secondary">{viewingPrompt.functionType}</Badge>
+  1081→              )}
+  1082→              {!viewingPrompt?.departmentId && !viewingPrompt?.domain && !viewingPrompt?.grade && !viewingPrompt?.functionType && (
+  1083→                <Badge variant="outline">Глобальный</Badge>
+  1084→              )}
+  1085→              {viewingPrompt?.isActive ? (
+  1086→                <Badge className="bg-green-600 text-white">Активна</Badge>
+  1087→              ) : (
+  1088→                <Badge variant="secondary">Неактивна</Badge>
+  1089→              )}
+  1090→            </div>
+  1091→
+  1092→            <Separator />
+  1093→
+  1094→            {/* Content */}
+  1095→            <div className="bg-muted/50 rounded-lg p-4">
+  1096→              <pre className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
+  1097→                {viewingPrompt?.content}
+  1098→              </pre>
+  1099→            </div>
+  1100→
+  1101→            <Separator />
+  1102→
+  1103→            {/* Metadata */}
+  1104→            <div className="grid grid-cols-2 gap-2 text-sm">
+  1105→              <div>
+  1106→                <span className="text-muted-foreground">Создан:</span>{' '}
+  1107→                {viewingPrompt?.createdAt && new Date(viewingPrompt.createdAt).toLocaleString('ru-RU')}
+  1108→              </div>
+  1109→              <div>
+  1110→                <span className="text-muted-foreground">Обновлён:</span>{' '}
+  1111→                {viewingPrompt?.updatedAt && new Date(viewingPrompt.updatedAt).toLocaleString('ru-RU')}
+  1112→              </div>
+  1113→            </div>
+  1114→          </div>
+  1115→          <DialogFooter>
+  1116→            <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
+  1117→              Закрыть
+  1118→            </Button>
+  1119→            {viewingPrompt && (
+  1120→              <Button onClick={() => {
+  1121→                setViewDialogOpen(false)
+  1122→                openEditDialog(viewingPrompt)
+  1123→              }}>
+  1124→                <Pencil className="h-4 w-4 mr-2" />
+  1125→                Редактировать
+  1126→              </Button>
+  1127→            )}
+  1128→          </DialogFooter>
+  1129→        </DialogContent>
+  1130→      </Dialog>
+  1131→
+  1132→      {/* ============================================ */}
+  1133→      {/* Version History Dialog */}
+  1134→      {/* ============================================ */}
+  1135→      <Dialog open={versionDialogOpen} onOpenChange={setVersionDialogOpen}>
+  1136→        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+  1137→          <DialogHeader>
+  1138→            <DialogTitle>
+  1139→              История версий — {versionPromptName}
+  1140→            </DialogTitle>
+  1141→            <DialogDescription>
+  1142→              Все версии промпта с возможностью активации и сравнения
+  1143→            </DialogDescription>
+  1144→          </DialogHeader>
+  1145→          <div className="flex-1 overflow-y-auto pr-2">
+  1146→            {versionHistory.length === 0 ? (
+  1147→              <div className="text-center text-muted-foreground py-8">
+  1148→                Нет версий
+  1149→              </div>
+  1150→            ) : (
+  1151→              <div className="space-y-3">
+  1152→                {versionHistory.map((version, idx) => (
+  1153→                  <Card key={version.id} className={!version.isActive ? 'opacity-60' : ''}>
+  1154→                    <CardContent className="p-4">
+  1155→                      <div className="flex items-start justify-between gap-3">
+  1156→                        <div className="flex-1 min-w-0">
+  1157→                          <div className="flex items-center gap-2 mb-1">
+  1158→                            <Badge variant="secondary">v{version.version}</Badge>
+  1159→                            {version.isActive ? (
+  1160→                              <Badge className="bg-green-600 text-white text-xs">Активна</Badge>
+  1161→                            ) : (
+  1162→                              <Badge variant="secondary" className="text-xs">Неактивна</Badge>
+  1163→                            )}
+  1164→                            <span className="text-xs text-muted-foreground">
+  1165→                              {new Date(version.createdAt).toLocaleString('ru-RU')}
+  1166→                            </span>
+  1167→                          </div>
+  1168→                          {version.description && (
+  1169→                            <p className="text-sm text-muted-foreground mb-2">{version.description}</p>
+  1170→                          )}
+  1171→                          <div className="flex gap-1 flex-wrap">
+  1172→                            {version.department && (
+  1173→                              <Badge variant="outline" className="text-xs">{version.department.name}</Badge>
+  1174→                            )}
+  1175→                            {version.domain && (
+  1176→                              <Badge variant="outline" className="text-xs">{version.domain}</Badge>
+  1177→                            )}
+  1178→                            {version.grade && (
+  1179→                              <Badge variant="outline" className="text-xs">{version.grade}</Badge>
+  1180→                            )}
+  1181→                            {version.functionType && (
+  1182→                              <Badge variant="outline" className="text-xs">{version.functionType}</Badge>
+  1183→                            )}
+  1184→                          </div>
+  1185→                          <pre className="mt-2 text-xs font-mono bg-muted/50 rounded p-2 max-h-32 overflow-y-auto whitespace-pre-wrap">
+  1186→                            {version.content.substring(0, 300)}
+  1187→                            {version.content.length > 300 ? '...' : ''}
+  1188→                          </pre>
+  1189→                        </div>
+  1190→                        <div className="flex flex-col gap-1">
+  1191→                          <Button
+  1192→                            variant="ghost"
+  1193→                            size="icon"
+  1194→                            className="h-8 w-8"
+  1195→                            onClick={() => handleToggleActive(version)}
+  1196→                            title={version.isActive ? 'Деактивировать' : 'Активировать'}
+  1197→                          >
+  1198→                            {version.isActive ? <XCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+  1199→                          </Button>
+  1200→                          <Button
+  1201→                            variant="ghost"
+  1202→                            size="icon"
+  1203→                            className="h-8 w-8"
+  1204→                            onClick={() => openViewDialog(version)}
+  1205→                            title="Просмотр"
+  1206→                          >
+  1207→                            <Eye className="h-4 w-4" />
+  1208→                          </Button>
+  1209→                          {idx < versionHistory.length - 1 && (
+  1210→                            <Button
+  1211→                              variant="ghost"
+  1212→                              size="icon"
+  1213→                              className="h-8 w-8"
+  1214→                              onClick={() => openDiffDialog(versionHistory[idx + 1], version)}
+  1215→                              title="Сравнить с предыдущей"
+  1216→                            >
+  1217→                              <GitBranch className="h-4 w-4" />
+  1218→                            </Button>
+  1219→                          )}
+  1220→                        </div>
+  1221→                      </div>
+  1222→                    </CardContent>
+  1223→                  </Card>
+  1224→                ))}
+  1225→              </div>
+  1226→            )}
+  1227→          </div>
+  1228→          <DialogFooter>
+  1229→            <Button variant="outline" onClick={() => setVersionDialogOpen(false)}>
+  1230→              Закрыть
+  1231→            </Button>
+  1232→            {versionHistory.length >= 2 && (
+  1233→              <Button variant="outline" onClick={() => openDiffDialog(versionHistory[versionHistory.length - 1], versionHistory[0])}>
+  1234→                Сравнить первую и последнюю
+  1235→              </Button>
+  1236→            )}
+  1237→          </DialogFooter>
+  1238→        </DialogContent>
+  1239→      </Dialog>
+  1240→
+  1241→      {/* ============================================ */}
+  1242→      {/* Diff Dialog */}
+  1243→      {/* ============================================ */}
+  1244→      <Dialog open={diffDialogOpen} onOpenChange={setDiffDialogOpen}>
+  1245→        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+  1246→          <DialogHeader>
+  1247→            <DialogTitle>Сравнение версий</DialogTitle>
+  1248→            <DialogDescription>
+  1249→              {diffLeftVersion && diffRightVersion && (
+  1250→                <span>
+  1251→                  v{diffLeftVersion.version} → v{diffRightVersion.version}
+  1252→                  {diffLeftVersion.name && ` (${diffLeftVersion.name})`}
+  1253→                </span>
+  1254→              )}
+  1255→            </DialogDescription>
+  1256→          </DialogHeader>
+  1257→
+  1258→          {/* Version selectors */}
+  1259→          {versionHistory.length > 2 && (
+  1260→            <div className="flex gap-3 items-center">
+  1261→              <div className="flex-1">
+  1262→                <Label className="text-xs mb-1 block">Левая версия</Label>
+  1263→                <Select
+  1264→                  value={diffLeftVersion?.id || ''}
+  1265→                  onValueChange={(val) => {
+  1266→                    const found = versionHistory.find((v) => v.id === val)
+  1267→                    if (found) setDiffLeftVersion(found)
+  1268→                  }}
+  1269→                >
+  1270→                  <SelectTrigger>
+  1271→                    <SelectValue />
+  1272→                  </SelectTrigger>
+  1273→                  <SelectContent>
+  1274→                    {versionHistory.map((v) => (
+  1275→                      <SelectItem key={v.id} value={v.id}>v{v.version} — {v.description || 'Без описания'}</SelectItem>
+  1276→                    ))}
+  1277→                  </SelectContent>
+  1278→                </Select>
+  1279→              </div>
+  1280→              <ArrowRight className="h-4 w-4 text-muted-foreground mt-4" />
+  1281→              <div className="flex-1">
+  1282→                <Label className="text-xs mb-1 block">Правая версия</Label>
+  1283→                <Select
+  1284→                  value={diffRightVersion?.id || ''}
+  1285→                  onValueChange={(val) => {
+  1286→                    const found = versionHistory.find((v) => v.id === val)
+  1287→                    if (found) setDiffRightVersion(found)
+  1288→                  }}
+  1289→                >
+  1290→                  <SelectTrigger>
+  1291→                    <SelectValue />
+  1292→                  </SelectTrigger>
+  1293→                  <SelectContent>
+  1294→                    {versionHistory.map((v) => (
+  1295→                      <SelectItem key={v.id} value={v.id}>v{v.version} — {v.description || 'Без описания'}</SelectItem>
+  1296→                    ))}
+  1297→                  </SelectContent>
+  1298→                </Select>
+  1299→              </div>
+  1300→            </div>
+  1301→          )}
+  1302→
+  1303→          <div className="flex-1 overflow-y-auto">
+  1304→            {diffLeftVersion && diffRightVersion && (
+  1305→              <div className="grid grid-cols-2 gap-4">
+  1306→                <div>
+  1307→                  <div className="flex items-center gap-2 mb-2">
+  1308→                    <Badge variant="secondary">v{diffLeftVersion.version}</Badge>
+  1309→                    <span className="text-sm text-muted-foreground">
+  1310→                      {diffLeftVersion.description || 'Без описания'}
+  1311→                    </span>
+  1312→                  </div>
+  1313→                  <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs space-y-0.5">
+  1314→                    {computeDiff(diffLeftVersion.content, diffRightVersion.content).map((line, i) => (
+  1315→                      <div
+  1316→                        key={i}
+  1317→                        className={`px-2 py-0.5 rounded ${
+  1318→                          line.type === 'removed'
+  1319→                            ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 line-through'
+  1320→                            : line.type === 'changed'
+  1321→                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+  1322→                            : 'text-foreground'
+  1323→                        }`}
+  1324→                      >
+  1325→                        {line.left || '\u00A0'}
+  1326→                      </div>
+  1327→                    ))}
+  1328→                  </div>
+  1329→                </div>
+  1330→                <div>
+  1331→                  <div className="flex items-center gap-2 mb-2">
+  1332→                    <Badge variant="default">v{diffRightVersion.version}</Badge>
+  1333→                    <span className="text-sm text-muted-foreground">
+  1334→                      {diffRightVersion.description || 'Без описания'}
+  1335→                    </span>
+  1336→                  </div>
+  1337→                  <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs space-y-0.5">
+  1338→                    {computeDiff(diffLeftVersion.content, diffRightVersion.content).map((line, i) => (
+  1339→                      <div
+  1340→                        key={i}
+  1341→                        className={`px-2 py-0.5 rounded ${
+  1342→                          line.type === 'added'
+  1343→                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+  1344→                            : line.type === 'changed'
+  1345→                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+  1346→                            : 'text-foreground'
+  1347→                        }`}
+  1348→                      >
+  1349→                        {line.right || '\u00A0'}
+  1350→                      </div>
+  1351→                    ))}
+  1352→                  </div>
+  1353→                </div>
+  1354→              </div>
+  1355→            )}
+  1356→          </div>
+  1357→
+  1358→          <DialogFooter>
+  1359→            <Button variant="outline" onClick={() => setDiffDialogOpen(false)}>
+  1360→              Закрыть
+  1361→            </Button>
+  1362→          </DialogFooter>
+  1363→        </DialogContent>
+  1364→      </Dialog>
+  1365→
+  1366→      {/* ============================================ */}
+  1367→      {/* Resolver Dialog */}
+  1368→      {/* ============================================ */}
+  1369→      <Dialog open={resolverDialogOpen} onOpenChange={setResolverDialogOpen}>
+  1370→        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+  1371→          <DialogHeader>
+  1372→            <DialogTitle>
+  1373→              <Sparkles className="h-5 w-5 inline mr-2" />
+  1374→              Тест резолвера промптов
+  1375→            </DialogTitle>
+  1376→            <DialogDescription>
+  1377→              Выберите должность и посмотрите, какой мастер-промпт будет применён
+  1378→            </DialogDescription>
+  1379→          </DialogHeader>
+  1380→          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+  1381→            <div className="space-y-2">
+  1382→              <Label>Должность</Label>
+  1383→              <Select value={resolverPositionId} onValueChange={setResolverPositionId}>
+  1384→                <SelectTrigger>
+  1385→                  <SelectValue placeholder="Выберите должность..." />
+  1386→                </SelectTrigger>
+  1387→                <SelectContent>
+  1388→                  {positions.map((p) => (
+  1389→                    <SelectItem key={p.id} value={p.id}>
+  1390→                      {p.title} ({p.department?.name})
+  1391→                    </SelectItem>
+  1392→                  ))}
+  1393→                </SelectContent>
+  1394→              </Select>
+  1395→            </div>
+  1396→
+  1397→            {resolverPositionId && (() => {
+  1398→              const pos = positions.find((p) => p.id === resolverPositionId)
+  1399→              if (!pos) return null
+  1400→              return (
+  1401→                <Card>
+  1402→                  <CardContent className="p-3">
+  1403→                    <p className="text-xs font-medium text-muted-foreground mb-2">Параметры должности:</p>
+  1404→                    <div className="flex gap-2 flex-wrap">
+  1405→                      <Badge variant="default">{pos.department?.name}</Badge>
+  1406→                      {pos.domain && <Badge variant="secondary">{pos.domain}</Badge>}
+  1407→                      {pos.grade && <Badge variant="secondary">{pos.grade}</Badge>}
+  1408→                      {pos.functions && (() => {
+  1409→                        try {
+  1410→                          return JSON.parse(pos.functions).map((f: string) => (
+  1411→                            <Badge key={f} variant="outline">{f}</Badge>
+  1412→                          ))
+  1413→                        } catch {
+  1414→                          return <Badge variant="outline">{pos.functions}</Badge>
+  1415→                        }
+  1416→                      })()}
+  1417→                    </div>
+  1418→                  </CardContent>
+  1419→                </Card>
+  1420→              )
+  1421→            })()}
+  1422→
+  1423→            <Button onClick={handleResolve} disabled={!resolverPositionId || resolverLoading} className="w-full">
+  1424→              {resolverLoading ? 'Разрешение...' : 'Разрешить промпт'}
+  1425→            </Button>
+  1426→
+  1427→            {resolverResult && (
+  1428→              <div className="space-y-4">
+  1429→                {resolverResult.prompt ? (
+  1430→                  <Card className="border-green-200 dark:border-green-800">
+  1431→                    <CardHeader className="pb-2">
+  1432→                      <CardTitle className="text-base flex items-center gap-2">
+  1433→                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+  1434→                        Найден подходящий промпт
+  1435→                      </CardTitle>
+  1436→                    </CardHeader>
+  1437→                    <CardContent className="space-y-3">
+  1438→                      <div className="flex items-center gap-2">
+  1439→                        <span className="font-semibold">{resolverResult.prompt.name}</span>
+  1440→                        <Badge variant="secondary">v{resolverResult.prompt.version}</Badge>
+  1441→                      </div>
+  1442→                      <div className="flex gap-2 flex-wrap">
+  1443→                        {resolverResult.resolution?.matchDetails.map((d) => (
+  1444→                          <Badge key={d} className="bg-green-600 text-white">{d}</Badge>
+  1445→                        ))}
+  1446→                        <Badge variant="outline">
+  1447→                          Очков: {resolverResult.resolution?.score}
+  1448→                        </Badge>
+  1449→                      </div>
+  1450→                      <pre className="text-xs font-mono bg-muted/50 rounded p-3 max-h-48 overflow-y-auto whitespace-pre-wrap">
+  1451→                        {resolverResult.prompt.content.substring(0, 500)}
+  1452→                        {resolverResult.prompt.content.length > 500 ? '...' : ''}
+  1453→                      </pre>
+  1454→                    </CardContent>
+  1455→                  </Card>
+  1456→                ) : (
+  1457→                  <Card className="border-red-200 dark:border-red-800">
+  1458→                    <CardContent className="p-4">
+  1459→                      <div className="flex items-center gap-2 text-red-600">
+  1460→                        <AlertCircle className="h-5 w-5" />
+  1461→                        <span className="font-medium">Подходящий промпт не найден</span>
+  1462→                      </div>
+  1463→                      <p className="text-sm text-muted-foreground mt-1">
+  1464→                        Ни один активный промпт не соответствует параметрам выбранной должности
+  1465→                      </p>
+  1466→                    </CardContent>
+  1467→                  </Card>
+  1468→                )}
+  1469→
+  1470→                {/* All evaluated prompts */}
+  1471→                {resolverResult.resolution?.evaluatedPrompts && resolverResult.resolution.evaluatedPrompts.length > 0 && (
+  1472→                  <Card>
+  1473→                    <CardHeader className="pb-2">
+  1474→                      <CardTitle className="text-sm">Все оценённые промпты</CardTitle>
+  1475→                    </CardHeader>
+  1476→                    <CardContent>
+  1477→                      <Table>
+  1478→                        <TableHeader>
+  1479→                          <TableRow>
+  1480→                            <TableHead>Промпт</TableHead>
+  1481→                            <TableHead>Версия</TableHead>
+  1482→                            <TableHead>Совпадения</TableHead>
+  1483→                            <TableHead>Очки</TableHead>
+  1484→                          </TableRow>
+  1485→                        </TableHeader>
+  1486→                        <TableBody>
+  1487→                          {resolverResult.resolution.evaluatedPrompts.map((ep) => (
+  1488→                            <TableRow key={ep.id} className={ep.id === resolverResult.prompt?.id ? 'bg-green-50 dark:bg-green-950/20' : ''}>
+  1489→                              <TableCell className="font-medium">{ep.name}</TableCell>
+  1490→                              <TableCell><Badge variant="secondary">v{ep.version}</Badge></TableCell>
+  1491→                              <TableCell>
+  1492→                                <div className="flex gap-1">
+  1493→                                  {ep.matchDetails.length > 0 ? ep.matchDetails.map((d) => (
+  1494→                                    <Badge key={d} variant="outline" className="text-xs">{d}</Badge>
+  1495→                                  )) : (
+  1496→                                    <span className="text-xs text-muted-foreground">Глобальный</span>
+  1497→                                  )}
+  1498→                                </div>
+  1499→                              </TableCell>
+  1500→                              <TableCell>
+  1501→                                <Badge variant={ep.score > 0 ? 'default' : 'secondary'}>
+  1502→                                  {ep.score}
+  1503→                                </Badge>
+  1504→                              </TableCell>
+  1505→                            </TableRow>
+  1506→                          ))}
+  1507→                        </TableBody>
+  1508→                      </Table>
+  1509→                    </CardContent>
+  1510→                  </Card>
+  1511→                )}
+  1512→
+  1513→                {/* Priority visualization */}
+  1514→                <Card>
+  1515→                  <CardContent className="p-3">
+  1516→                    <p className="text-xs font-medium mb-2">Логика приоритета резолвера:</p>
+  1517→                    <div className="space-y-1">
+  1518→                      <div className="flex items-center gap-2 text-xs">
+  1519→                        <Badge variant="default">1000 очков</Badge>
+  1520→                        <span>Совпадение подразделения</span>
+  1521→                      </div>
+  1522→                      <div className="flex items-center gap-2 text-xs">
+  1523→                        <Badge variant="secondary">100 очков</Badge>
+  1524→                        <span>Совпадение домена</span>
+  1525→                      </div>
+  1526→                      <div className="flex items-center gap-2 text-xs">
+  1527→                        <Badge variant="secondary">10 очков</Badge>
+  1528→                        <span>Совпадение грейда</span>
+  1529→                      </div>
+  1530→                      <div className="flex items-center gap-2 text-xs">
+  1531→                        <Badge variant="secondary">1 очко</Badge>
+  1532→                        <span>Совпадение функции</span>
+  1533→                      </div>
+  1534→                      <div className="flex items-center gap-2 text-xs">
+  1535→                        <Badge variant="outline">0 очков</Badge>
+  1536→                        <span>Глобальный промпт (нет ограничений)</span>
+  1537→                      </div>
+  1538→                    </div>
+  1539→                  </CardContent>
+  1540→                </Card>
+  1541→              </div>
+  1542→            )}
+  1543→          </div>
+  1544→          <DialogFooter>
+  1545→            <Button variant="outline" onClick={() => {
+  1546→              setResolverDialogOpen(false)
+  1547→              setResolverResult(null)
+  1548→            }}>
+  1549→              Закрыть
+  1550→            </Button>
+  1551→          </DialogFooter>
+  1552→        </DialogContent>
+  1553→      </Dialog>
+  1554→
+  1555→      {/* ============================================ */}
+  1556→      {/* Delete Confirmation Dialog */}
+  1557→      {/* ============================================ */}
+  1558→      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+  1559→        <AlertDialogContent>
+  1560→          <AlertDialogHeader>
+  1561→            <AlertDialogTitle>Удалить мастер-промпт?</AlertDialogTitle>
+  1562→            <AlertDialogDescription>
+  1563→              Вы уверены, что хотите удалить промпт &quot;{deletingPrompt?.name}&quot; (версия {deletingPrompt?.version})?
+  1564→              Это действие нельзя отменить.
+  1565→            </AlertDialogDescription>
+  1566→          </AlertDialogHeader>
+  1567→          <AlertDialogFooter>
+  1568→            <AlertDialogCancel>Отмена</AlertDialogCancel>
+  1569→            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+  1570→              Удалить
+  1571→            </AlertDialogAction>
+  1572→          </AlertDialogFooter>
+  1573→        </AlertDialogContent>
+  1574→      </AlertDialog>
+  1575→    </div>
+  1576→  )
+  1577→}
+  1578→

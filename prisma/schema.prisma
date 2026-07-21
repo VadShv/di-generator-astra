@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// Подразделения (отделы)
+// ==========================================
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  parentId  String?
+  parent    Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children  Department[] @relation("DepartmentHierarchy")
+  positions     Position[]
+  masterPrompts MasterPrompt[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// Штатное расписание - Должности
+// ==========================================
+model Position {
+  id           String   @id @default(cuid())
+  title        String
+  code         String   @unique
+  departmentId String
+  department   Department  @relation(fields: [departmentId], references: [id])
+  grade        String?     // Грейд (например: G1, G2, G3...)
+  domain       String?     // Домен (например: IT, Финансы, HR...)
+  headcount    Int      @default(1)
+  functions    String?     // Выполняемые функции (JSON строка с массивом)
+  archiveDIs   ArchiveDI[]
+  generatedDIs GeneratedDI[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ==========================================
+// Архив должностных инструкций
+// ==========================================
+model ArchiveDI {
+  id          String   @id @default(cuid())
+  title       String
+  content     String   // Полный текст ДИ
+  positionId  String
+  position    Position   @relation(fields: [positionId], references: [id])
+  fileName    String?    // Имя загруженного файла
+  uploadedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ==========================================
+// Шаблоны должностных инструкций
+// ==========================================
+model DITemplate {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  sections     DITemplateSection[]
+  generatedDIs GeneratedDI[]
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model DITemplateSection {
+  id             String   @id @default(cuid())
+  templateId     String
+  template       DITemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title          String
+  order          Int      @default(0)
+  promptGuidance String?  // Руководство для ИИ при генерации этой секции
+  isRequired     Boolean  @default(true)
+  content        String?  // Дефолтное содержимое секции
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ==========================================
+// Мастер-промпты с версионированием
+// ==========================================
+model MasterPrompt {
+  id          String   @id @default(cuid())
+  name        String
+  content     String   // Содержимое промпта
+  version     Int      @default(1)
+  isActive    Boolean  @default(true)
+  // Логика применимости
+  departmentId String?  // Применимо к подразделению (null = все)
+  department   Department? @relation(fields: [departmentId], references: [id])
+  domain       String?  // Применимо к домену (null = все)
+  grade        String?  // Применимо к грейду (null = все)
+  functionType String?  // Применимо к функции (null = все)
+  description  String?  // Описание версии
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ==========================================
+// Сгенерированные должностные инструкции
+// ==========================================
+model GeneratedDI {
+  id          String   @id @default(cuid())
+  positionId  String
+  position    Position   @relation(fields: [positionId], references: [id])
+  templateId  String?
+  template    DITemplate? @relation(fields: [templateId], references: [id])
+  title       String
+  status      String   @default("draft") // draft, review, approved, exported
+  sections    GeneratedDISection[]
+  trackings   DITracking[]
+  versions    DIVersion[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model GeneratedDISection {
+  id             String   @id @default(cuid())
+  generatedDIId  String
+  generatedDI    GeneratedDI @relation(fields: [generatedDIId], references: [id], onDelete: Cascade)
+  sectionTitle   String
+  sectionContent String
+  order          Int      @default(0)
+  aiGenerated    Boolean  @default(true)
+  editedBy       String?  // Кто редактировал (user/manual)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ==========================================
+// Отслеживание ДИ (жизненный цикл)
+// ==========================================
+model DITracking {
+  id             String   @id @default(cuid())
+  generatedDIId  String
+  generatedDI    GeneratedDI @relation(fields: [generatedDIId], references: [id], onDelete: Cascade)
+  status         String   // sent_for_review, returned_with_comments, approved, rejected, signed, etc.
+  assignee       String?  // Ответственный
+  notes          String?  // Заметки
+  createdAt      DateTime @default(now())
+}
+
+// ==========================================
+// Версии ДИ (для сравнения)
+// ==========================================
+model DIVersion {
+  id             String   @id @default(cuid())
+  generatedDIId  String
+  generatedDI    GeneratedDI @relation(fields: [generatedDIId], references: [id], onDelete: Cascade)
+  content        String   // Полный текст версии (JSON)
+  version        Int      @default(1)
+  isOriginal     Boolean  @default(false) // true = сгенерированная, false = загруженная после правок
+  uploadedBy     String?  // Кто загрузил
+  fileName       String?  // Имя файла
+  diffSummary    String?  // Краткое резюме различий (ИИ-сгенерированное)
+  createdAt      DateTime @default(now())
+}

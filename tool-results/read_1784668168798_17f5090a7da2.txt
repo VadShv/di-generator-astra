@@ -1,0 +1,580 @@
+  1000→                  </datalist>
+  1001→                </div>
+  1002→              </div>
+  1003→
+  1004→              {/* Priority visualization */}
+  1005→              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+  1006→                <p className="text-xs font-medium mb-2">Приоритет резолвера:</p>
+  1007→                <div className="flex items-center gap-1 text-xs flex-wrap">
+  1008→                  <Badge variant="default" className="text-xs">Подразделение</Badge>
+  1009→                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+  1010→                  <Badge variant="secondary" className="text-xs">Домен</Badge>
+  1011→                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+  1012→                  <Badge variant="secondary" className="text-xs">Грейд</Badge>
+  1013→                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+  1014→                  <Badge variant="secondary" className="text-xs">Функция</Badge>
+  1015→                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+  1016→                  <Badge variant="outline" className="text-xs">Глобальный</Badge>
+  1017→                </div>
+  1018→              </div>
+  1019→            </div>
+  1020→
+  1021→            {/* New version checkbox */}
+  1022→            {editingPrompt && (
+  1023→              <>
+  1024→                <Separator />
+  1025→                <div className="flex items-center gap-3 p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
+  1026→                  <Checkbox
+  1027→                    id="new-version"
+  1028→                    checked={formCreateNewVersion}
+  1029→                    onCheckedChange={(checked) => setFormCreateNewVersion(checked === true)}
+  1030→                  />
+  1031→                  <div>
+  1032→                    <Label htmlFor="new-version" className="text-sm font-medium cursor-pointer">
+  1033→                      Создать новую версию
+  1034→                    </Label>
+  1035→                    <p className="text-xs text-muted-foreground">
+  1036→                      Вместо изменения текущей версии будет создана новая версия промпта &quot;{editingPrompt.name}&quot;
+  1037→                    </p>
+  1038→                  </div>
+  1039→                </div>
+  1040→              </>
+  1041→            )}
+  1042→          </div>
+  1043→          <DialogFooter>
+  1044→            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+  1045→              Отмена
+  1046→            </Button>
+  1047→            <Button onClick={handleSave}>
+  1048→              {editingPrompt && !formCreateNewVersion ? 'Сохранить' : 'Создать'}
+  1049→            </Button>
+  1050→          </DialogFooter>
+  1051→        </DialogContent>
+  1052→      </Dialog>
+  1053→
+  1054→      {/* ============================================ */}
+  1055→      {/* View Dialog */}
+  1056→      {/* ============================================ */}
+  1057→      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+  1058→        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+  1059→          <DialogHeader>
+  1060→            <DialogTitle>
+  1061→              {viewingPrompt?.name} — v{viewingPrompt?.version}
+  1062→            </DialogTitle>
+  1063→            <DialogDescription>
+  1064→              {viewingPrompt?.description || 'Просмотр мастер-промпта'}
+  1065→            </DialogDescription>
+  1066→          </DialogHeader>
+  1067→          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+  1068→            {/* Applicability badges */}
+  1069→            <div className="flex flex-wrap gap-2">
+  1070→              {viewingPrompt?.department && (
+  1071→                <Badge variant="default">{viewingPrompt.department.name}</Badge>
+  1072→              )}
+  1073→              {viewingPrompt?.domain && (
+  1074→                <Badge variant="secondary">{viewingPrompt.domain}</Badge>
+  1075→              )}
+  1076→              {viewingPrompt?.grade && (
+  1077→                <Badge variant="secondary">{viewingPrompt.grade}</Badge>
+  1078→              )}
+  1079→              {viewingPrompt?.functionType && (
+  1080→                <Badge variant="secondary">{viewingPrompt.functionType}</Badge>
+  1081→              )}
+  1082→              {!viewingPrompt?.departmentId && !viewingPrompt?.domain && !viewingPrompt?.grade && !viewingPrompt?.functionType && (
+  1083→                <Badge variant="outline">Глобальный</Badge>
+  1084→              )}
+  1085→              {viewingPrompt?.isActive ? (
+  1086→                <Badge className="bg-green-600 text-white">Активна</Badge>
+  1087→              ) : (
+  1088→                <Badge variant="secondary">Неактивна</Badge>
+  1089→              )}
+  1090→            </div>
+  1091→
+  1092→            <Separator />
+  1093→
+  1094→            {/* Content */}
+  1095→            <div className="bg-muted/50 rounded-lg p-4">
+  1096→              <pre className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
+  1097→                {viewingPrompt?.content}
+  1098→              </pre>
+  1099→            </div>
+  1100→
+  1101→            <Separator />
+  1102→
+  1103→            {/* Metadata */}
+  1104→            <div className="grid grid-cols-2 gap-2 text-sm">
+  1105→              <div>
+  1106→                <span className="text-muted-foreground">Создан:</span>{' '}
+  1107→                {viewingPrompt?.createdAt && new Date(viewingPrompt.createdAt).toLocaleString('ru-RU')}
+  1108→              </div>
+  1109→              <div>
+  1110→                <span className="text-muted-foreground">Обновлён:</span>{' '}
+  1111→                {viewingPrompt?.updatedAt && new Date(viewingPrompt.updatedAt).toLocaleString('ru-RU')}
+  1112→              </div>
+  1113→            </div>
+  1114→          </div>
+  1115→          <DialogFooter>
+  1116→            <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
+  1117→              Закрыть
+  1118→            </Button>
+  1119→            {viewingPrompt && (
+  1120→              <Button onClick={() => {
+  1121→                setViewDialogOpen(false)
+  1122→                openEditDialog(viewingPrompt)
+  1123→              }}>
+  1124→                <Pencil className="h-4 w-4 mr-2" />
+  1125→                Редактировать
+  1126→              </Button>
+  1127→            )}
+  1128→          </DialogFooter>
+  1129→        </DialogContent>
+  1130→      </Dialog>
+  1131→
+  1132→      {/* ============================================ */}
+  1133→      {/* Version History Dialog */}
+  1134→      {/* ============================================ */}
+  1135→      <Dialog open={versionDialogOpen} onOpenChange={setVersionDialogOpen}>
+  1136→        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+  1137→          <DialogHeader>
+  1138→            <DialogTitle>
+  1139→              История версий — {versionPromptName}
+  1140→            </DialogTitle>
+  1141→            <DialogDescription>
+  1142→              Все версии промпта с возможностью активации и сравнения
+  1143→            </DialogDescription>
+  1144→          </DialogHeader>
+  1145→          <div className="flex-1 overflow-y-auto pr-2">
+  1146→            {versionHistory.length === 0 ? (
+  1147→              <div className="text-center text-muted-foreground py-8">
+  1148→                Нет версий
+  1149→              </div>
+  1150→            ) : (
+  1151→              <div className="space-y-3">
+  1152→                {versionHistory.map((version, idx) => (
+  1153→                  <Card key={version.id} className={!version.isActive ? 'opacity-60' : ''}>
+  1154→                    <CardContent className="p-4">
+  1155→                      <div className="flex items-start justify-between gap-3">
+  1156→                        <div className="flex-1 min-w-0">
+  1157→                          <div className="flex items-center gap-2 mb-1">
+  1158→                            <Badge variant="secondary">v{version.version}</Badge>
+  1159→                            {version.isActive ? (
+  1160→                              <Badge className="bg-green-600 text-white text-xs">Активна</Badge>
+  1161→                            ) : (
+  1162→                              <Badge variant="secondary" className="text-xs">Неактивна</Badge>
+  1163→                            )}
+  1164→                            <span className="text-xs text-muted-foreground">
+  1165→                              {new Date(version.createdAt).toLocaleString('ru-RU')}
+  1166→                            </span>
+  1167→                          </div>
+  1168→                          {version.description && (
+  1169→                            <p className="text-sm text-muted-foreground mb-2">{version.description}</p>
+  1170→                          )}
+  1171→                          <div className="flex gap-1 flex-wrap">
+  1172→                            {version.department && (
+  1173→                              <Badge variant="outline" className="text-xs">{version.department.name}</Badge>
+  1174→                            )}
+  1175→                            {version.domain && (
+  1176→                              <Badge variant="outline" className="text-xs">{version.domain}</Badge>
+  1177→                            )}
+  1178→                            {version.grade && (
+  1179→                              <Badge variant="outline" className="text-xs">{version.grade}</Badge>
+  1180→                            )}
+  1181→                            {version.functionType && (
+  1182→                              <Badge variant="outline" className="text-xs">{version.functionType}</Badge>
+  1183→                            )}
+  1184→                          </div>
+  1185→                          <pre className="mt-2 text-xs font-mono bg-muted/50 rounded p-2 max-h-32 overflow-y-auto whitespace-pre-wrap">
+  1186→                            {version.content.substring(0, 300)}
+  1187→                            {version.content.length > 300 ? '...' : ''}
+  1188→                          </pre>
+  1189→                        </div>
+  1190→                        <div className="flex flex-col gap-1">
+  1191→                          <Button
+  1192→                            variant="ghost"
+  1193→                            size="icon"
+  1194→                            className="h-8 w-8"
+  1195→                            onClick={() => handleToggleActive(version)}
+  1196→                            title={version.isActive ? 'Деактивировать' : 'Активировать'}
+  1197→                          >
+  1198→                            {version.isActive ? <XCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+  1199→                          </Button>
+  1200→                          <Button
+  1201→                            variant="ghost"
+  1202→                            size="icon"
+  1203→                            className="h-8 w-8"
+  1204→                            onClick={() => openViewDialog(version)}
+  1205→                            title="Просмотр"
+  1206→                          >
+  1207→                            <Eye className="h-4 w-4" />
+  1208→                          </Button>
+  1209→                          {idx < versionHistory.length - 1 && (
+  1210→                            <Button
+  1211→                              variant="ghost"
+  1212→                              size="icon"
+  1213→                              className="h-8 w-8"
+  1214→                              onClick={() => openDiffDialog(versionHistory[idx + 1], version)}
+  1215→                              title="Сравнить с предыдущей"
+  1216→                            >
+  1217→                              <GitBranch className="h-4 w-4" />
+  1218→                            </Button>
+  1219→                          )}
+  1220→                        </div>
+  1221→                      </div>
+  1222→                    </CardContent>
+  1223→                  </Card>
+  1224→                ))}
+  1225→              </div>
+  1226→            )}
+  1227→          </div>
+  1228→          <DialogFooter>
+  1229→            <Button variant="outline" onClick={() => setVersionDialogOpen(false)}>
+  1230→              Закрыть
+  1231→            </Button>
+  1232→            {versionHistory.length >= 2 && (
+  1233→              <Button variant="outline" onClick={() => openDiffDialog(versionHistory[versionHistory.length - 1], versionHistory[0])}>
+  1234→                Сравнить первую и последнюю
+  1235→              </Button>
+  1236→            )}
+  1237→          </DialogFooter>
+  1238→        </DialogContent>
+  1239→      </Dialog>
+  1240→
+  1241→      {/* ============================================ */}
+  1242→      {/* Diff Dialog */}
+  1243→      {/* ============================================ */}
+  1244→      <Dialog open={diffDialogOpen} onOpenChange={setDiffDialogOpen}>
+  1245→        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+  1246→          <DialogHeader>
+  1247→            <DialogTitle>Сравнение версий</DialogTitle>
+  1248→            <DialogDescription>
+  1249→              {diffLeftVersion && diffRightVersion && (
+  1250→                <span>
+  1251→                  v{diffLeftVersion.version} → v{diffRightVersion.version}
+  1252→                  {diffLeftVersion.name && ` (${diffLeftVersion.name})`}
+  1253→                </span>
+  1254→              )}
+  1255→            </DialogDescription>
+  1256→          </DialogHeader>
+  1257→
+  1258→          {/* Version selectors */}
+  1259→          {versionHistory.length > 2 && (
+  1260→            <div className="flex gap-3 items-center">
+  1261→              <div className="flex-1">
+  1262→                <Label className="text-xs mb-1 block">Левая версия</Label>
+  1263→                <Select
+  1264→                  value={diffLeftVersion?.id || ''}
+  1265→                  onValueChange={(val) => {
+  1266→                    const found = versionHistory.find((v) => v.id === val)
+  1267→                    if (found) setDiffLeftVersion(found)
+  1268→                  }}
+  1269→                >
+  1270→                  <SelectTrigger>
+  1271→                    <SelectValue />
+  1272→                  </SelectTrigger>
+  1273→                  <SelectContent>
+  1274→                    {versionHistory.map((v) => (
+  1275→                      <SelectItem key={v.id} value={v.id}>v{v.version} — {v.description || 'Без описания'}</SelectItem>
+  1276→                    ))}
+  1277→                  </SelectContent>
+  1278→                </Select>
+  1279→              </div>
+  1280→              <ArrowRight className="h-4 w-4 text-muted-foreground mt-4" />
+  1281→              <div className="flex-1">
+  1282→                <Label className="text-xs mb-1 block">Правая версия</Label>
+  1283→                <Select
+  1284→                  value={diffRightVersion?.id || ''}
+  1285→                  onValueChange={(val) => {
+  1286→                    const found = versionHistory.find((v) => v.id === val)
+  1287→                    if (found) setDiffRightVersion(found)
+  1288→                  }}
+  1289→                >
+  1290→                  <SelectTrigger>
+  1291→                    <SelectValue />
+  1292→                  </SelectTrigger>
+  1293→                  <SelectContent>
+  1294→                    {versionHistory.map((v) => (
+  1295→                      <SelectItem key={v.id} value={v.id}>v{v.version} — {v.description || 'Без описания'}</SelectItem>
+  1296→                    ))}
+  1297→                  </SelectContent>
+  1298→                </Select>
+  1299→              </div>
+  1300→            </div>
+  1301→          )}
+  1302→
+  1303→          <div className="flex-1 overflow-y-auto">
+  1304→            {diffLeftVersion && diffRightVersion && (
+  1305→              <div className="grid grid-cols-2 gap-4">
+  1306→                <div>
+  1307→                  <div className="flex items-center gap-2 mb-2">
+  1308→                    <Badge variant="secondary">v{diffLeftVersion.version}</Badge>
+  1309→                    <span className="text-sm text-muted-foreground">
+  1310→                      {diffLeftVersion.description || 'Без описания'}
+  1311→                    </span>
+  1312→                  </div>
+  1313→                  <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs space-y-0.5">
+  1314→                    {computeDiff(diffLeftVersion.content, diffRightVersion.content).map((line, i) => (
+  1315→                      <div
+  1316→                        key={i}
+  1317→                        className={`px-2 py-0.5 rounded ${
+  1318→                          line.type === 'removed'
+  1319→                            ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 line-through'
+  1320→                            : line.type === 'changed'
+  1321→                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+  1322→                            : 'text-foreground'
+  1323→                        }`}
+  1324→                      >
+  1325→                        {line.left || '\u00A0'}
+  1326→                      </div>
+  1327→                    ))}
+  1328→                  </div>
+  1329→                </div>
+  1330→                <div>
+  1331→                  <div className="flex items-center gap-2 mb-2">
+  1332→                    <Badge variant="default">v{diffRightVersion.version}</Badge>
+  1333→                    <span className="text-sm text-muted-foreground">
+  1334→                      {diffRightVersion.description || 'Без описания'}
+  1335→                    </span>
+  1336→                  </div>
+  1337→                  <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs space-y-0.5">
+  1338→                    {computeDiff(diffLeftVersion.content, diffRightVersion.content).map((line, i) => (
+  1339→                      <div
+  1340→                        key={i}
+  1341→                        className={`px-2 py-0.5 rounded ${
+  1342→                          line.type === 'added'
+  1343→                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+  1344→                            : line.type === 'changed'
+  1345→                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+  1346→                            : 'text-foreground'
+  1347→                        }`}
+  1348→                      >
+  1349→                        {line.right || '\u00A0'}
+  1350→                      </div>
+  1351→                    ))}
+  1352→                  </div>
+  1353→                </div>
+  1354→              </div>
+  1355→            )}
+  1356→          </div>
+  1357→
+  1358→          <DialogFooter>
+  1359→            <Button variant="outline" onClick={() => setDiffDialogOpen(false)}>
+  1360→              Закрыть
+  1361→            </Button>
+  1362→          </DialogFooter>
+  1363→        </DialogContent>
+  1364→      </Dialog>
+  1365→
+  1366→      {/* ============================================ */}
+  1367→      {/* Resolver Dialog */}
+  1368→      {/* ============================================ */}
+  1369→      <Dialog open={resolverDialogOpen} onOpenChange={setResolverDialogOpen}>
+  1370→        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+  1371→          <DialogHeader>
+  1372→            <DialogTitle>
+  1373→              <Sparkles className="h-5 w-5 inline mr-2" />
+  1374→              Тест резолвера промптов
+  1375→            </DialogTitle>
+  1376→            <DialogDescription>
+  1377→              Выберите должность и посмотрите, какой мастер-промпт будет применён
+  1378→            </DialogDescription>
+  1379→          </DialogHeader>
+  1380→          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+  1381→            <div className="space-y-2">
+  1382→              <Label>Должность</Label>
+  1383→              <Select value={resolverPositionId} onValueChange={setResolverPositionId}>
+  1384→                <SelectTrigger>
+  1385→                  <SelectValue placeholder="Выберите должность..." />
+  1386→                </SelectTrigger>
+  1387→                <SelectContent>
+  1388→                  {positions.map((p) => (
+  1389→                    <SelectItem key={p.id} value={p.id}>
+  1390→                      {p.title} ({p.department?.name})
+  1391→                    </SelectItem>
+  1392→                  ))}
+  1393→                </SelectContent>
+  1394→              </Select>
+  1395→            </div>
+  1396→
+  1397→            {resolverPositionId && (() => {
+  1398→              const pos = positions.find((p) => p.id === resolverPositionId)
+  1399→              if (!pos) return null
+  1400→              return (
+  1401→                <Card>
+  1402→                  <CardContent className="p-3">
+  1403→                    <p className="text-xs font-medium text-muted-foreground mb-2">Параметры должности:</p>
+  1404→                    <div className="flex gap-2 flex-wrap">
+  1405→                      <Badge variant="default">{pos.department?.name}</Badge>
+  1406→                      {pos.domain && <Badge variant="secondary">{pos.domain}</Badge>}
+  1407→                      {pos.grade && <Badge variant="secondary">{pos.grade}</Badge>}
+  1408→                      {pos.functions && (() => {
+  1409→                        try {
+  1410→                          return JSON.parse(pos.functions).map((f: string) => (
+  1411→                            <Badge key={f} variant="outline">{f}</Badge>
+  1412→                          ))
+  1413→                        } catch {
+  1414→                          return <Badge variant="outline">{pos.functions}</Badge>
+  1415→                        }
+  1416→                      })()}
+  1417→                    </div>
+  1418→                  </CardContent>
+  1419→                </Card>
+  1420→              )
+  1421→            })()}
+  1422→
+  1423→            <Button onClick={handleResolve} disabled={!resolverPositionId || resolverLoading} className="w-full">
+  1424→              {resolverLoading ? 'Разрешение...' : 'Разрешить промпт'}
+  1425→            </Button>
+  1426→
+  1427→            {resolverResult && (
+  1428→              <div className="space-y-4">
+  1429→                {resolverResult.prompt ? (
+  1430→                  <Card className="border-green-200 dark:border-green-800">
+  1431→                    <CardHeader className="pb-2">
+  1432→                      <CardTitle className="text-base flex items-center gap-2">
+  1433→                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+  1434→                        Найден подходящий промпт
+  1435→                      </CardTitle>
+  1436→                    </CardHeader>
+  1437→                    <CardContent className="space-y-3">
+  1438→                      <div className="flex items-center gap-2">
+  1439→                        <span className="font-semibold">{resolverResult.prompt.name}</span>
+  1440→                        <Badge variant="secondary">v{resolverResult.prompt.version}</Badge>
+  1441→                      </div>
+  1442→                      <div className="flex gap-2 flex-wrap">
+  1443→                        {resolverResult.resolution?.matchDetails.map((d) => (
+  1444→                          <Badge key={d} className="bg-green-600 text-white">{d}</Badge>
+  1445→                        ))}
+  1446→                        <Badge variant="outline">
+  1447→                          Очков: {resolverResult.resolution?.score}
+  1448→                        </Badge>
+  1449→                      </div>
+  1450→                      <pre className="text-xs font-mono bg-muted/50 rounded p-3 max-h-48 overflow-y-auto whitespace-pre-wrap">
+  1451→                        {resolverResult.prompt.content.substring(0, 500)}
+  1452→                        {resolverResult.prompt.content.length > 500 ? '...' : ''}
+  1453→                      </pre>
+  1454→                    </CardContent>
+  1455→                  </Card>
+  1456→                ) : (
+  1457→                  <Card className="border-red-200 dark:border-red-800">
+  1458→                    <CardContent className="p-4">
+  1459→                      <div className="flex items-center gap-2 text-red-600">
+  1460→                        <AlertCircle className="h-5 w-5" />
+  1461→                        <span className="font-medium">Подходящий промпт не найден</span>
+  1462→                      </div>
+  1463→                      <p className="text-sm text-muted-foreground mt-1">
+  1464→                        Ни один активный промпт не соответствует параметрам выбранной должности
+  1465→                      </p>
+  1466→                    </CardContent>
+  1467→                  </Card>
+  1468→                )}
+  1469→
+  1470→                {/* All evaluated prompts */}
+  1471→                {resolverResult.resolution?.evaluatedPrompts && resolverResult.resolution.evaluatedPrompts.length > 0 && (
+  1472→                  <Card>
+  1473→                    <CardHeader className="pb-2">
+  1474→                      <CardTitle className="text-sm">Все оценённые промпты</CardTitle>
+  1475→                    </CardHeader>
+  1476→                    <CardContent>
+  1477→                      <Table>
+  1478→                        <TableHeader>
+  1479→                          <TableRow>
+  1480→                            <TableHead>Промпт</TableHead>
+  1481→                            <TableHead>Версия</TableHead>
+  1482→                            <TableHead>Совпадения</TableHead>
+  1483→                            <TableHead>Очки</TableHead>
+  1484→                          </TableRow>
+  1485→                        </TableHeader>
+  1486→                        <TableBody>
+  1487→                          {resolverResult.resolution.evaluatedPrompts.map((ep) => (
+  1488→                            <TableRow key={ep.id} className={ep.id === resolverResult.prompt?.id ? 'bg-green-50 dark:bg-green-950/20' : ''}>
+  1489→                              <TableCell className="font-medium">{ep.name}</TableCell>
+  1490→                              <TableCell><Badge variant="secondary">v{ep.version}</Badge></TableCell>
+  1491→                              <TableCell>
+  1492→                                <div className="flex gap-1">
+  1493→                                  {ep.matchDetails.length > 0 ? ep.matchDetails.map((d) => (
+  1494→                                    <Badge key={d} variant="outline" className="text-xs">{d}</Badge>
+  1495→                                  )) : (
+  1496→                                    <span className="text-xs text-muted-foreground">Глобальный</span>
+  1497→                                  )}
+  1498→                                </div>
+  1499→                              </TableCell>
+  1500→                              <TableCell>
+  1501→                                <Badge variant={ep.score > 0 ? 'default' : 'secondary'}>
+  1502→                                  {ep.score}
+  1503→                                </Badge>
+  1504→                              </TableCell>
+  1505→                            </TableRow>
+  1506→                          ))}
+  1507→                        </TableBody>
+  1508→                      </Table>
+  1509→                    </CardContent>
+  1510→                  </Card>
+  1511→                )}
+  1512→
+  1513→                {/* Priority visualization */}
+  1514→                <Card>
+  1515→                  <CardContent className="p-3">
+  1516→                    <p className="text-xs font-medium mb-2">Логика приоритета резолвера:</p>
+  1517→                    <div className="space-y-1">
+  1518→                      <div className="flex items-center gap-2 text-xs">
+  1519→                        <Badge variant="default">1000 очков</Badge>
+  1520→                        <span>Совпадение подразделения</span>
+  1521→                      </div>
+  1522→                      <div className="flex items-center gap-2 text-xs">
+  1523→                        <Badge variant="secondary">100 очков</Badge>
+  1524→                        <span>Совпадение домена</span>
+  1525→                      </div>
+  1526→                      <div className="flex items-center gap-2 text-xs">
+  1527→                        <Badge variant="secondary">10 очков</Badge>
+  1528→                        <span>Совпадение грейда</span>
+  1529→                      </div>
+  1530→                      <div className="flex items-center gap-2 text-xs">
+  1531→                        <Badge variant="secondary">1 очко</Badge>
+  1532→                        <span>Совпадение функции</span>
+  1533→                      </div>
+  1534→                      <div className="flex items-center gap-2 text-xs">
+  1535→                        <Badge variant="outline">0 очков</Badge>
+  1536→                        <span>Глобальный промпт (нет ограничений)</span>
+  1537→                      </div>
+  1538→                    </div>
+  1539→                  </CardContent>
+  1540→                </Card>
+  1541→              </div>
+  1542→            )}
+  1543→          </div>
+  1544→          <DialogFooter>
+  1545→            <Button variant="outline" onClick={() => {
+  1546→              setResolverDialogOpen(false)
+  1547→              setResolverResult(null)
+  1548→            }}>
+  1549→              Закрыть
+  1550→            </Button>
+  1551→          </DialogFooter>
+  1552→        </DialogContent>
+  1553→      </Dialog>
+  1554→
+  1555→      {/* ============================================ */}
+  1556→      {/* Delete Confirmation Dialog */}
+  1557→      {/* ============================================ */}
+  1558→      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+  1559→        <AlertDialogContent>
+  1560→          <AlertDialogHeader>
+  1561→            <AlertDialogTitle>Удалить мастер-промпт?</AlertDialogTitle>
+  1562→            <AlertDialogDescription>
+  1563→              Вы уверены, что хотите удалить промпт &quot;{deletingPrompt?.name}&quot; (версия {deletingPrompt?.version})?
+  1564→              Это действие нельзя отменить.
+  1565→            </AlertDialogDescription>
+  1566→          </AlertDialogHeader>
+  1567→          <AlertDialogFooter>
+  1568→            <AlertDialogCancel>Отмена</AlertDialogCancel>
+  1569→            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+  1570→              Удалить
+  1571→            </AlertDialogAction>
+  1572→          </AlertDialogFooter>
+  1573→        </AlertDialogContent>
+  1574→      </AlertDialog>
+  1575→    </div>
+  1576→  )
+  1577→}
+
+[showing lines 1000-1577 of 1578; use offset=1578 with limit to continue reading]

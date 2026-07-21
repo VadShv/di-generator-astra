@@ -1,0 +1,1164 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useCallback } from 'react'
+     4→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     5→import { Button } from '@/components/ui/button'
+     6→import { Input } from '@/components/ui/input'
+     7→import { Label } from '@/components/ui/label'
+     8→import { Textarea } from '@/components/ui/textarea'
+     9→import { Badge } from '@/components/ui/badge'
+    10→import {
+    11→  Table,
+    12→  TableBody,
+    13→  TableCell,
+    14→  TableHead,
+    15→  TableHeader,
+    16→  TableRow,
+    17→} from '@/components/ui/table'
+    18→import {
+    19→  Dialog,
+    20→  DialogContent,
+    21→  DialogDescription,
+    22→  DialogFooter,
+    23→  DialogHeader,
+    24→  DialogTitle,
+    25→} from '@/components/ui/dialog'
+    26→import {
+    27→  AlertDialog,
+    28→  AlertDialogAction,
+    29→  AlertDialogCancel,
+    30→  AlertDialogContent,
+    31→  AlertDialogDescription,
+    32→  AlertDialogFooter,
+    33→  AlertDialogHeader,
+    34→  AlertDialogTitle,
+    35→} from '@/components/ui/alert-dialog'
+    36→import {
+    37→  Select,
+    38→  SelectContent,
+    39→  SelectItem,
+    40→  SelectTrigger,
+    41→  SelectValue,
+    42→} from '@/components/ui/select'
+    43→import {
+    44→  Tooltip,
+    45→  TooltipContent,
+    46→  TooltipProvider,
+    47→  TooltipTrigger,
+    48→} from '@/components/ui/tooltip'
+    49→import { ScrollArea } from '@/components/ui/scroll-area'
+    50→import { Separator } from '@/components/ui/separator'
+    51→import { Skeleton } from '@/components/ui/skeleton'
+    52→import { useToast } from '@/hooks/use-toast'
+    53→import {
+    54→  GitBranch,
+    55→  Plus,
+    56→  LayoutGrid,
+    57→  List,
+    58→  Search,
+    59→  Clock,
+    60→  User,
+    61→  MessageSquare,
+    62→  AlertTriangle,
+    63→  CheckCircle2,
+    64→  XCircle,
+    65→  Send,
+    66→  RotateCcw,
+    67→  FileCheck,
+    68→  Ban,
+    69→  PenSquare,
+    70→  Trash2,
+    71→  Filter,
+    72→  BarChart3,
+    73→  CalendarDays,
+    74→  ChevronRight,
+    75→} from 'lucide-react'
+    76→
+    77→// ============================================
+    78→// Types
+    79→// ============================================
+    80→
+    81→interface Department {
+    82→  id: string
+    83→  name: string
+    84→  code: string
+    85→}
+    86→
+    87→interface Position {
+    88→  id: string
+    89→  title: string
+    90→  code: string
+    91→  departmentId: string
+    92→  department: Department
+    93→}
+    94→
+    95→interface GeneratedDI {
+    96→  id: string
+    97→  positionId: string
+    98→  title: string
+    99→  status: string
+   100→  position: Position
+   101→  trackings: DITracking[]
+   102→  createdAt: string
+   103→  updatedAt: string
+   104→}
+   105→
+   106→interface DITracking {
+   107→  id: string
+   108→  generatedDIId: string
+   109→  status: string
+   110→  assignee: string | null
+   111→  notes: string | null
+   112→  createdAt: string
+   113→  generatedDI?: GeneratedDI
+   114→}
+   115→
+   116→// ============================================
+   117→// Status Configuration
+   118→// ============================================
+   119→
+   120→const TRACKING_STATUSES = [
+   121→  { value: 'draft', label: 'Черновик', color: 'bg-slate-200 text-slate-800', icon: PenSquare, borderColor: 'border-l-slate-400' },
+   122→  { value: 'sent_for_review', label: 'На рассмотрении', color: 'bg-amber-100 text-amber-800', icon: Send, borderColor: 'border-l-amber-400' },
+   123→  { value: 'returned_with_comments', label: 'Возвращена с комментариями', color: 'bg-orange-100 text-orange-800', icon: RotateCcw, borderColor: 'border-l-orange-400' },
+   124→  { value: 'approved', label: 'Согласована', color: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2, borderColor: 'border-l-emerald-400' },
+   125→  { value: 'rejected', label: 'Отклонена', color: 'bg-red-100 text-red-800', icon: XCircle, borderColor: 'border-l-red-400' },
+   126→  { value: 'signed', label: 'Подписана', color: 'bg-teal-100 text-teal-800', icon: FileCheck, borderColor: 'border-l-teal-400' },
+   127→  { value: 'cancelled', label: 'Отменена', color: 'bg-gray-100 text-gray-800', icon: Ban, borderColor: 'border-l-gray-400' },
+   128→] as const
+   129→
+   130→function getStatusConfig(status: string) {
+   131→  return TRACKING_STATUSES.find(s => s.value === status) ?? TRACKING_STATUSES[0]
+   132→}
+   133→
+   134→function formatDate(dateStr: string) {
+   135→  try {
+   136→    return new Date(dateStr).toLocaleDateString('ru-RU', {
+   137→      day: '2-digit',
+   138→      month: '2-digit',
+   139→      year: 'numeric',
+   140→      hour: '2-digit',
+   141→      minute: '2-digit',
+   142→    })
+   143→  } catch {
+   144→    return dateStr
+   145→  }
+   146→}
+   147→
+   148→function formatDateShort(dateStr: string) {
+   149→  try {
+   150→    return new Date(dateStr).toLocaleDateString('ru-RU', {
+   151→      day: '2-digit',
+   152→      month: '2-digit',
+   153→    })
+   154→  } catch {
+   155→    return dateStr
+   156→  }
+   157→}
+   158→
+   159→function daysBetween(dateA: string, dateB: string) {
+   160→  const a = new Date(dateA).getTime()
+   161→  const b = new Date(dateB).getTime()
+   162→  return Math.round(Math.abs(b - a) / (1000 * 60 * 60 * 24))
+   163→}
+   164→
+   165→function daysSince(dateStr: string) {
+   166→  return Math.round((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24))
+   167→}
+   168→
+   169→// ============================================
+   170→// Main Component
+   171→// ============================================
+   172→
+   173→export function TrackingModule() {
+   174→  const { toast } = useToast()
+   175→
+   176→  // Data state
+   177→  const [trackings, setTrackings] = useState<DITracking[]>([])
+   178→  const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
+   179→  const [loading, setLoading] = useState(true)
+   180→
+   181→  // View state
+   182→  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
+   183→
+   184→  // Filter state
+   185→  const [filterStatus, setFilterStatus] = useState<string>('all')
+   186→  const [filterAssignee, setFilterAssignee] = useState<string>('')
+   187→  const [searchQuery, setSearchQuery] = useState('')
+   188→
+   189→  // Dialog state
+   190→  const [addDialogOpen, setAddDialogOpen] = useState(false)
+   191→  const [statusChangeDialogOpen, setStatusChangeDialogOpen] = useState(false)
+   192→  const [timelineDialogOpen, setTimelineDialogOpen] = useState(false)
+   193→  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+   194→  const [statsDialogOpen, setStatsDialogOpen] = useState(false)
+   195→
+   196→  // Form state
+   197→  const [formDIId, setFormDIId] = useState('')
+   198→  const [formStatus, setFormStatus] = useState('sent_for_review')
+   199→  const [formAssignee, setFormAssignee] = useState('')
+   200→  const [formNotes, setFormNotes] = useState('')
+   201→
+   202→  // Selected tracking for actions
+   203→  const [selectedTracking, setSelectedTracking] = useState<DITracking | null>(null)
+   204→  const [selectedDIForTimeline, setSelectedDIForTimeline] = useState<string | null>(null)
+   205→
+   206→  // ============================================
+   207→  // Data Fetching
+   208→  // ============================================
+   209→
+   210→  const fetchTrackings = useCallback(async () => {
+   211→    try {
+   212→      const params = new URLSearchParams()
+   213→      if (filterStatus && filterStatus !== 'all') params.set('status', filterStatus)
+   214→      if (filterAssignee) params.set('assignee', filterAssignee)
+   215→
+   216→      const res = await fetch(`/api/tracking?${params.toString()}`)
+   217→      if (!res.ok) throw new Error()
+   218→      const data = await res.json()
+   219→      setTrackings(data)
+   220→    } catch {
+   221→      toast({ title: 'Ошибка', description: 'Не удалось загрузить данные отслеживания', variant: 'destructive' })
+   222→    }
+   223→  }, [filterStatus, filterAssignee, toast])
+   224→
+   225→  const fetchGeneratedDIs = useCallback(async () => {
+   226→    try {
+   227→      const res = await fetch('/api/generated-di')
+   228→      if (!res.ok) throw new Error()
+   229→      const data = await res.json()
+   230→      setGeneratedDIs(data)
+   231→    } catch {
+   232→      toast({ title: 'Ошибка', description: 'Не удалось загрузить список ДИ', variant: 'destructive' })
+   233→    }
+   234→  }, [toast])
+   235→
+   236→  const loadAll = useCallback(async () => {
+   237→    setLoading(true)
+   238→    await Promise.all([fetchTrackings(), fetchGeneratedDIs()])
+   239→    setLoading(false)
+   240→  }, [fetchTrackings, fetchGeneratedDIs])
+   241→
+   242→  useEffect(() => {
+   243→    loadAll()
+   244→  }, [loadAll])
+   245→
+   246→  // ============================================
+   247→  // Actions
+   248→  // ============================================
+   249→
+   250→  const handleCreateTracking = async () => {
+   251→    if (!formDIId || !formStatus) {
+   252→      toast({ title: 'Ошибка', description: 'Выберите ДИ и статус', variant: 'destructive' })
+   253→      return
+   254→    }
+   255→
+   256→    try {
+   257→      const res = await fetch('/api/tracking', {
+   258→        method: 'POST',
+   259→        headers: { 'Content-Type': 'application/json' },
+   260→        body: JSON.stringify({
+   261→          generatedDIId: formDIId,
+   262→          status: formStatus,
+   263→          assignee: formAssignee || null,
+   264→          notes: formNotes || null,
+   265→        }),
+   266→      })
+   267→      if (!res.ok) throw new Error()
+   268→      toast({ title: 'Успешно', description: 'Запись отслеживания добавлена' })
+   269→      resetForm()
+   270→      setAddDialogOpen(false)
+   271→      fetchTrackings()
+   272→      fetchGeneratedDIs()
+   273→    } catch {
+   274→      toast({ title: 'Ошибка', description: 'Не удалось создать запись', variant: 'destructive' })
+   275→    }
+   276→  }
+   277→
+   278→  const handleStatusChange = async () => {
+   279→    if (!selectedTracking) return
+   280→
+   281→    try {
+   282→      const res = await fetch('/api/tracking', {
+   283→        method: 'PUT',
+   284→        headers: { 'Content-Type': 'application/json' },
+   285→        body: JSON.stringify({
+   286→          id: selectedTracking.id,
+   287→          status: formStatus,
+   288→          assignee: formAssignee || selectedTracking.assignee,
+   289→          notes: formNotes || selectedTracking.notes,
+   290→        }),
+   291→      })
+   292→      if (!res.ok) throw new Error()
+   293→      toast({ title: 'Успешно', description: 'Статус обновлён' })
+   294→      setStatusChangeDialogOpen(false)
+   295→      setSelectedTracking(null)
+   296→      resetForm()
+   297→      fetchTrackings()
+   298→      fetchGeneratedDIs()
+   299→    } catch {
+   300→      toast({ title: 'Ошибка', description: 'Не удалось обновить статус', variant: 'destructive' })
+   301→    }
+   302→  }
+   303→
+   304→  const handleDelete = async () => {
+   305→    if (!selectedTracking) return
+   306→
+   307→    try {
+   308→      const res = await fetch('/api/tracking', {
+   309→        method: 'DELETE',
+   310→        headers: { 'Content-Type': 'application/json' },
+   311→        body: JSON.stringify({ id: selectedTracking.id }),
+   312→      })
+   313→      if (!res.ok) throw new Error()
+   314→      toast({ title: 'Успешно', description: 'Запись удалена' })
+   315→      setDeleteDialogOpen(false)
+   316→      setSelectedTracking(null)
+   317→      fetchTrackings()
+   318→    } catch {
+   319→      toast({ title: 'Ошибка', description: 'Не удалось удалить запись', variant: 'destructive' })
+   320→    }
+   321→  }
+   322→
+   323→  const handleUpdateDIStatus = async (generatedDIId: string, newDIStatus: string) => {
+   324→    try {
+   325→      const res = await fetch('/api/tracking/update-di-status', {
+   326→        method: 'PUT',
+   327→        headers: { 'Content-Type': 'application/json' },
+   328→        body: JSON.stringify({ generatedDIId, status: newDIStatus }),
+   329→      })
+   330→      if (!res.ok) throw new Error()
+   331→      toast({ title: 'Успешно', description: 'Статус ДИ обновлён' })
+   332→      fetchGeneratedDIs()
+   333→    } catch {
+   334→      toast({ title: 'Ошибка', description: 'Не удалось обновить статус ДИ', variant: 'destructive' })
+   335→    }
+   336→  }
+   337→
+   338→  const resetForm = () => {
+   339→    setFormDIId('')
+   340→    setFormStatus('sent_for_review')
+   341→    setFormAssignee('')
+   342→    setFormNotes('')
+   343→  }
+   344→
+   345→  const openStatusChange = (tracking: DITracking) => {
+   346→    setSelectedTracking(tracking)
+   347→    setFormStatus(tracking.status)
+   348→    setFormAssignee(tracking.assignee || '')
+   349→    setFormNotes('')
+   350→    setStatusChangeDialogOpen(true)
+   351→  }
+   352→
+   353→  const openTimeline = (generatedDIId: string) => {
+   354→    setSelectedDIForTimeline(generatedDIId)
+   355→    setTimelineDialogOpen(true)
+   356→  }
+   357→
+   358→  // ============================================
+   359→  // Computed Data
+   360→  // ============================================
+   361→
+   362→  // Get the latest tracking for each DI to determine its current lifecycle status
+   363→  const getLatestTrackingPerDI = useCallback((): Record<string, DITracking> => {
+   364→    const latest: Record<string, DITracking> = {}
+   365→    for (const t of trackings) {
+   366→      if (!latest[t.generatedDIId] || new Date(t.createdAt) > new Date(latest[t.generatedDIId].createdAt)) {
+   367→        latest[t.generatedDIId] = t
+   368→      }
+   369→    }
+   370→    return latest
+   371→  }, [trackings])
+   372→
+   373→  // DIs that have tracking entries, mapped by their latest status
+   374→  const disWithTracking = useCallback(() => {
+   375→    const latestMap = getLatestTrackingPerDI()
+   376→    const result: Record<string, GeneratedDI & { latestTracking: DITracking }> = {}
+   377→
+   378→    for (const di of generatedDIs) {
+   379→      if (latestMap[di.id]) {
+   380→        result[di.id] = { ...di, latestTracking: latestMap[di.id] }
+   381→      }
+   382→    }
+   383→    return Object.values(result)
+   384→  }, [generatedDIs, getLatestTrackingPerDI])
+   385→
+   386→  // Filter DIs by search
+   387→  const filteredDIs = useCallback(() => {
+   388→    let dis = disWithTracking()
+   389→    if (searchQuery) {
+   390→      const q = searchQuery.toLowerCase()
+   391→      dis = dis.filter(di =>
+   392→        di.title.toLowerCase().includes(q) ||
+   393→        di.position.title.toLowerCase().includes(q) ||
+   394→        (di.latestTracking.assignee && di.latestTracking.assignee.toLowerCase().includes(q))
+   395→      )
+   396→    }
+   397→    return dis
+   398→  }, [disWithTracking, searchQuery])
+   399→
+   400→  // Kanban columns
+   401→  const kanbanColumns = TRACKING_STATUSES.map(status => ({
+   402→    ...status,
+   403→    items: filteredDIs().filter(di => di.latestTracking.status === status.value),
+   404→  }))
+   405→
+   406→  // Statistics
+   407→  const stats = useCallback(() => {
+   408→    const dis = disWithTracking()
+   409→    const statusCounts: Record<string, number> = {}
+   410→    for (const s of TRACKING_STATUSES) {
+   411→      statusCounts[s.value] = 0
+   412→    }
+   413→    for (const di of dis) {
+   414→      statusCounts[di.latestTracking.status] = (statusCounts[di.latestTracking.status] || 0) + 1
+   415→    }
+   416→
+   417→    // Average time between status changes
+   418→    let totalDays = 0
+   419→    let pairCount = 0
+   420→    for (const di of generatedDIs) {
+   421→      const diTrackings = trackings
+   422→        .filter(t => t.generatedDIId === di.id)
+   423→        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+   424→      for (let i = 1; i < diTrackings.length; i++) {
+   425→        totalDays += daysBetween(diTrackings[i - 1].createdAt, diTrackings[i].createdAt)
+   426→        pairCount++
+   427→      }
+   428→    }
+   429→    const avgDays = pairCount > 0 ? Math.round(totalDays / pairCount * 10) / 10 : 0
+   430→
+   431→    // Overdue items (in sent_for_review for > 7 days)
+   432→    const overdueDis = dis.filter(di => {
+   433→      if (di.latestTracking.status !== 'sent_for_review') return false
+   434→      return daysSince(di.latestTracking.createdAt) > 7
+   435→    })
+   436→
+   437→    return { statusCounts, avgDays, overdueDis, totalDis: dis.length }
+   438→  }, [disWithTracking, generatedDIs, trackings])
+   439→
+   440→  // Timeline for a specific DI
+   441→  const getTimelineForDI = useCallback((diId: string) => {
+   442→    return trackings
+   443→      .filter(t => t.generatedDIId === diId)
+   444→      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+   445→  }, [trackings])
+   446→
+   447→  // Unique assignees for filter
+   448→  const uniqueAssignees = [...new Set(trackings.map(t => t.assignee).filter(Boolean))] as string[]
+   449→
+   450→  // ============================================
+   451→  // Render
+   452→  // ============================================
+   453→
+   454→  if (loading) {
+   455→    return (
+   456→      <div className="space-y-6">
+   457→        <div>
+   458→          <Skeleton className="h-9 w-64" />
+   459→          <Skeleton className="h-5 w-96 mt-2" />
+   460→        </div>
+   461→        <div className="grid grid-cols-4 gap-4">
+   462→          {[1, 2, 3, 4].map(i => (
+   463→            <Skeleton key={i} className="h-24" />
+   464→          ))}
+   465→        </div>
+   466→        <Skeleton className="h-96" />
+   467→      </div>
+   468→    )
+   469→  }
+   470→
+   471→  const { statusCounts, avgDays, overdueDis, totalDis } = stats()
+   472→
+   473→  return (
+   474→    <div className="space-y-6">
+   475→      {/* Header */}
+   476→      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+   477→        <div>
+   478→          <h1 className="text-3xl font-bold tracking-tight">Отслеживание</h1>
+   479→          <p className="text-muted-foreground mt-1">
+   480→            Отслеживание жизненного цикла должностных инструкций
+   481→          </p>
+   482→        </div>
+   483→        <div className="flex items-center gap-2">
+   484→          <Button variant="outline" size="sm" onClick={() => setStatsDialogOpen(true)}>
+   485→            <BarChart3 className="h-4 w-4 mr-1" />
+   486→            Статистика
+   487→          </Button>
+   488→          <Button size="sm" onClick={() => { resetForm(); setAddDialogOpen(true) }}>
+   489→            <Plus className="h-4 w-4 mr-1" />
+   490→            Добавить запись
+   491→          </Button>
+   492→        </div>
+   493→      </div>
+   494→
+   495→      {/* Stats Cards */}
+   496→      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   497→        <Card>
+   498→          <CardContent className="p-4">
+   499→            <div className="flex items-center gap-2">
+   500→              <GitBranch className="h-4 w-4 text-muted-foreground" />
+   501→              <span className="text-sm text-muted-foreground">Всего ДИ с отслеживанием</span>
+   502→            </div>
+   503→            <p className="text-2xl font-bold mt-1">{totalDis}</p>
+   504→          </CardContent>
+   505→        </Card>
+   506→        <Card>
+   507→          <CardContent className="p-4">
+   508→            <div className="flex items-center gap-2">
+   509→              <Clock className="h-4 w-4 text-amber-500" />
+   510→              <span className="text-sm text-muted-foreground">На рассмотрении</span>
+   511→            </div>
+   512→            <p className="text-2xl font-bold mt-1">{statusCounts.sent_for_review}</p>
+   513→          </CardContent>
+   514→        </Card>
+   515→        <Card>
+   516→          <CardContent className="p-4">
+   517→            <div className="flex items-center gap-2">
+   518→              <AlertTriangle className="h-4 w-4 text-red-500" />
+   519→              <span className="text-sm text-muted-foreground">Просрочено (&gt;7 дней)</span>
+   520→            </div>
+   521→            <p className="text-2xl font-bold mt-1">{overdueDis.length}</p>
+   522→          </CardContent>
+   523→        </Card>
+   524→        <Card>
+   525→          <CardContent className="p-4">
+   526→            <div className="flex items-center gap-2">
+   527→              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+   528→              <span className="text-sm text-muted-foreground">Ср. время смены статуса</span>
+   529→            </div>
+   530→            <p className="text-2xl font-bold mt-1">{avgDays} дн.</p>
+   531→          </CardContent>
+   532→        </Card>
+   533→      </div>
+   534→
+   535→      {/* Filters & View Toggle */}
+   536→      <Card>
+   537→        <CardContent className="p-4">
+   538→          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+   539→            <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
+   540→              <Search className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+   541→              <Input
+   542→                placeholder="Поиск по названию, должности, ответственному..."
+   543→                value={searchQuery}
+   544→                onChange={(e) => setSearchQuery(e.target.value)}
+   545→                className="h-9"
+   546→              />
+   547→            </div>
+   548→            <div className="flex items-center gap-2 flex-wrap">
+   549→              <Filter className="h-4 w-4 text-muted-foreground" />
+   550→              <Select value={filterStatus} onValueChange={setFilterStatus}>
+   551→                <SelectTrigger className="w-48 h-9">
+   552→                  <SelectValue placeholder="Все статусы" />
+   553→                </SelectTrigger>
+   554→                <SelectContent>
+   555→                  <SelectItem value="all">Все статусы</SelectItem>
+   556→                  {TRACKING_STATUSES.map(s => (
+   557→                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+   558→                  ))}
+   559→                </SelectContent>
+   560→              </Select>
+   561→              <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+   562→                <SelectTrigger className="w-44 h-9">
+   563→                  <SelectValue placeholder="Все ответственные" />
+   564→                </SelectTrigger>
+   565→                <SelectContent>
+   566→                  <SelectItem value="__all__">Все ответственные</SelectItem>
+   567→                  {uniqueAssignees.map(a => (
+   568→                    <SelectItem key={a} value={a}>{a}</SelectItem>
+   569→                  ))}
+   570→                </SelectContent>
+   571→              </Select>
+   572→              <Separator orientation="vertical" className="h-6" />
+   573→              <div className="flex border rounded-md">
+   574→                <Button
+   575→                  variant={viewMode === 'kanban' ? 'secondary' : 'ghost'}
+   576→                  size="sm"
+   577→                  className="rounded-r-none h-9"
+   578→                  onClick={() => setViewMode('kanban')}
+   579→                >
+   580→                  <LayoutGrid className="h-4 w-4" />
+   581→                </Button>
+   582→                <Button
+   583→                  variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+   584→                  size="sm"
+   585→                  className="rounded-l-none h-9"
+   586→                  onClick={() => setViewMode('list')}
+   587→                >
+   588→                  <List className="h-4 w-4" />
+   589→                </Button>
+   590→              </div>
+   591→            </div>
+   592→          </div>
+   593→        </CardContent>
+   594→      </Card>
+   595→
+   596→      {/* Kanban View */}
+   597→      {viewMode === 'kanban' && (
+   598→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+   599→          {kanbanColumns.map(column => {
+   600→            const Icon = column.icon
+   601→            return (
+   602→              <div key={column.value} className="space-y-3">
+   603→                <div className="flex items-center gap-2 px-1">
+   604→                  <Icon className="h-4 w-4" />
+   605→                  <span className="font-medium text-sm">{column.label}</span>
+   606→                  <Badge variant="secondary" className="ml-auto text-xs">
+   607→                    {column.items.length}
+   608→                  </Badge>
+   609→                </div>
+   610→                <ScrollArea className="h-[calc(100vh-420px)] min-h-[200px]">
+   611→                  <div className="space-y-2 pr-2">
+   612→                    {column.items.length === 0 ? (
+   613→                      <div className="text-xs text-muted-foreground text-center py-6 border border-dashed rounded-lg">
+   614→                        Нет записей
+   615→                      </div>
+   616→                    ) : (
+   617→                      column.items.map(di => {
+   618→                        const isOverdue = di.latestTracking.status === 'sent_for_review' && daysSince(di.latestTracking.createdAt) > 7
+   619→                        return (
+   620→                          <Card
+   621→                            key={di.id}
+   622→                            className={`cursor-pointer hover:shadow-md transition-shadow border-l-4 ${column.borderColor} ${isOverdue ? 'ring-2 ring-red-200' : ''}`}
+   623→                            onClick={() => openTimeline(di.id)}
+   624→                          >
+   625→                            <CardContent className="p-3 space-y-2">
+   626→                              <div className="font-medium text-sm leading-tight line-clamp-2">
+   627→                                {di.title}
+   628→                              </div>
+   629→                              <div className="text-xs text-muted-foreground">
+   630→                                {di.position.title}
+   631→                              </div>
+   632→                              {di.latestTracking.assignee && (
+   633→                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+   634→                                  <User className="h-3 w-3" />
+   635→                                  {di.latestTracking.assignee}
+   636→                                </div>
+   637→                              )}
+   638→                              <div className="flex items-center justify-between">
+   639→                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+   640→                                  <CalendarDays className="h-3 w-3" />
+   641→                                  {formatDateShort(di.latestTracking.createdAt)}
+   642→                                </div>
+   643→                                {isOverdue && (
+   644→                                  <TooltipProvider>
+   645→                                    <Tooltip>
+   646→                                      <TooltipTrigger>
+   647→                                        <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+   648→                                      </TooltipTrigger>
+   649→                                      <TooltipContent>
+   650→                                        Просрочено: {daysSince(di.latestTracking.createdAt)} дн.
+   651→                                      </TooltipContent>
+   652→                                    </Tooltip>
+   653→                                  </TooltipProvider>
+   654→                                )}
+   655→                              </div>
+   656→                              <div className="flex gap-1 pt-1">
+   657→                                <Button
+   658→                                  variant="ghost"
+   659→                                  size="sm"
+   660→                                  className="h-7 w-7 p-0"
+   661→                                  onClick={(e) => {
+   662→                                    e.stopPropagation()
+   663→                                    openStatusChange(di.latestTracking)
+   664→                                  }}
+   665→                                >
+   666→                                  <PenSquare className="h-3.5 w-3.5" />
+   667→                                </Button>
+   668→                                <Button
+   669→                                  variant="ghost"
+   670→                                  size="sm"
+   671→                                  className="h-7 w-7 p-0"
+   672→                                  onClick={(e) => {
+   673→                                    e.stopPropagation()
+   674→                                    openTimeline(di.id)
+   675→                                  }}
+   676→                                >
+   677→                                  <Clock className="h-3.5 w-3.5" />
+   678→                                </Button>
+   679→                              </div>
+   680→                            </CardContent>
+   681→                          </Card>
+   682→                        )
+   683→                      })
+   684→                    )}
+   685→                  </div>
+   686→                </ScrollArea>
+   687→              </div>
+   688→            )
+   689→          })}
+   690→        </div>
+   691→      )}
+   692→
+   693→      {/* List View */}
+   694→      {viewMode === 'list' && (
+   695→        <Card>
+   696→          <CardContent className="p-0">
+   697→            <Table>
+   698→              <TableHeader>
+   699→                <TableRow>
+   700→                  <TableHead>ДИ</TableHead>
+   701→                  <TableHead>Должность</TableHead>
+   702→                  <TableHead>Статус</TableHead>
+   703→                  <TableHead>Ответственный</TableHead>
+   704→                  <TableHead>Заметки</TableHead>
+   705→                  <TableHead>Дата</TableHead>
+   706→                  <TableHead className="text-right">Действия</TableHead>
+   707→                </TableRow>
+   708→              </TableHeader>
+   709→              <TableBody>
+   710→                {filteredDIs().length === 0 ? (
+   711→                  <TableRow>
+   712→                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+   713→                      Нет записей для отображения
+   714→                    </TableCell>
+   715→                  </TableRow>
+   716→                ) : (
+   717→                  filteredDIs().map(di => {
+   718→                    const statusCfg = getStatusConfig(di.latestTracking.status)
+   719→                    const Icon = statusCfg.icon
+   720→                    const isOverdue = di.latestTracking.status === 'sent_for_review' && daysSince(di.latestTracking.createdAt) > 7
+   721→                    return (
+   722→                      <TableRow key={di.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openTimeline(di.id)}>
+   723→                        <TableCell className="font-medium max-w-[200px]">
+   724→                          <div className="truncate">{di.title}</div>
+   725→                        </TableCell>
+   726→                        <TableCell className="text-muted-foreground">
+   727→                          {di.position.title}
+   728→                        </TableCell>
+   729→                        <TableCell>
+   730→                          <Badge variant="outline" className={`${statusCfg.color} gap-1 text-xs`}>
+   731→                            <Icon className="h-3 w-3" />
+   732→                            {statusCfg.label}
+   733→                            {isOverdue && <AlertTriangle className="h-3 w-3 text-red-500 ml-1" />}
+   734→                          </Badge>
+   735→                        </TableCell>
+   736→                        <TableCell>
+   737→                          {di.latestTracking.assignee || '—'}
+   738→                        </TableCell>
+   739→                        <TableCell className="max-w-[200px]">
+   740→                          <div className="truncate text-sm text-muted-foreground">
+   741→                            {di.latestTracking.notes || '—'}
+   742→                          </div>
+   743→                        </TableCell>
+   744→                        <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+   745→                          {formatDate(di.latestTracking.createdAt)}
+   746→                        </TableCell>
+   747→                        <TableCell className="text-right">
+   748→                          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+   749→                            <Button
+   750→                              variant="ghost"
+   751→                              size="sm"
+   752→                              className="h-8 w-8 p-0"
+   753→                              onClick={() => openStatusChange(di.latestTracking)}
+   754→                            >
+   755→                              <PenSquare className="h-3.5 w-3.5" />
+   756→                            </Button>
+   757→                            <Button
+   758→                              variant="ghost"
+   759→                              size="sm"
+   760→                              className="h-8 w-8 p-0"
+   761→                              onClick={() => {
+   762→                                setSelectedTracking(di.latestTracking)
+   763→                                setDeleteDialogOpen(true)
+   764→                              }}
+   765→                            >
+   766→                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
+   767→                            </Button>
+   768→                          </div>
+   769→                        </TableCell>
+   770→                      </TableRow>
+   771→                    )
+   772→                  })
+   773→                )}
+   774→              </TableBody>
+   775→            </Table>
+   776→          </CardContent>
+   777→        </Card>
+   778→      )}
+   779→
+   780→      {/* DIs without tracking */}
+   781→      {generatedDIs.filter(di => !trackings.some(t => t.generatedDIId === di.id)).length > 0 && (
+   782→        <Card>
+   783→          <CardHeader className="pb-3">
+   784→            <CardTitle className="text-base">ДИ без отслеживания</CardTitle>
+   785→          </CardHeader>
+   786→          <CardContent className="p-4 pt-0">
+   787→            <div className="flex flex-wrap gap-2">
+   788→              {generatedDIs
+   789→                .filter(di => !trackings.some(t => t.generatedDIId === di.id))
+   790→                .map(di => (
+   791→                  <Badge
+   792→                    key={di.id}
+   793→                    variant="outline"
+   794→                    className="cursor-pointer hover:bg-muted transition-colors"
+   795→                    onClick={() => {
+   796→                      resetForm()
+   797→                      setFormDIId(di.id)
+   798→                      setAddDialogOpen(true)
+   799→                    }}
+   800→                  >
+   801→                    <Plus className="h-3 w-3 mr-1" />
+   802→                    {di.title}
+   803→                  </Badge>
+   804→                ))}
+   805→            </div>
+   806→          </CardContent>
+   807→        </Card>
+   808→      )}
+   809→
+   810→      {/* ============================================ */}
+   811→      {/* Add Tracking Dialog */}
+   812→      {/* ============================================ */}
+   813→      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+   814→        <DialogContent className="sm:max-w-[500px]">
+   815→          <DialogHeader>
+   816→            <DialogTitle>Добавить запись отслеживания</DialogTitle>
+   817→            <DialogDescription>
+   818→              Добавить новый статус в жизненный цикл ДИ
+   819→            </DialogDescription>
+   820→          </DialogHeader>
+   821→          <div className="space-y-4 py-2">
+   822→            <div className="space-y-2">
+   823→              <Label>Должностная инструкция *</Label>
+   824→              <Select value={formDIId} onValueChange={setFormDIId}>
+   825→                <SelectTrigger>
+   826→                  <SelectValue placeholder="Выберите ДИ" />
+   827→                </SelectTrigger>
+   828→                <SelectContent>
+   829→                  {generatedDIs.map(di => (
+   830→                    <SelectItem key={di.id} value={di.id}>
+   831→                      {di.title} — {di.position.title}
+   832→                    </SelectItem>
+   833→                  ))}
+   834→                </SelectContent>
+   835→              </Select>
+   836→            </div>
+   837→            <div className="space-y-2">
+   838→              <Label>Статус *</Label>
+   839→              <Select value={formStatus} onValueChange={setFormStatus}>
+   840→                <SelectTrigger>
+   841→                  <SelectValue />
+   842→                </SelectTrigger>
+   843→                <SelectContent>
+   844→                  {TRACKING_STATUSES.map(s => (
+   845→                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+   846→                  ))}
+   847→                </SelectContent>
+   848→              </Select>
+   849→            </div>
+   850→            <div className="space-y-2">
+   851→              <Label>Ответственный</Label>
+   852→              <Input
+   853→                placeholder="ФИО ответственного"
+   854→                value={formAssignee}
+   855→                onChange={(e) => setFormAssignee(e.target.value)}
+   856→              />
+   857→            </div>
+   858→            <div className="space-y-2">
+   859→              <Label>Заметки</Label>
+   860→              <Textarea
+   861→                placeholder="Комментарии к изменению статуса..."
+   862→                value={formNotes}
+   863→                onChange={(e) => setFormNotes(e.target.value)}
+   864→                rows={3}
+   865→              />
+   866→            </div>
+   867→          </div>
+   868→          <DialogFooter>
+   869→            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
+   870→              Отмена
+   871→            </Button>
+   872→            <Button onClick={handleCreateTracking}>
+   873→              Добавить
+   874→            </Button>
+   875→          </DialogFooter>
+   876→        </DialogContent>
+   877→      </Dialog>
+   878→
+   879→      {/* ============================================ */}
+   880→      {/* Status Change Dialog */}
+   881→      {/* ============================================ */}
+   882→      <Dialog open={statusChangeDialogOpen} onOpenChange={setStatusChangeDialogOpen}>
+   883→        <DialogContent className="sm:max-w-[450px]">
+   884→          <DialogHeader>
+   885→            <DialogTitle>Изменить статус</DialogTitle>
+   886→            <DialogDescription>
+   887→              {selectedTracking && (
+   888→                <>
+   889→                  {selectedTracking.generatedDI?.title || 'ДИ'}
+   890→                </>
+   891→              )}
+   892→            </DialogDescription>
+   893→          </DialogHeader>
+   894→          <div className="space-y-4 py-2">
+   895→            <div className="space-y-2">
+   896→              <Label>Новый статус</Label>
+   897→              <Select value={formStatus} onValueChange={setFormStatus}>
+   898→                <SelectTrigger>
+   899→                  <SelectValue />
+   900→                </SelectTrigger>
+   901→                <SelectContent>
+   902→                  {TRACKING_STATUSES.map(s => (
+   903→                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+   904→                  ))}
+   905→                </SelectContent>
+   906→              </Select>
+   907→            </div>
+   908→            <div className="space-y-2">
+   909→              <Label>Ответственный</Label>
+   910→              <Input
+   911→                placeholder="ФИО ответственного"
+   912→                value={formAssignee}
+   913→                onChange={(e) => setFormAssignee(e.target.value)}
+   914→              />
+   915→            </div>
+   916→            <div className="space-y-2">
+   917→              <Label>Заметка к изменению</Label>
+   918→              <Textarea
+   919→                placeholder="Причина изменения статуса..."
+   920→                value={formNotes}
+   921→                onChange={(e) => setFormNotes(e.target.value)}
+   922→                rows={3}
+   923→              />
+   924→            </div>
+   925→          </div>
+   926→          <DialogFooter>
+   927→            <Button variant="outline" onClick={() => setStatusChangeDialogOpen(false)}>
+   928→              Отмена
+   929→            </Button>
+   930→            <Button onClick={handleStatusChange}>
+   931→              Сохранить
+   932→            </Button>
+   933→          </DialogFooter>
+   934→        </DialogContent>
+   935→      </Dialog>
+   936→
+   937→      {/* ============================================ */}
+   938→      {/* Timeline Dialog */}
+   939→      {/* ============================================ */}
+   940→      <Dialog open={timelineDialogOpen} onOpenChange={setTimelineDialogOpen}>
+   941→        <DialogContent className="sm:max-w-[600px]">
+   942→          <DialogHeader>
+   943→            <DialogTitle>История изменений</DialogTitle>
+   944→            <DialogDescription>
+   945→              Хронология изменений статуса ДИ
+   946→            </DialogDescription>
+   947→          </DialogHeader>
+   948→          <div className="py-2">
+   949→            {selectedDIForTimeline ? (
+   950→              (() => {
+   951→                const timeline = getTimelineForDI(selectedDIForTimeline)
+   952→                const di = generatedDIs.find(d => d.id === selectedDIForTimeline)
+   953→                if (!di) return null
+   954→
+   955→                return (
+   956→                  <div className="space-y-4">
+   957→                    <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+   958→                      <GitBranch className="h-5 w-5 text-muted-foreground" />
+   959→                      <div>
+   960→                        <div className="font-medium">{di.title}</div>
+   961→                        <div className="text-sm text-muted-foreground">{di.position.title} — {di.position.department?.name}</div>
+   962→                      </div>
+   963→                    </div>
+   964→                    {timeline.length === 0 ? (
+   965→                      <div className="text-center py-6 text-muted-foreground">
+   966→                        Нет записей в истории
+   967→                      </div>
+   968→                    ) : (
+   969→                      <div className="relative pl-6 space-y-0">
+   970→                        {/* Timeline line */}
+   971→                        <div className="absolute left-[11px] top-2 bottom-2 w-px bg-border" />
+   972→                        {timeline.map((entry, index) => {
+   973→                          const cfg = getStatusConfig(entry.status)
+   974→                          const Icon = cfg.icon
+   975→                          return (
+   976→                            <div key={entry.id} className="relative pb-4 last:pb-0">
+   977→                              {/* Dot */}
+   978→                              <div className={`absolute left-[-20px] top-1 h-5 w-5 rounded-full border-2 border-background ${cfg.color} flex items-center justify-center`}>
+   979→                                <Icon className="h-2.5 w-2.5" />
+   980→                              </div>
+   981→                              {/* Content */}
+   982→                              <div className="ml-2 p-3 bg-card border rounded-lg hover:shadow-sm transition-shadow">
+   983→                                <div className="flex items-center justify-between">
+   984→                                  <Badge variant="outline" className={`${cfg.color} text-xs gap-1`}>
+   985→                                    {cfg.label}
+   986→                                  </Badge>
+   987→                                  <span className="text-xs text-muted-foreground">
+   988→                                    {formatDate(entry.createdAt)}
+   989→                                  </span>
+   990→                                </div>
+   991→                                {entry.assignee && (
+   992→                                  <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+   993→                                    <User className="h-3 w-3" />
+   994→                                    {entry.assignee}
+   995→                                  </div>
+   996→                                )}
+   997→                                {entry.notes && (
+   998→                                  <div className="flex items-start gap-1 mt-1.5 text-xs text-muted-foreground">
+   999→                                    <MessageSquare className="h-3 w-3 mt-0.5 flex-shrink-0" />
+  1000→                                    <span className="line-clamp-3">{entry.notes}</span>
+  1001→                                  </div>
+  1002→                                )}
+  1003→                                {index === 0 && (
+  1004→                                  <div className="flex gap-1 mt-2">
+  1005→                                    <Button
+  1006→                                      variant="ghost"
+  1007→                                      size="sm"
+  1008→                                      className="h-6 text-xs px-2"
+  1009→                                      onClick={() => {
+  1010→                                        setStatusChangeDialogOpen(false)
+  1011→                                        setTimelineDialogOpen(false)
+  1012→                                        setTimeout(() => {
+  1013→                                          openStatusChange(entry)
+  1014→                                        }, 100)
+  1015→                                      }}
+  1016→                                    >
+  1017→                                      <PenSquare className="h-3 w-3 mr-1" />
+  1018→                                      Изменить
+  1019→                                    </Button>
+  1020→                                    <Button
+  1021→                                      variant="ghost"
+  1022→                                      size="sm"
+  1023→                                      className="h-6 text-xs px-2 text-red-600"
+  1024→                                      onClick={() => {
+  1025→                                        setTimelineDialogOpen(false)
+  1026→                                        setSelectedTracking(entry)
+  1027→                                        setDeleteDialogOpen(true)
+  1028→                                      }}
+  1029→                                    >
+  1030→                                      <Trash2 className="h-3 w-3 mr-1" />
+  1031→                                      Удалить
+  1032→                                    </Button>
+  1033→                                  </div>
+  1034→                                )}
+  1035→                              </div>
+  1036→                            </div>
+  1037→                          )
+  1038→                        })}
+  1039→                      </div>
+  1040→                    )}
+  1041→                  </div>
+  1042→                )
+  1043→              })()
+  1044→            ) : (
+  1045→              <div className="text-center py-6 text-muted-foreground">
+  1046→                Выберите ДИ для просмотра истории
+  1047→              </div>
+  1048→            )}
+  1049→          </div>
+  1050→        </DialogContent>
+  1051→      </Dialog>
+  1052→
+  1053→      {/* ============================================ */}
+  1054→      {/* Delete Confirmation Dialog */}
+  1055→      {/* ============================================ */}
+  1056→      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+  1057→        <AlertDialogContent>
+  1058→          <AlertDialogHeader>
+  1059→            <AlertDialogTitle>Удалить запись?</AlertDialogTitle>
+  1060→            <AlertDialogDescription>
+  1061→              Это действие нельзя отменить. Запись отслеживания будет удалена из системы.
+  1062→            </AlertDialogDescription>
+  1063→          </AlertDialogHeader>
+  1064→          <AlertDialogFooter>
+  1065→            <AlertDialogCancel>Отмена</AlertDialogCancel>
+  1066→            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+  1067→              Удалить
+  1068→            </AlertDialogAction>
+  1069→          </AlertDialogFooter>
+  1070→        </AlertDialogContent>
+  1071→      </AlertDialog>
+  1072→
+  1073→      {/* ============================================ */}
+  1074→      {/* Statistics Dialog */}
+  1075→      {/* ============================================ */}
+  1076→      <Dialog open={statsDialogOpen} onOpenChange={setStatsDialogOpen}>
+  1077→        <DialogContent className="sm:max-w-[600px]">
+  1078→          <DialogHeader>
+  1079→            <DialogTitle>Статистика отслеживания</DialogTitle>
+  1080→            <DialogDescription>
+  1081→              Обзор текущего состояния должностных инструкций
+  1082→            </DialogDescription>
+  1083→          </DialogHeader>
+  1084→          <div className="space-y-6 py-2">
+  1085→            {/* Status distribution */}
+  1086→            <div>
+  1087→              <h3 className="text-sm font-medium mb-3">Распределение по статусам</h3>
+  1088→              <div className="space-y-2">
+  1089→                {TRACKING_STATUSES.map(status => {
+  1090→                  const count = statusCounts[status.value] || 0
+  1091→                  const pct = totalDis > 0 ? Math.round((count / totalDis) * 100) : 0
+  1092→                  const Icon = status.icon
+  1093→                  return (
+  1094→                    <div key={status.value} className="flex items-center gap-3">
+  1095→                      <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+  1096→                      <span className="text-sm w-52 truncate">{status.label}</span>
+  1097→                      <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
+  1098→                        <div
+  1099→                          className={`h-full rounded-full transition-all duration-300 ${status.color}`}
+  1100→                          style={{ width: `${Math.max(pct, count > 0 ? 8 : 0)}%` }}
+  1101→                        />
+  1102→                      </div>
+  1103→                      <span className="text-sm font-medium w-8 text-right">{count}</span>
+  1104→                      <span className="text-xs text-muted-foreground w-10 text-right">({pct}%)</span>
+  1105→                    </div>
+  1106→                  )
+  1107→                })}
+  1108→              </div>
+  1109→            </div>
+  1110→
+  1111→            <Separator />
+  1112→
+  1113→            {/* Key metrics */}
+  1114→            <div className="grid grid-cols-2 gap-4">
+  1115→              <div className="p-3 bg-muted rounded-lg">
+  1116→                <div className="text-xs text-muted-foreground">Среднее время между сменами статуса</div>
+  1117→                <div className="text-xl font-bold mt-1">{avgDays} дн.</div>
+  1118→              </div>
+  1119→              <div className="p-3 bg-muted rounded-lg">
+  1120→                <div className="text-xs text-muted-foreground">ДИ с отслеживанием</div>
+  1121→                <div className="text-xl font-bold mt-1">{totalDis}</div>
+  1122→              </div>
+  1123→            </div>
+  1124→
+  1125→            {/* Overdue items */}
+  1126→            {overdueDis.length > 0 && (
+  1127→              <div>
+  1128→                <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+  1129→                  <AlertTriangle className="h-4 w-4 text-red-500" />
+  1130→                  Просроченные (на рассмотрении &gt;7 дней)
+  1131→                </h3>
+  1132→                <div className="space-y-2 max-h-48 overflow-y-auto">
+  1133→                  {overdueDis.map(di => (
+  1134→                    <div
+  1135→                      key={di.id}
+  1136→                      className="flex items-center justify-between p-2 border rounded-lg hover:bg-muted/50 cursor-pointer"
+  1137→                      onClick={() => {
+  1138→                        setStatsDialogOpen(false)
+  1139→                        setTimeout(() => openTimeline(di.id), 100)
+  1140→                      }}
+  1141→                    >
+  1142→                      <div>
+  1143→                        <div className="text-sm font-medium">{di.title}</div>
+  1144→                        <div className="text-xs text-muted-foreground">
+  1145→                          {di.position.title} • {di.latestTracking.assignee || 'Без ответственного'}
+  1146→                        </div>
+  1147→                      </div>
+  1148→                      <div className="flex items-center gap-1 text-red-600 text-xs font-medium">
+  1149→                        <Clock className="h-3 w-3" />
+  1150→                        {daysSince(di.latestTracking.createdAt)} дн.
+  1151→                        <ChevronRight className="h-3 w-3" />
+  1152→                      </div>
+  1153→                    </div>
+  1154→                  ))}
+  1155→                </div>
+  1156→              </div>
+  1157→            )}
+  1158→          </div>
+  1159→        </DialogContent>
+  1160→      </Dialog>
+  1161→    </div>
+  1162→  )
+  1163→}
+  1164→
