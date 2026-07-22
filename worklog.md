@@ -107,11 +107,11 @@ The Job Description Generator (Генератор ДИ) for Группа Аст�
    - ✅ Verified via agent-browser + VLM: flip toggles correctly, shows "@VADSHV" on back, logo on front
    - ✅ Lint passes cleanly
 
-6. **Logo image added to project (2026-07-23)**
-   - Originally copied user-uploaded image to `/public/logo.png`
-   - **Regenerated with AI** — created a much more stylish version: sleek document icon with indigo-to-violet mesh gradient, glassmorphism depth, refined sparkle stars, premium SaaS aesthetic
-   - Logo used in sidebar plaque (front side) via `next/image` `<Image src="/logo.png" />`
-   - Logo used in dashboard header via `next/image` `<Image src="/logo.png" />` (replacing Activity icon)
+6. **Logo image — replaced with classic AI icon (2026-07-23)**
+   - Originally copied user-uploaded image, then regenerated with document/sparkles style
+   - **Final version**: Classic AI brain icon — stylized brain silhouette with circuit/neural network lines and glowing nodes
+   - Deep blue-to-cyan gradient, clean flat design, universally recognizable AI symbol
+   - Logo used in sidebar plaque (front side) and dashboard header via `next/image`
    - Added `images: { unoptimized: true }` to `next.config.ts` for standalone compatibility
    - Removed unused `MessageCircle` and `Activity` icon imports
 
