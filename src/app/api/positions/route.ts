@@ -16,7 +16,9 @@ export async function GET(request: NextRequest) {
     const positions = await db.position.findMany({
       where,
       include: {
-        department: true,
+        department: { include: { company: true } },
+        generatedDIs: { select: { id: true, status: true } },
+        archiveDIs: { select: { id: true } },
       },
       orderBy: { title: 'asc' }
     })
@@ -60,7 +62,9 @@ export async function POST(request: NextRequest) {
         functions: functions || null,
       },
       include: {
-        department: true,
+        department: { include: { company: true } },
+        generatedDIs: { select: { id: true, status: true } },
+        archiveDIs: { select: { id: true } },
       }
     })
 
@@ -113,7 +117,9 @@ export async function PUT(request: NextRequest) {
         ...(functions !== undefined && { functions: functions || null }),
       },
       include: {
-        department: true,
+        department: { include: { company: true } },
+        generatedDIs: { select: { id: true, status: true } },
+        archiveDIs: { select: { id: true } },
       }
     })
 

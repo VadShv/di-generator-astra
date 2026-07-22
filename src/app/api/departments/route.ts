@@ -7,6 +7,7 @@ export async function GET() {
       include: {
         parent: true,
         children: true,
+        company: true,
         _count: {
           select: { positions: true }
         }
@@ -23,7 +24,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, code, parentId } = body
+    const { name, code, parentId, companyId } = body
 
     if (!name || !code) {
       return NextResponse.json({ error: 'Название и код обязательны' }, { status: 400 })
@@ -48,10 +49,12 @@ export async function POST(request: NextRequest) {
         name,
         code,
         parentId: parentId || null,
+        companyId: companyId || null,
       },
       include: {
         parent: true,
         children: true,
+        company: true,
         _count: {
           select: { positions: true }
         }
@@ -68,7 +71,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, code, parentId } = body
+    const { id, name, code, parentId, companyId } = body
 
     if (!id) {
       return NextResponse.json({ error: 'ID обязателен' }, { status: 400 })
@@ -98,10 +101,12 @@ export async function PUT(request: NextRequest) {
         ...(name !== undefined && { name }),
         ...(code !== undefined && { code }),
         ...(parentId !== undefined && { parentId: parentId || null }),
+        ...(companyId !== undefined && { companyId: companyId || null }),
       },
       include: {
         parent: true,
         children: true,
+        company: true,
         _count: {
           select: { positions: true }
         }

@@ -8,6 +8,22 @@ datasource db {
 }
 
 // ==========================================
+// Юридические лица (Компании)
+// ==========================================
+model Company {
+  id          String       @id @default(cuid())
+  name        String       // Название юр. лица
+  shortName   String?      // Краткое название
+  code        String       @unique // Код/ИНН/КПП
+  type        String?      // Тип (ООО, АО, ИП и т.д.)
+  director    String?      // Руководитель
+  description String?      // Описание
+  departments Department[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+// ==========================================
 // Подразделения (отделы)
 // ==========================================
 model Department {
@@ -17,6 +33,8 @@ model Department {
   parentId  String?
   parent    Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
   children  Department[] @relation("DepartmentHierarchy")
+  companyId String?
+  company   Company?     @relation(fields: [companyId], references: [id])
   positions     Position[]
   masterPrompts MasterPrompt[]
   createdAt DateTime @default(now())
