@@ -2,14 +2,105 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import ZAI from 'z-ai-web-dev-sdk'
 
-// POST /api/generate-di/ai-section - Regenerate a SINGLE section with AI
+// POST /api/generate-di/ai-section - Generate a SINGLE section with AI
+// Supports two modes:
+// 1. Existing DI: { generatedDIId, sectionOrder, customPrompt }
+// 2. Manual mode: { positionId, sectionTitle, sectionOrder, promptGuidance, manualMode: true, positionContext }
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { generatedDIId, sectionOrder, customPrompt } = body
+    const { generatedDIId, sectionOrder, customPrompt, manualMode, positionId, sectionTitle, promptGuidance, positionContext } = body
 
+    // ===== MANUAL MODE: Generate section for a new/manual DI without a DB record =====
+    if (manualMode && positionId) {
+      const position = await db.position.findUnique({
+        where: { id: positionId },
+        include: { department: true },
+      })
+
+      if (!position) {
+        return NextResponse.json({ error: 'Должность не найдена' }, { status: 404 })
+      }
+
+      // Resolve master prompt
+      const masterPrompt = await resolveMasterPromptInternal(
+        position.departmentId,
+        position.domain,
+        position.grade
+      )
+
+      // Get archive DIs as reference
+      const archiveDIs = await db.archiveDI.findMany({
+        where: { positionId },
+        orderBy: { uploadedAt: 'desc' },
+        take: 3,
+      })
+
+      const archiveContext = archiveDIs.length > 0
+        ? archiveDIs.map((di, i) => `--- Архивная ДИ #${i + 1}: ${di.title} ---\n${di.content}`).join('\n\n')
+        : 'Архивные ДИ для данной должности отсутствуют.'
+
+      const posContext = `Должность: ${position.title}
+Код должности: ${position.code}
+Подразделение: ${position.department.name}
+Грейд: ${position.grade || 'Не указан'}
+Домен: ${position.domain || 'Не указан'}
+Количество штатных единиц: ${position.headcount}
+${position.functions ? `Выполняемые функции: ${position.functions}` : ''}`
+
+      const systemPrompt = `Ты — эксперт по созданию должностных инструкций для компании Группа Астра.
+Ты создаёшь профессиональные, подробные и формально корректные должностные инструкции на русском языке в соответствии с требованиями трудового законодательства РФ.
+
+${masterPrompt ? `МАСТЕР-ПРОМПТ (основные правила и стиль):
+${masterPrompt.content}` : 'Используй стандартный корпоративный стиль должностных инструкций.'}
+
+ИНФОРМАЦИЯ О ДОЛЖНОСТИ:
+${posContext}
+
+АРХИВНЫЕ ДИ (для справки):
+${archiveContext}
+
+ПРАВИЛА:
+- Генерируй содержание только для указанной секции
+- Используй формально-деловой стиль
+- Учитывай специфику должности и подразделения
+- При наличии архивных ДИ, ориентируйся на их стиль и структуру
+- Формулируй чётко и недвусмысленно
+- Используй нумерованные списки где уместно
+- Не добавляй заголовок секции в начало текста — только содержание`
+
+      const title = sectionTitle || 'Секция'
+      let userPrompt = `Сгенерируй содержание секции "${title}" для должностной инструкции.`
+      
+      if (promptGuidance) {
+        userPrompt += `\nРуководство для генерации: ${promptGuidance}`
+      }
+
+      userPrompt += '\n\nСгенерируй подробное, профессиональное содержание для этой секции.'
+
+      const zai = await ZAI.create()
+      const completion = await zai.chat.completions.create({
+        messages: [
+          { role: 'assistant', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        thinking: { type: 'disabled' },
+      })
+
+      const response = completion.choices[0]?.message?.content || ''
+
+      // Return the generated content (don't save to DB yet - manual mode)
+      return NextResponse.json({
+        content: response.trim(),
+        sectionTitle: title,
+        sectionOrder: sectionOrder || 0,
+        aiGenerated: true,
+      })
+    }
+
+    // ===== EXISTING DI MODE: Generate section for an existing GeneratedDI =====
     if (!generatedDIId || typeof generatedDIId !== 'string') {
-      return NextResponse.json({ error: 'ID сгенерированной ДИ обязателен' }, { status: 400 })
+      return NextResponse.json({ error: 'ID сгенерированной ДИ обязателен (или используйте manualMode)' }, { status: 400 })
     }
 
     if (sectionOrder === undefined || sectionOrder === null || typeof sectionOrder !== 'number') {
@@ -57,7 +148,7 @@ export async function POST(request: Request) {
       ? archiveDIs.map((di, i) => `--- Архивная ДИ #${i + 1}: ${di.title} ---\n${di.content}`).join('\n\n')
       : 'Архивные ДИ для данной должности отсутствуют.'
 
-    const positionContext = `Должность: ${generatedDI.position.title}
+    const posContext = `Должность: ${generatedDI.position.title}
 Код должности: ${generatedDI.position.code}
 Подразделение: ${generatedDI.position.department.name}
 Грейд: ${generatedDI.position.grade || 'Не указан'}
@@ -78,7 +169,7 @@ ${masterPrompt ? `МАСТЕР-ПРОМПТ:
 ${masterPrompt.content}` : 'Используй стандартный корпоративный стиль должностных инструкций.'}
 
 ИНФОРМАЦИЯ О ДОЛЖНОСТИ:
-${positionContext}
+${posContext}
 
 АРХИВНЫЕ ДИ:
 ${archiveContext}

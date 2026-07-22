@@ -18,12 +18,12 @@ interface TemplateSection { id?: string; title: string; order: number; promptGui
 interface Template { id: string; name: string; description?: string | null; isActive: boolean; sections: TemplateSection[]; createdAt: string; updatedAt: string }
 
 const DEFAULT_SECTIONS: Omit<TemplateSection, 'id'>[] = [
-  { title: 'Общие положения', order: 1, promptGuidance: 'Опишите общие положения должностной инструкции', isRequired: true, content: null },
-  { title: 'Квалификационные требования', order: 2, promptGuidance: 'Укажите требования к квалификации', isRequired: true, content: null },
-  { title: 'Должностные обязанности', order: 3, promptGuidance: 'Перечислите должностные обязанности', isRequired: true, content: null },
-  { title: 'Права', order: 4, promptGuidance: 'Опишите права работника', isRequired: true, content: null },
-  { title: 'Ответственность', order: 5, promptGuidance: 'Укажите виды ответственности', isRequired: true, content: null },
-  { title: 'Взаимоотношения по должности', order: 6, promptGuidance: 'Опишите систему взаимодействий', isRequired: true, content: null },
+  { title: 'Общие положения', order: 1, promptGuidance: 'Опишите общие положения: категория должности, порядок назначения и освобождения, подчинённость, замещение, требования к знаниям (законодательство, нормативные акты, правила делового общения).', isRequired: true, content: null },
+  { title: 'Квалификационные требования и навыки', order: 2, promptGuidance: 'Укажите требования: образование (направления), опыт работы, профессиональные навыки, необходимые знания, сертификаты.', isRequired: true, content: null },
+  { title: 'Должностные обязанности', order: 3, promptGuidance: 'Перечислите должностные обязанности: руководство, планирование, контроль, взаимодействие, отчётность и т.д.', isRequired: true, content: null },
+  { title: 'Права', order: 4, promptGuidance: 'Опишите права работника: требование условий, запрос информации, внесение предложений, привлечение специалистов, визирование документов, принятие решений, представление интересов.', isRequired: true, content: null },
+  { title: 'Ответственность', order: 5, promptGuidance: 'Укажите виды ответственности: за неисполнение обязанностей, правонарушения, материальный ущерб, разглашение коммерческой тайны.', isRequired: true, content: null },
+  { title: 'Условия работы', order: 6, promptGuidance: 'Опишите условия работы: режим рабочего времени, командировки, оклад, премирование по KPI.', isRequired: true, content: null },
 ]
 
 export function TemplatesModule() {
@@ -48,7 +48,7 @@ export function TemplatesModule() {
 
   const handleCreateNew = () => { setCurrentTemplate({ name: '', description: '', isActive: true }); setEditingSections([]); setViewMode('edit') }
   const handleCreateDefault = () => {
-    setCurrentTemplate({ name: 'Стандартный шаблон ДИ', description: 'Стандартный шаблон должностной инструкции', isActive: true })
+    setCurrentTemplate({ name: 'Стандартный шаблон ДИ Группы Астра', description: 'Стандартный шаблон должностной инструкции Группы Астра с 6 разделами: Общие положения, Квалификационные требования, Должностные обязанности, Права, Ответственность, Условия работы', isActive: true })
     setEditingSections(DEFAULT_SECTIONS.map((s, i) => ({ ...s, id: `new-${Date.now()}-${i}` }))); setViewMode('edit')
   }
 
