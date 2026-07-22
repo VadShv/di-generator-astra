@@ -108,7 +108,8 @@ The Job Description Generator (Генератор ДИ) for Группа Аст�
    - ✅ Lint passes cleanly
 
 6. **Logo image added to project (2026-07-23)**
-   - User-uploaded image (`generated-image (1).png`) copied to `/public/logo.png`
+   - Originally copied user-uploaded image to `/public/logo.png`
+   - **Regenerated with AI** — created a much more stylish version: sleek document icon with indigo-to-violet mesh gradient, glassmorphism depth, refined sparkle stars, premium SaaS aesthetic
    - Logo used in sidebar plaque (front side) via `next/image` `<Image src="/logo.png" />`
    - Logo used in dashboard header via `next/image` `<Image src="/logo.png" />` (replacing Activity icon)
    - Added `images: { unoptimized: true }` to `next.config.ts` for standalone compatibility
