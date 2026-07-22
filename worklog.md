@@ -96,6 +96,18 @@ The Job Description Generator (Генератор ДИ) for Группа Аст�
 - DITracking model (id, generatedDIId, status, assignee, notes)
 - DIVersion model (id, generatedDIId, content, version, isOriginal, uploadedBy, fileName, diffSummary)
 
+5. **Logo plaque flip card (contact info on back)**
+   - Added CSS 3D flip animation in `globals.css` (`.flip-card`, `.flip-card-inner`, `.flip-card-front`, `.flip-card-back`)
+   - Updated `page.tsx` (the actual page component, NOT app-shell.tsx which wasn't being used)
+   - The sidebar "Группа Астра / Генератор ДИ" plaque now flips on click via `rotateY(180deg)` transform
+   - Front side: logo "A" + "Группа Астра" / "Генератор ДИ"
+   - Back side: MessageCircle icon + "Если возникли вопросы или предложения по работе сервиса, напишите в тг @vadshv"
+   - Back side has gradient background (from-primary/10 to-primary/5) with border and centered text
+   - Collapsed sidebar: shows "A" logo on front, MessageCircle icon on back (both 8x8 size)
+   - `logoFlipped` state toggles the flip; smooth 0.6s cubic-bezier transition
+   - ✅ Verified via agent-browser: flip toggles correctly (flipped class applied/removed)
+   - ✅ Lint passes cleanly
+
 ## Known Issues / Risks
 - Background processes die between bash tool calls — need to restart server each session
 - DB was reset during this session — test data needs to be re-created (companies, departments, positions)

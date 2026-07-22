@@ -1,9 +1,10 @@
 'use client'
 
 import { useAppStore, type ActiveSection } from '@/lib/store'
+import { useState } from 'react'
 import {
   LayoutDashboard, Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows,
-  Menu, ChevronLeft,
+  Menu, ChevronLeft, MessageCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -42,26 +43,69 @@ const modules: Record<ActiveSection, React.ReactNode> = {
 
 export default function HomePage() {
   const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen } = useAppStore()
+  const [logoFlipped, setLogoFlipped] = useState(false)
   const groups = ['Обзор', 'Данные', 'Настройка', 'Генерация', 'Жизненный цикл']
 
   return (
     <div className="min-h-screen flex bg-background">
       <aside className={cn('fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-card transition-all duration-300', sidebarOpen ? 'w-64' : 'w-16')}>
-        <div className="flex items-center gap-2 p-4 border-b">
-          {sidebarOpen && (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-                <span className="text-primary-foreground font-bold text-sm">A</span>
+        <div className="p-4 border-b">
+          {sidebarOpen ? (
+            <div className="flex items-center gap-2">
+              {/* Flip card plaque */}
+              <div
+                className="flip-card flex-1 min-w-0 cursor-pointer"
+                onClick={() => setLogoFlipped(!logoFlipped)}
+              >
+                <div className={cn('flip-card-inner', logoFlipped && 'flipped')}>
+                  {/* FRONT SIDE */}
+                  <div className="flip-card-front flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+                      <span className="text-primary-foreground font-bold text-sm">A</span>
+                    </div>
+                    <div className="min-w-0">
+                      <h1 className="font-semibold text-sm truncate">Группа Астра</h1>
+                      <p className="text-xs text-muted-foreground truncate">Генератор ДИ</p>
+                    </div>
+                  </div>
+                  {/* BACK SIDE */}
+                  <div className="flip-card-back rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 p-2.5 flex flex-col items-center justify-center text-center">
+                    <MessageCircle className="h-4 w-4 text-primary mb-1.5" />
+                    <p className="text-xs leading-relaxed text-foreground">
+                      Если возникли вопросы или предложения по работе сервиса, напишите в
+                    </p>
+                    <p className="text-sm font-semibold text-primary mt-0.5">
+                      тг @vadshv
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="min-w-0">
-                <h1 className="font-semibold text-sm truncate">Группа Астра</h1>
-                <p className="text-xs text-muted-foreground truncate">Генератор ДИ</p>
+              <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => setSidebarOpen(!sidebarOpen)}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-1.5">
+              <div
+                className="flip-card cursor-pointer"
+                onClick={() => setLogoFlipped(!logoFlipped)}
+              >
+                <div className={cn('flip-card-inner h-8 w-8', logoFlipped && 'flipped')}>
+                  {/* FRONT */}
+                  <div className="flip-card-front h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+                    <span className="text-primary-foreground font-bold text-sm">A</span>
+                  </div>
+                  {/* BACK */}
+                  <div className="flip-card-back h-8 w-8 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex items-center justify-center">
+                    <MessageCircle className="h-3.5 w-3.5 text-primary" />
+                  </div>
+                </div>
               </div>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSidebarOpen(!sidebarOpen)}>
+                <Menu className="h-3.5 w-3.5" />
+              </Button>
             </div>
           )}
-          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-          </Button>
         </div>
         <ScrollArea className="flex-1 py-2">
           {groups.map((group) => {
