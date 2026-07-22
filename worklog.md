@@ -107,13 +107,13 @@ The Job Description Generator (Генератор ДИ) for Группа Аст�
    - ✅ Verified via agent-browser + VLM: flip toggles correctly, shows "@VADSHV" on back, logo on front
    - ✅ Lint passes cleanly
 
-6. **Logo image — replaced with classic AI icon (2026-07-23)**
-   - Originally copied user-uploaded image, then regenerated with document/sparkles style
-   - **Final version**: Classic AI brain icon — stylized brain silhouette with circuit/neural network lines and glowing nodes
-   - Deep blue-to-cyan gradient, clean flat design, universally recognizable AI symbol
+6. **Logo image — user-provided 3D document icon (2026-07-23)**
+   - User uploaded their own logo (`generated-image (2).png`) → copied to `/public/logo.png`
+   - **Design**: 3D isometric должностная инструкция (job instruction document) with 5 numbered sections, blue accents, folded corner, certification seal with checkmark
+   - Royal blue/white/slate gray color scheme — professional, authoritative HR document look
    - Logo used in sidebar plaque (front side) and dashboard header via `next/image`
    - Added `images: { unoptimized: true }` to `next.config.ts` for standalone compatibility
-   - Removed unused `MessageCircle` and `Activity` icon imports
+   - ✅ Verified via agent-browser + VLM: logo visible and fitting well in both sidebar and dashboard header
 
 ## Known Issues / Risks
 - Background processes die between bash tool calls — need to restart server each session
