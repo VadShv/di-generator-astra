@@ -85,6 +85,7 @@ model DITemplate {
   sections     DITemplateSection[]
   generatedDIs GeneratedDI[]
   isActive     Boolean  @default(true)
+  isPrimary    Boolean  @default(false) // Основной шаблон — предвыбран при ручной генерации
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

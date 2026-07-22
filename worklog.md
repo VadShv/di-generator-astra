@@ -1,93 +1,109 @@
 # Worklog — Генератор ДИ Группы Астра
 
 ## Project Status
-The Job Description Generator (Генератор ДИ) for Группа Астра is fully functional with all 8 modules, enhanced with file upload capabilities and manual DI creation mode with per-section AI generation. The Staff Schedule module has been significantly redesigned with company (Юр лицо) support and DI coverage tracking.
+The Job Description Generator (Генератор ДИ) for Группа Астра is fully functional with all 8 modules. Templates now support `isPrimary` (основной пресет) which is pre-selected during manual DI generation. The Generation module has been redesigned to use template presets instead of hardcoded sections.
 
-## Current Phase - Staff Schedule Redesign (2026-07-22)
+## Current Phase — Template Preset System for Manual Generation (2026-07-22)
 
 ### Completed in This Phase
 
-1. **Company (Юр лицо) Model & Management**
-   - Added `Company` model to Prisma schema with fields: name, shortName, code, type, director, description
-   - Created `/api/companies` CRUD endpoint
-   - Added `companyId` field to `Department` model linking departments to companies
-   - Updated `/api/departments` to include company relation and companyId
-   - Company CRUD dialog with fields for name, short name, code/ИНН, type (ООО/АО/ПАО/ИП etc.), director, description
-   - Companies shown as expandable sections in organization tree
+1. **isPrimary field for DITemplate model**
+   - Added `isPrimary Boolean @default(false)` field to DITemplate Prisma model
+   - Only one template can be primary at any time — setting a new primary automatically unsets the previous one
+   - Database schema pushed successfully
 
-2. **DI Coverage Tracking per Department & Company**
-   - Updated `/api/positions` to include `generatedDIs` (with status) and `archiveDIs` in response
-   - Each position now shows DI status: "Утверждена" (approved), "Сгенерирована" (draft), "Архивная" (archive), "Нет ДИ" (none)
-   - Each department in tree shows mini progress bar with coverage percentage
-   - Each company shows overall coverage bar with percentage
-   - Global coverage summary bar at top showing: total approved, in progress, without DI
-   - Color-coded coverage: green (≥80%), amber (≥50%), orange (≥25%), red (<25%)
+2. **Templates API updated for isPrimary**
+   - POST: When creating a template with isPrimary=true, all other templates' isPrimary is set to false first
+   - PUT: Same logic for updating isPrimary — exclusive, only one can be primary
+   - Both create and update flows handle the exclusive primary constraint correctly
 
-3. **Rich Position Cards**
-   - Each position displayed as an informative card instead of a simple table row
-   - Shows: DI status icon with color badge, position title + code, department name, company name, grade, domain, headcount, archive DI count, functions preview
-   - Edit/delete buttons appear on hover
+3. **Templates Module enhanced**
+   - Added "Основной шаблон (пресет)" highlight card at top showing the primary template with Crown icon and amber styling
+   - Info message when no primary template is set
+   - Template cards show Crown icon and "Основной" badge for primary templates
+   - "Основной" button to set any template as primary (with confirmation dialog)
+   - "Снять" button to remove primary status from a primary template
+   - "Основной (пресет)" switch in edit mode with Crown badge explanation
+   - Confirmation dialog when setting a template as primary
 
-4. **Organization Tree with Companies**
-   - Left panel: tree view with companies as root nodes
-   - Each company expandable to show its department hierarchy
-   - Departments without company shown under "Без юр. лица" section
-   - Expandable/collapsible with chevron icons
-   - Action buttons on hover for companies and departments
+4. **Generation Module redesigned for preset-based manual creation**
+   - **Removed hardcoded STANDARD_DI_SECTIONS** — sections now come from selected template/preset
+   - **Manual creation flow**: 
+     - If primary template exists → auto-selected, sections loaded, goes directly to edit mode
+     - If no primary template → shows preset selection step where user picks a template card
+   - **Preset indicator bar** at top of manual edit view showing:
+     - Crown icon + selected template name
+     - "Основной" badge if it's the primary template
+     - Dropdown to switch to another preset (preserves matching content)
+     - "Другой пресет" button to go back to preset selection
+   - **Section customization in manual mode**:
+     - Inline editable section titles (when expanded)
+     - Add custom sections beyond template ("Добавить секцию" button)
+     - Remove template sections
+     - Reorder sections (move up/down buttons)
+     - "Обяз." badges for required sections from template
+   - **Generation list view** shows primary template name on the "Создать вручную" card with Crown icon
+   - **Manual save** now includes templateId (manualPresetId) to link DI to its template
 
-5. **Enhanced Stats Dashboard**
-   - 6 stat cards: Юр. лица, Подразделения, Должности, Штат. единиц, Покрытие ДИ, Доменов
-   - Each card with gradient background and appropriate icon
-   - Coverage card is color-coded based on percentage
-
-6. **DI Status Filter**
-   - Dropdown filter for positions: "Все должности", "✅ Утверждена", "📝 Сгенерирована", "❌ Нет ДИ"
-
-7. **Package.json Update**
-   - Changed dev script to include `-H 0.0.0.0` flag for proper IPv4 binding
-
-8. **Next.js Config Update**
-   - Added `allowedDevOrigins` for preview panel domain
-
-### Test Data Created
-- 2 companies: ООО Астра Групп, АО Астра Лаб
-- 5 departments: Комплексные решения, IT отдел, HR отдел, Лаборатория инноваций, Отдел продаж
-- 7 positions with various grades, domains, headcounts
-- All verified via agent-browser: companies, departments, positions, coverage, and DI status all display correctly
+### Verification via agent-browser
+- ✅ Templates tab: Created "Стандартный шаблон ДИ Группы Астра" with isPrimary=true
+- ✅ Templates list shows primary template highlight card with amber styling and Crown
+- ✅ Template card shows "Основной" badge and "Снять" button
+- ✅ Generation tab "Создать вручную" card shows primary template name
+- ✅ Manual creation: Primary template auto-selected, sections loaded from template
+- ✅ Manual creation: Preset indicator bar visible at top with dropdown and "Другой пресет" button
+- ✅ Manual creation: Sections from template shown with all customization options
+- ✅ All lint checks pass cleanly
 
 ## All Completed Modules (from previous phases)
 
 ### 1. Dashboard (Дашборд)
-### 2. Staff Schedule (Штатное расписание) — REDESIGNED
+### 2. Staff Schedule (Штатное расписание) — REDESIGNED with company support & DI coverage
 ### 3. Archive DI (Архив ДИ)
-### 4. Templates (Шаблоны ДИ)
+### 4. Templates (Шаблоны ДИ) — ENHANCED with isPrimary/пресет system
 ### 5. Master Prompts (Мастер-промпты)
-### 6. AI Generation (Генерация ДИ)
+### 6. AI Generation (Генерация ДИ) — ENHANCED with preset-based manual creation
 ### 7. Tracking (Отслеживание)
 ### 8. Version Comparison (Сравнение версий)
 
 ## API Endpoints
-- All previous endpoints unchanged
-- **NEW** `/api/companies` - CRUD for legal entities (Юр лица)
-- Updated `/api/departments` - includes `companyId` and `company` relation
-- Updated `/api/positions` - includes `generatedDIs` (status), `archiveDIs`, department with company
+- `/api/companies` - CRUD for legal entities
+- `/api/departments` - includes companyId and company relation
+- `/api/positions` - includes generatedDIs, archiveDIs
+- `/api/templates` - CRUD with isPrimary support
+- `/api/templates/[id]` - GET single template
+- `/api/generate-di` - CRUD for generated DIs (now accepts templateId for manual)
+- `/api/generate-di/ai-generate` - AI full generation
+- `/api/generate-di/ai-section` - AI single section generation
+- `/api/generate-di/ai-improve` - AI section improvement
+- `/api/master-prompts` - CRUD for master prompts
+- `/api/archive-di` - CRUD for archive DIs
+- `/api/tracking` - CRUD for DI tracking
+- `/api/compare` - Version comparison
+- `/api/export-di` - DOCX export
+- `/api/dashboard/stats` - Dashboard statistics
 
-## Database Schema Changes
-- **NEW** `Company` model (id, name, shortName, code, type, director, description, departments)
-- Updated `Department` model (added companyId, company relation)
-- `Position` now includes generatedDIs and archiveDIs in API responses
+## Database Schema
+- Company model (id, name, shortName, code, type, director, description, departments)
+- Department model (id, name, code, parentId hierarchy, companyId, positions, masterPrompts)
+- Position model (id, title, code, departmentId, grade, domain, headcount, functions, archiveDIs, generatedDIs)
+- DITemplate model (id, name, description, sections, generatedDIs, isActive, **isPrimary**, createdAt, updatedAt)
+- DITemplateSection model (id, templateId, title, order, promptGuidance, isRequired, content)
+- MasterPrompt model (id, name, content, version, isActive, departmentId, domain, grade, functionType)
+- GeneratedDI model (id, positionId, templateId, title, status, sections, trackings, versions)
+- GeneratedDISection model (id, generatedDIId, sectionTitle, sectionContent, order, aiGenerated, editedBy)
+- ArchiveDI model (id, title, content, positionId, fileName, uploadedAt)
+- DITracking model (id, generatedDIId, status, assignee, notes)
+- DIVersion model (id, generatedDIId, content, version, isOriginal, uploadedBy, fileName, diffSummary)
 
 ## Known Issues / Risks
-- Dev server binding: needed `-H 0.0.0.0` flag in package.json for IPv4 access (some sandbox networking quirks)
 - Background processes die between bash tool calls — need to restart server each session
-- The "Отдел продаж" department from original session has companyId=null (orphan)
+- DB was reset during this session — test data needs to be re-created (companies, departments, positions)
 
 ## Priority Recommendations for Next Phase
-1. Fix orphan departments (assign Отдел продаж to ООО Астра Групп)
+1. Re-create test data (companies, departments, positions) since DB was reset
 2. Add batch DI generation with progress tracking
 3. Add DOCX export using the docx npm package
-4. Implement proper authentication with NextAuth.js
-5. Add more keyboard shortcuts and accessibility features
-6. Add collaborative editing features
-7. Enhance position cards with direct link to DI generation
-8. Add ability to create DI directly from position card (quick action)
+4. Enhance position cards with direct link to DI generation
+5. Add ability to create DI directly from position card (quick action)
+6. Improve styling with more visual polish and animations

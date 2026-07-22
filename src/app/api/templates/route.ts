@@ -23,7 +23,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { name, description, sections } = body
+    const { name, description, sections, isPrimary } = body
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return NextResponse.json({ error: 'Название шаблона обязательно' }, { status: 400 })
@@ -33,10 +33,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Добавьте хотя бы одну секцию' }, { status: 400 })
     }
 
+    // If this template is set as primary, unset all other primary templates first
+    if (isPrimary) {
+      await db.dITemplate.updateMany({
+        where: { isPrimary: true },
+        data: { isPrimary: false },
+      })
+    }
+
     const template = await db.dITemplate.create({
       data: {
         name: name.trim(),
         description: description?.trim() || null,
+        isPrimary: isPrimary || false,
         sections: {
           create: sections.map((s: { title: string; order: number; promptGuidance?: string; isRequired?: boolean; content?: string }) => ({
             title: s.title.trim(),
@@ -59,11 +68,11 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT /api/templates - Update template
+// PUT /api/templates - Update template (including isPrimary)
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
-    const { id, name, description, isActive, sections } = body
+    const { id, name, description, isActive, isPrimary, sections } = body
 
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'ID шаблона обязателен' }, { status: 400 })
@@ -72,6 +81,14 @@ export async function PUT(request: Request) {
     const existing = await db.dITemplate.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Шаблон не найден' }, { status: 404 })
+    }
+
+    // If setting this template as primary, unset all other primary templates first
+    if (isPrimary === true) {
+      await db.dITemplate.updateMany({
+        where: { isPrimary: true, id: { not: id } },
+        data: { isPrimary: false },
+      })
     }
 
     // If sections are provided, replace all sections
@@ -85,6 +102,7 @@ export async function PUT(request: Request) {
           name: name !== undefined ? name.trim() : undefined,
           description: description !== undefined ? (description?.trim() || null) : undefined,
           isActive: isActive !== undefined ? isActive : undefined,
+          isPrimary: isPrimary !== undefined ? isPrimary : undefined,
           sections: {
             create: sections.map((s: { title: string; order: number; promptGuidance?: string; isRequired?: boolean; content?: string }) => ({
               title: s.title.trim(),
@@ -107,6 +125,7 @@ export async function PUT(request: Request) {
           name: name !== undefined ? name.trim() : undefined,
           description: description !== undefined ? (description?.trim() || null) : undefined,
           isActive: isActive !== undefined ? isActive : undefined,
+          isPrimary: isPrimary !== undefined ? isPrimary : undefined,
         },
         include: {
           sections: { orderBy: { order: 'asc' } },

@@ -23,49 +23,26 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
-import { Plus, Pencil, Trash2, Eye, Loader2, Sparkles, FileText, PenLine, Wand2, Download, ChevronDown, ChevronRight, CheckCircle2, RotateCcw, BookOpen, Zap } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, Loader2, Sparkles, FileText, PenLine, Wand2, Download, ChevronDown, ChevronRight, CheckCircle2, RotateCcw, BookOpen, Zap, Crown, Star, LayoutTemplate, ArrowUp, ArrowDown, Settings2 } from 'lucide-react'
 
 interface Department { id: string; name: string; code: string }
 interface Position { id: string; title: string; code: string; departmentId: string; department: Department; grade?: string | null; domain?: string | null; headcount: number; functions?: string | null }
 interface TemplateSection { id: string; title: string; order: number; promptGuidance?: string | null; isRequired: boolean; content?: string | null }
-interface Template { id: string; name: string; description?: string | null; isActive: boolean; sections: TemplateSection[] }
+interface Template { id: string; name: string; description?: string | null; isActive: boolean; isPrimary: boolean; sections: TemplateSection[] }
 interface MasterPrompt { id: string; name: string; content: string; version: number; isActive: boolean; departmentId?: string | null; domain?: string | null; grade?: string | null; description?: string | null }
 interface GeneratedDISection { id: string; sectionTitle: string; sectionContent: string; order: number; aiGenerated: boolean; editedBy?: string | null }
 interface GeneratedDI { id: string; positionId: string; templateId?: string | null; title: string; status: string; position: Position & { department: Department }; template?: Template | null; sections: GeneratedDISection[]; createdAt: string; updatedAt: string }
 
-// Standard DI sections from the user's provided template
-const STANDARD_DI_SECTIONS = [
-  { 
-    title: 'ОБЩИЕ ПОЛОЖЕНИЯ', 
-    order: 1, 
-    promptGuidance: 'Опишите общие положения: категория должности, порядок назначения и освобождения, подчинённость, замещение, требования к знаниям (законодательство, нормативные акты, правила делового общения).',
-  },
-  { 
-    title: 'КВАЛИФИКАЦИОННЫЕ ТРЕБОВАНИЯ И НАВЫКИ', 
-    order: 2, 
-    promptGuidance: 'Укажите требования: образование (направления), опыт работы, профессиональные навыки, необходимые знания, сертификаты и преимущества.',
-  },
-  { 
-    title: 'ДОЛЖНОСТНЫЕ ОБЯЗАННОСТИ', 
-    order: 3, 
-    promptGuidance: 'Перечислите должностные обязанности: руководство, планирование, контроль, взаимодействие, отчётность и т.д.',
-  },
-  { 
-    title: 'ПРАВА', 
-    order: 4, 
-    promptGuidance: 'Опишите права работника: требование условий, запрос информации, внесение предложений, привлечение специалистов, визирование документов, принятие решений, представление интересов.',
-  },
-  { 
-    title: 'ОТВЕТСТВЕННОСТЬ', 
-    order: 5, 
-    promptGuidance: 'Укажите виды ответственности: за неисполнение обязанностей, правонарушения, материальный ущерб, разглашение коммерческой тайны.',
-  },
-  { 
-    title: 'УСЛОВИЯ РАБОТЫ', 
-    order: 6, 
-    promptGuidance: 'Опишите условия работы: режим рабочего времени, командировки, оклад, премирование по KPI.',
-  },
-]
+// Manual section type (extends template section with content and generation state)
+interface ManualSection {
+  title: string
+  order: number
+  promptGuidance?: string | null
+  isRequired: boolean
+  content: string
+  aiGenerated: boolean
+  isGenerating: boolean
+}
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   draft: { label: 'Черновик', variant: 'secondary' },
@@ -93,11 +70,13 @@ export function GenerationModule() {
   const [manualPositionId, setManualPositionId] = useState('')
   const [manualDepartment, setManualDepartment] = useState('')
   const [manualCategory, setManualCategory] = useState('Руководители')
-  const [manualSections, setManualSections] = useState(STANDARD_DI_SECTIONS.map(s => ({ ...s, content: '', aiGenerated: false, isGenerating: false })))
+  const [manualSections, setManualSections] = useState<ManualSection[]>([])
+  const [manualPresetId, setManualPresetId] = useState<string>('')
   const [manualSaving, setManualSaving] = useState(false)
   const [manualGeneratingAll, setManualGeneratingAll] = useState(false)
   const [manualProgress, setManualProgress] = useState(0)
   const [expandedSections, setExpandedSections] = useState<Set<number>>(new Set([0]))
+  const [manualStep, setManualStep] = useState<'preset' | 'edit'>('preset')
 
   // Editor state
   const [editingDI, setEditingDI] = useState<GeneratedDI | null>(null)
@@ -134,9 +113,91 @@ export function GenerationModule() {
 
   const startManual = () => {
     setManualTitle(''); setManualPositionId(''); setManualDepartment(''); setManualCategory('Руководители')
-    setManualSections(STANDARD_DI_SECTIONS.map(s => ({ ...s, content: '', aiGenerated: false, isGenerating: false })))
+    setManualSections([])
+    // Pre-select the primary template if one exists
+    const primaryTemplate = templates.find(t => t.isPrimary)
+    if (primaryTemplate) {
+      setManualPresetId(primaryTemplate.id)
+      setManualSections(primaryTemplate.sections.map(s => ({
+        title: s.title,
+        order: s.order,
+        promptGuidance: s.promptGuidance,
+        isRequired: s.isRequired,
+        content: '',
+        aiGenerated: false,
+        isGenerating: false,
+      })))
+      setManualStep('edit')
+    } else {
+      setManualPresetId('')
+      setManualStep('preset')
+    }
     setExpandedSections(new Set([0]))
     setViewMode('manual')
+  }
+
+  // Apply template/preset to manual sections
+  const applyPreset = (templateId: string) => {
+    const template = templates.find(t => t.id === templateId)
+    if (!template) return
+    setManualPresetId(templateId)
+    setManualSections(template.sections.map(s => ({
+      title: s.title,
+      order: s.order,
+      promptGuidance: s.promptGuidance,
+      isRequired: s.isRequired,
+      content: '',
+      aiGenerated: false,
+      isGenerating: false,
+    })))
+    setExpandedSections(new Set([0]))
+    setManualStep('edit')
+  }
+
+  // Change preset during editing (keep already filled content if section titles match)
+  const changePreset = (templateId: string) => {
+    const template = templates.find(t => t.id === templateId)
+    if (!template) return
+    setManualPresetId(templateId)
+    setManualSections(template.sections.map(s => {
+      // Try to find existing section with same title to preserve content
+      const existing = manualSections.find(ms => ms.title === s.title)
+      return {
+        title: s.title,
+        order: s.order,
+        promptGuidance: s.promptGuidance,
+        isRequired: s.isRequired,
+        content: existing?.content || '',
+        aiGenerated: existing?.aiGenerated || false,
+        isGenerating: false,
+      }
+    }))
+  }
+
+  // Add custom section in manual mode
+  const addManualSection = () => {
+    setManualSections([...manualSections, {
+      title: '',
+      order: manualSections.length,
+      promptGuidance: null,
+      isRequired: false,
+      content: '',
+      aiGenerated: false,
+      isGenerating: false,
+    }])
+  }
+
+  const removeManualSection = (i: number) => setManualSections(manualSections.filter((_, idx) => idx !== i))
+  const moveManualSectionUp = (i: number) => {
+    if (i === 0) return
+    const arr = [...manualSections]; [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; setManualSections(arr)
+  }
+  const moveManualSectionDown = (i: number) => {
+    if (i === manualSections.length - 1) return
+    const arr = [...manualSections]; [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]]; setManualSections(arr)
+  }
+  const updateManualSectionTitle = (i: number, title: string) => {
+    setManualSections(manualSections.map((s, idx) => idx === i ? { ...s, title } : s))
   }
 
   // AI Generate ALL sections at once
@@ -164,7 +225,6 @@ export function GenerationModule() {
     setManualSections(prev => prev.map((s, i) => i === sectionIndex ? { ...s, isGenerating: true } : s))
     
     try {
-      // Create DI first if it doesn't exist, or use existing one
       const position = positions.find(p => p.id === manualPositionId)
       
       const res = await fetch('/api/generate-di/ai-section', {
@@ -227,6 +287,7 @@ export function GenerationModule() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           positionId: manualPositionId,
+          templateId: manualPresetId || undefined,
           title: manualTitle.trim(),
           sections: manualSections.map(s => ({
             sectionTitle: s.title,
@@ -322,6 +383,9 @@ export function GenerationModule() {
   const expandAllSections = () => setExpandedSections(new Set(manualSections.map((_, i) => i)))
   const collapseAllSections = () => setExpandedSections(new Set())
 
+  const primaryTemplate = templates.find(t => t.isPrimary)
+  const selectedPreset = templates.find(t => t.id === manualPresetId)
+
   // ===================== LIST VIEW =====================
   if (viewMode === 'list') return (
     <div className="space-y-6">
@@ -352,13 +416,15 @@ export function GenerationModule() {
               </div>
               <div>
                 <h3 className="font-semibold text-cyan-900">Создать вручную</h3>
-                <p className="text-sm text-cyan-700 mt-1">Заполните секции вручную или сгенерируйте каждую с помощью ИИ</p>
-                <div className="flex gap-1 mt-2">
-                  {STANDARD_DI_SECTIONS.slice(0, 3).map(s => (
-                    <Badge key={s.order} variant="secondary" className="text-xs bg-cyan-200/60">{s.title.substring(0, 12)}...</Badge>
-                  ))}
-                  <Badge variant="secondary" className="text-xs bg-cyan-200/60">+3</Badge>
-                </div>
+                <p className="text-sm text-cyan-700 mt-1">Выберите шаблон-пресет и заполните секции вручную или с помощью ИИ</p>
+                {primaryTemplate ? (
+                  <div className="flex gap-1 mt-2 items-center">
+                    <Crown className="h-3 w-3 text-amber-500" />
+                    <Badge variant="secondary" className="text-xs bg-cyan-200/60">{primaryTemplate.name}</Badge>
+                  </div>
+                ) : (
+                  <Badge variant="secondary" className="text-xs bg-cyan-200/60 mt-2">Выберите пресет</Badge>
+                )}
               </div>
             </div>
           </CardContent>
@@ -474,7 +540,7 @@ export function GenerationModule() {
             <Label>Шаблон *</Label>
             <Select value={selTemplateId} onValueChange={setSelTemplateId}>
               <SelectTrigger><SelectValue placeholder="Выберите шаблон" /></SelectTrigger>
-              <SelectContent>{templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name} {t.isPrimary ? '⭐ Основной' : ''}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <Button onClick={handleGenerateAll} disabled={generating} className="bg-purple-600 hover:bg-purple-700">
@@ -505,7 +571,73 @@ export function GenerationModule() {
   if (viewMode === 'manual') {
     const generatedCount = manualSections.filter(s => s.content.trim()).length
     const aiGeneratedCount = manualSections.filter(s => s.aiGenerated).length
-    
+
+    // Step 1: Preset selection (only if no primary template was found)
+    if (manualStep === 'preset') {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={() => setViewMode('list')}>← Назад</Button>
+            <h1 className="text-2xl font-bold flex items-center gap-2"><LayoutTemplate className="h-6 w-6 text-cyan-600" /> Выберите шаблон-пресет</h1>
+          </div>
+
+          <Card className="bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200/50">
+            <CardContent className="p-5">
+              <p className="text-sm text-cyan-800">
+                <BookOpen className="h-4 w-4 inline mr-1" />
+                Выберите шаблон как основу для ручной создания ДИ. Вы сможете настроить секции — добавить, удалить, изменить порядок или дополнить содержание.
+              </p>
+            </CardContent>
+          </Card>
+
+          {templates.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center text-muted-foreground">
+                <LayoutTemplate className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                <p>Нет доступных шаблонов</p>
+                <p className="text-sm mt-1">Создайте шаблон в разделе «Шаблоны ДИ» и установите его как основной</p>
+                <Button variant="outline" className="mt-3" onClick={() => setViewMode('list')}>Назад</Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {templates.map(t => (
+                <Card
+                  key={t.id}
+                  className={`cursor-pointer hover:shadow-md transition-all ${t.isPrimary ? 'ring-2 ring-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50' : 'hover:border-cyan-200'}`}
+                  onClick={() => applyPreset(t.id)}
+                >
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        {t.name}
+                        {t.isPrimary && <Crown className="h-4 w-4 text-amber-500" />}
+                      </CardTitle>
+                      {t.isPrimary && <Badge className="bg-amber-600 text-white text-xs">Основной</Badge>}
+                    </div>
+                    {t.description && <CardDescription className="text-sm mt-1">{t.description}</CardDescription>}
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex flex-wrap gap-1">
+                      {t.sections.slice(0, 4).map(s => (
+                        <Badge key={s.id} variant="secondary" className="text-xs">{s.title}</Badge>
+                      ))}
+                      {t.sections.length > 4 && <Badge variant="secondary" className="text-xs">+{t.sections.length - 4}</Badge>}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{t.sections.length} секций • Можно донастроить после выбора</p>
+                    <Button size="sm" className="w-full mt-2 bg-cyan-600 hover:bg-cyan-700" onClick={() => applyPreset(t.id)}>
+                      <LayoutTemplate className="h-3.5 w-3.5 mr-1.5" /> Использовать пресет
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // Step 2: Edit with selected preset
     return (
       <div className="space-y-4">
         {/* Header */}
@@ -519,6 +651,39 @@ export function GenerationModule() {
             <Button variant="outline" size="sm" onClick={collapseAllSections}>Свернуть все</Button>
           </div>
         </div>
+
+        {/* Preset indicator */}
+        {selectedPreset && (
+          <Card className="bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Crown className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm font-medium text-amber-900">Пресет: {selectedPreset.name}</span>
+                  {selectedPreset.isPrimary && <Badge className="bg-amber-600 text-white text-xs">Основной</Badge>}
+                  <span className="text-xs text-amber-600">{selectedPreset.sections.length} секций в основе</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={manualPresetId} onValueChange={changePreset}>
+                    <SelectTrigger className="w-auto min-w-[160px] h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map(t => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name} {t.isPrimary ? '⭐' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => { setManualStep('preset'); setManualPresetId(''); setManualSections([]) }}>
+                    <Settings2 className="h-3 w-3 mr-1" /> Другой пресет
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Progress */}
         <Card className="bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200/50">
@@ -581,6 +746,9 @@ export function GenerationModule() {
             {manualGeneratingAll ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Генерация... ({manualProgress}%)</> : <><Zap className="h-4 w-4 mr-1.5" /> Сгенерировать все секции ИИ</>}
           </Button>
           {manualGeneratingAll && <Progress value={manualProgress} className="flex-1 max-w-xs h-2" />}
+          <Button variant="outline" size="sm" onClick={addManualSection}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Добавить секцию
+          </Button>
         </div>
 
         {/* Sections */}
@@ -590,7 +758,7 @@ export function GenerationModule() {
             const hasContent = section.content.trim().length > 0
             
             return (
-              <Card key={section.order} className={`transition-all ${isExpanded ? 'ring-1 ring-cyan-200/50' : ''}`}>
+              <Card key={index} className={`transition-all ${isExpanded ? 'ring-1 ring-cyan-200/50' : ''}`}>
                 <div 
                   className="flex items-center gap-3 p-4 cursor-pointer hover:bg-muted/30"
                   onClick={() => toggleSection(index)}
@@ -601,7 +769,17 @@ export function GenerationModule() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground font-mono">{index + 1}.</span>
-                      <span className="font-semibold text-sm">{section.title}</span>
+                      {isExpanded ? (
+                        <Input
+                          value={section.title}
+                          onChange={e => updateManualSectionTitle(index, e.target.value)}
+                          className="h-6 text-sm font-semibold border-0 bg-transparent shadow-none focus-visible:ring-0 p-0"
+                          placeholder="Название секции"
+                        />
+                      ) : (
+                        <span className="font-semibold text-sm">{section.title || 'Без названия'}</span>
+                      )}
+                      {section.isRequired && <Badge variant="destructive" className="text-xs h-5">Обяз.</Badge>}
                     </div>
                     {section.promptGuidance && !isExpanded && (
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">{section.promptGuidance}</p>
@@ -616,12 +794,24 @@ export function GenerationModule() {
                       <Badge variant="outline" className="text-xs text-muted-foreground">Пусто</Badge>
                     )}
                     {section.isGenerating && <Loader2 className="h-4 w-4 animate-spin text-cyan-600" />}
+                    {/* Section reorder buttons */}
+                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={(e) => { e.stopPropagation(); moveManualSectionUp(index) }} disabled={index === 0}>
+                      <ArrowUp className="h-3 w-3" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={(e) => { e.stopPropagation(); moveManualSectionDown(index) }} disabled={index === manualSections.length - 1}>
+                      <ArrowDown className="h-3 w-3" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={(e) => { e.stopPropagation(); removeManualSection(index) }}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
                   </div>
                 </div>
                 
                 {isExpanded && (
                   <CardContent className="pt-0 px-4 pb-4 space-y-3">
-                    <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">{section.promptGuidance}</p>
+                    {section.promptGuidance && (
+                      <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">{section.promptGuidance}</p>
+                    )}
                     <Textarea 
                       value={section.content} 
                       onChange={e => setManualSections(prev => prev.map((s, i) => i === index ? { ...s, content: e.target.value, aiGenerated: false } : s))}
@@ -662,6 +852,7 @@ export function GenerationModule() {
           <CardContent className="p-4 flex items-center justify-between">
             <div className="text-sm text-muted-foreground">
               Заполнено {generatedCount} из {manualSections.length} секций
+              {selectedPreset && <span className="text-xs ml-2">• Пресет: {selectedPreset.name}</span>}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setViewMode('list')}>Отмена</Button>
