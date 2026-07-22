@@ -6,7 +6,6 @@ import {
   LayoutDashboard, Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows,
   Menu, ChevronLeft,
 } from 'lucide-react'
-import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -61,7 +60,7 @@ export default function HomePage() {
                 <div className={cn('flip-card-inner', logoFlipped && 'flipped')}>
                   {/* FRONT SIDE */}
                   <div className="flip-card-front flex items-center gap-2">
-                    <Image src="/logo.png" alt="Логотип" width={32} height={32} className="h-8 w-8 rounded-lg flex-shrink-0 object-contain" />
+                    <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
                     <div className="min-w-0">
                       <h1 className="font-semibold text-sm truncate">Группа Астра</h1>
                       <p className="text-xs text-muted-foreground truncate">Генератор ДИ</p>
@@ -87,8 +86,8 @@ export default function HomePage() {
               >
                 <div className={cn('flip-card-inner h-8 w-8', logoFlipped && 'flipped')}>
                   {/* FRONT */}
-                  <div className="flip-card-front h-8 w-8 rounded-lg flex items-center justify-center">
-                    <Image src="/logo.png" alt="Логотип" width={32} height={32} className="h-8 w-8 rounded-lg object-contain" />
+                  <div className="flip-card-front h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+                    <Sparkles className="h-4 w-4 text-primary-foreground" />
                   </div>
                   {/* BACK */}
                   <div className="flip-card-back h-8 w-8 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex items-center justify-center">

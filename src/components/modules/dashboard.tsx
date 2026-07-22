@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows, TrendingUp, ArrowRight } from 'lucide-react'
-import Image from 'next/image'
 
 interface Stats {
   departments: number
@@ -61,18 +60,10 @@ export function DashboardModule() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-6 text-white">
+      <div className="relative overflow-hidden rounded-2xl bg-black p-8 text-white">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyem0wLTRWMjhIMjR2MmgxMnptLTIgNHYySDI2di0yaDh6bTAtNHYtMmgtOHYyaDh6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-40"></div>
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-1 rounded-xl bg-white/10 backdrop-blur-sm">
-              <Image src="/logo.png" alt="Логотип Группа Астра" width={40} height={40} className="h-10 w-10 object-contain" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">Генератор ДИ</h1>
-              <p className="text-sm text-slate-300">Система генерации должностных инструкций Группы Астра</p>
-            </div>
-          </div>
+        <div className="relative z-10 flex items-center justify-center">
+          <h1 className="text-3xl font-bold tracking-widest uppercase">СИСТЕМА ГЕНЕРАЦИИ</h1>
         </div>
       </div>
 

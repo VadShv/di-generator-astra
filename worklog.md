@@ -107,12 +107,13 @@ The Job Description Generator (Генератор ДИ) for Группа Аст�
    - ✅ Verified via agent-browser + VLM: flip toggles correctly, shows "@VADSHV" on back, logo on front
    - ✅ Lint passes cleanly
 
-6. **Logo — classic 3D default icon, transparent background (2026-07-23)**
-   - Generated 3D stylized document icon with folded corner, royal-blue-to-cyan gradient, glass-like reflections, AI sparkle badge
-   - **White background removed** using Python/PIL — threshold-based alpha channel transparency conversion
-   - Logo now floats cleanly on both dark header and light sidebar backgrounds — no white box, no halo
-   - Production-ready transparent PNG with alpha channel
-   - ✅ Verified via agent-browser + VLM: logo looks clean on dark navy header and white sidebar
+6. **Logo removed, dashboard header simplified (2026-07-23)**
+   - **Removed all logo images** from sidebar and dashboard — replaced with Sparkles icon in sidebar, no logo in dashboard
+   - **Dashboard header**: Replaced gradient header with logo+title → **pure black background** with centered **"СИСТЕМА ГЕНЕРАЦИИ"** in bold uppercase white text (tracking-widest, text-3xl)
+   - Sidebar: Sparkles icon + "Группа Астра" / "Генератор ДИ" text (no image logo)
+   - Collapsed sidebar: Sparkles icon in bg-primary square (front), "@" on back
+   - Flip card still works — front shows text+icon, back shows "@VADSHV"
+   - ✅ Verified via agent-browser + VLM: no logos visible, black banner with centered "СИСТЕМА ГЕНЕРАЦИИ"
 
 ## Known Issues / Risks
 - Background processes die between bash tool calls — need to restart server each session
