@@ -4,8 +4,9 @@ import { useAppStore, type ActiveSection } from '@/lib/store'
 import { useState } from 'react'
 import {
   LayoutDashboard, Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows,
-  Menu, ChevronLeft, MessageCircle,
+  Menu, ChevronLeft,
 } from 'lucide-react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -60,22 +61,16 @@ export default function HomePage() {
                 <div className={cn('flip-card-inner', logoFlipped && 'flipped')}>
                   {/* FRONT SIDE */}
                   <div className="flip-card-front flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-                      <span className="text-primary-foreground font-bold text-sm">A</span>
-                    </div>
+                    <Image src="/logo.png" alt="Логотип" width={32} height={32} className="h-8 w-8 rounded-lg flex-shrink-0 object-contain" />
                     <div className="min-w-0">
                       <h1 className="font-semibold text-sm truncate">Группа Астра</h1>
                       <p className="text-xs text-muted-foreground truncate">Генератор ДИ</p>
                     </div>
                   </div>
                   {/* BACK SIDE */}
-                  <div className="flip-card-back rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 p-2.5 flex flex-col items-center justify-center text-center">
-                    <MessageCircle className="h-4 w-4 text-primary mb-1.5" />
-                    <p className="text-xs leading-relaxed text-foreground">
-                      Если возникли вопросы или предложения по работе сервиса, напишите в
-                    </p>
-                    <p className="text-sm font-semibold text-primary mt-0.5">
-                      тг @vadshv
+                  <div className="flip-card-back rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex flex-col items-center justify-center text-center">
+                    <p className="text-sm font-bold text-primary tracking-wide">
+                      @VADSHV
                     </p>
                   </div>
                 </div>
@@ -92,12 +87,12 @@ export default function HomePage() {
               >
                 <div className={cn('flip-card-inner h-8 w-8', logoFlipped && 'flipped')}>
                   {/* FRONT */}
-                  <div className="flip-card-front h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                    <span className="text-primary-foreground font-bold text-sm">A</span>
+                  <div className="flip-card-front h-8 w-8 rounded-lg flex items-center justify-center">
+                    <Image src="/logo.png" alt="Логотип" width={32} height={32} className="h-8 w-8 rounded-lg object-contain" />
                   </div>
                   {/* BACK */}
                   <div className="flip-card-back h-8 w-8 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex items-center justify-center">
-                    <MessageCircle className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-xs font-bold text-primary">@</span>
                   </div>
                 </div>
               </div>
