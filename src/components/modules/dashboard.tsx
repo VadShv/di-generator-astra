@@ -109,8 +109,8 @@ export function DashboardModule() {
           <CardContent className="space-y-1.5">
             {quickActions.map((action) => (
               <div key={action.label} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/60 transition-colors cursor-pointer group" onClick={() => setActiveSection(action.section)}>
-                <div className={`p-1.5 rounded-full ${action.bgColor}`}>
-                  <action.icon className={`h-4 w-4 ${action.color}`} />
+                <div className={`flex items-center justify-center rounded-lg p-2.5 ${action.bgColor}`}>
+                  <action.icon className={`h-5 w-5 ${action.color}`} />
                 </div>
                 <span className="text-sm flex-1">{action.label}</span>
                 {action.badge && <Badge variant="secondary" className="text-xs">{action.badge}</Badge>}

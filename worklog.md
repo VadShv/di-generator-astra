@@ -144,3 +144,20 @@ The Job Description Generator (Генератор ДИ) for Группа Аст�
 5. Add batch delete for mass-generated DIs
 6. Improve styling with more visual polish and animations
 7. Add DI filtering/search in mass generation module
+
+---
+
+Task ID: fix-dashboard-icon-bg
+Agent: main
+Task: Fix dashboard quick action icons to have colored background containers
+
+Work Log:
+- Read dashboard.tsx and found quick action icons had `p-1.5 rounded-full` which was too small
+- Changed icon container from `p-1.5 rounded-full` to `flex items-center justify-center rounded-lg p-2.5` for more prominent backgrounds
+- Changed icon size from `h-4 w-4` to `h-5 w-5` for better visibility
+- Verified via agent-browser + VLM that all 9 quick action icons now have visible colored backgrounds
+- Confirmed: cyan, orange, red, indigo, amber, pink, purple, emerald, rose backgrounds all visible
+
+Stage Summary:
+- Dashboard quick action icons now have prominent colored background containers (rounded-lg with p-2.5 padding)
+- All 9 icons verified with VLM analysis showing correct color backgrounds
