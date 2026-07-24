@@ -161,3 +161,37 @@ Work Log:
 Stage Summary:
 - Dashboard quick action icons now have prominent colored background containers (rounded-lg with p-2.5 padding)
 - All 9 icons verified with VLM analysis showing correct color backgrounds
+
+---
+
+Task ID: enhance-ai-audit-5-classes
+Agent: main
+Task: Усиление модуля AI-аудита с 5 классами правовых ошибок
+
+Work Log:
+- Updated Prisma schema: added 5 new JSON fields to DIAuditResult (duplicatedTkItems, vagueFormulationItems, legislativeConflictItems, unrealisticRequirementItems, incompleteSectionItems) with default "[]"
+- Pushed schema to database successfully (bun run db:push)
+- Rewrote API route `/api/generate-di/ai-audit/route.ts`:
+  - LLM prompt now contains detailed "Правовое ядро" with 5 classes and specific detection rules for each
+  - Type-specific focus: full=all 5, legal=TK+law+sections, consistency=formulations+requirements
+  - JSON output structure includes categoryScores per category + 5 detailed arrays with specific fields
+  - Legacy fields computed from new 5-class data for backward compatibility
+- Rewrote UI module `/components/modules/ai-audit.tsx`:
+  - Banner card showing "Что проверяет модуль (правовое ядро)" with 5 category icons
+  - 5 tabs with specialized rendering per category:
+    - Дублирование ТК: shows quote + TK article + TK text + explanation + recommendation
+    - Расплывчатые формулировки: shows quote + problem type badge + risk explanation + specific alternative
+    - Противоречия законодательству: shows quote + violated law + violation type + risk level badge + correct formulation
+    - Завышенные требования: shows quote + requirement type + current vs realistic alternative comparison
+    - Неполнота разделов: shows missing section + required content + current state + suggested content
+  - Overall score + 5 mini category score cards
+  - Total findings count badge
+  - History dialog shows per-category counts
+- Verified via agent-browser: module renders with all 5 categories visible, banner, selection panel, audit type dropdown with "Полный аудит (все 5 классов)"
+- Lint passes cleanly
+
+Stage Summary:
+- AI Audit module enhanced from 3 generic categories to 5 specific legal error classes
+- Each class has tailored LLM prompt with detection rules and structured JSON output
+- UI has specialized tabs with category-specific rendering and detailed information
+- Prisma schema updated, database synced, backward compatibility maintained
