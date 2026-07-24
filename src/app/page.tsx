@@ -125,8 +125,8 @@ export default function HomePage() {
                   <Button key={item.id} variant={activeSection === item.id ? 'secondary' : 'ghost'}
                     className={cn('w-full justify-start gap-3 h-9 px-3 mx-1', !sidebarOpen && 'justify-center px-0 w-12', activeSection === item.id && 'font-medium')}
                     onClick={() => setActiveSection(item.id)} title={!sidebarOpen ? item.label : undefined}>
-                    {/* Icon with colored background */}
-                    <div className={cn('flex items-center justify-center rounded-lg', sidebarOpen ? 'p-1.5' : 'p-2', item.iconBg)}>
+                    {/* Icon with colored background circle */}
+                    <div className={cn('flex items-center justify-center rounded-full', sidebarOpen ? 'p-1.5' : 'p-2', item.iconBg)}>
                       <item.icon className={cn('h-4 w-4', item.iconColor)} />
                     </div>
                     {sidebarOpen && <span className="truncate">{item.label}</span>}

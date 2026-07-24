@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows, TrendingUp, ArrowRight, Zap, Shield, History } from 'lucide-react'
 
+import { useAppStore, type ActiveSection } from '@/lib/store'
+
 interface Stats {
   departments: number
   positions: number
@@ -17,8 +19,6 @@ interface Stats {
   pendingComparison: number
 }
 
-import { useAppStore, type ActiveSection } from '@/lib/store'
-
 const quickActions = [
   { label: 'Сгенерировать новую ДИ', icon: Sparkles, color: 'text-cyan-600', bgColor: 'bg-cyan-100', section: 'generation' as ActiveSection, badge: 'AI' },
   { label: 'Массовая генерация ДИ', icon: Zap, color: 'text-orange-600', bgColor: 'bg-orange-100', section: 'mass-generation' as ActiveSection, badge: 'New' },
@@ -29,6 +29,17 @@ const quickActions = [
   { label: 'Настроить мастер-промпт', icon: Brain, color: 'text-purple-600', bgColor: 'bg-purple-100', section: 'master-prompts' as ActiveSection, badge: null },
   { label: 'Загрузить штатное расписание', icon: Users, color: 'text-emerald-600', bgColor: 'bg-emerald-100', section: 'staff-schedule' as ActiveSection, badge: null },
   { label: 'Создать шаблон ДИ', icon: FileText, color: 'text-rose-600', bgColor: 'bg-rose-100', section: 'templates' as ActiveSection, badge: null },
+]
+
+const statCardsConfig = [
+  { label: 'Подразделения', key: 'departments' as const, icon: Users, iconBg: 'bg-emerald-100 text-emerald-600' },
+  { label: 'Должности в ШР', key: 'positions' as const, icon: Users, iconBg: 'bg-teal-100 text-teal-600' },
+  { label: 'Архивных ДИ', key: 'archiveDIs' as const, icon: Archive, iconBg: 'bg-amber-100 text-amber-600' },
+  { label: 'Шаблонов ДИ', key: 'templates' as const, icon: FileText, iconBg: 'bg-rose-100 text-rose-600' },
+  { label: 'Мастер-промптов', key: 'masterPrompts' as const, icon: Brain, iconBg: 'bg-purple-100 text-purple-600' },
+  { label: 'Сгенерированных ДИ', key: 'generatedDIs' as const, icon: Sparkles, iconBg: 'bg-cyan-100 text-cyan-600' },
+  { label: 'На согласовании', key: 'pendingTracking' as const, icon: GitBranch, iconBg: 'bg-orange-100 text-orange-600' },
+  { label: 'Ожидают сравнения', key: 'pendingComparison' as const, icon: GitCompareArrows, iconBg: 'bg-pink-100 text-pink-600' },
 ]
 
 export function DashboardModule() {
@@ -52,17 +63,6 @@ export function DashboardModule() {
     loadStats()
   }, [])
 
-  const statCards = stats ? [
-    { label: 'Подразделения', value: stats.departments, icon: <Users className="h-5 w-5" />, gradient: 'from-emerald-500 to-emerald-600', iconBg: 'bg-emerald-100 text-emerald-600' },
-    { label: 'Должности в ШР', value: stats.positions, icon: <Users className="h-5 w-5" />, gradient: 'from-teal-500 to-teal-600', iconBg: 'bg-teal-100 text-teal-600' },
-    { label: 'Архивных ДИ', value: stats.archiveDIs, icon: <Archive className="h-5 w-5" />, gradient: 'from-amber-500 to-amber-600', iconBg: 'bg-amber-100 text-amber-600' },
-    { label: 'Шаблонов ДИ', value: stats.templates, icon: <FileText className="h-5 w-5" />, gradient: 'from-rose-500 to-rose-600', iconBg: 'bg-rose-100 text-rose-600' },
-    { label: 'Мастер-промптов', value: stats.masterPrompts, icon: <Brain className="h-5 w-5" />, gradient: 'from-purple-500 to-purple-600', iconBg: 'bg-purple-100 text-purple-600' },
-    { label: 'Сгенерированных ДИ', value: stats.generatedDIs, icon: <Sparkles className="h-5 w-5" />, gradient: 'from-cyan-500 to-cyan-600', iconBg: 'bg-cyan-100 text-cyan-600' },
-    { label: 'На согласовании', value: stats.pendingTracking, icon: <GitBranch className="h-5 w-5" />, gradient: 'from-orange-500 to-orange-600', iconBg: 'bg-orange-100 text-orange-600' },
-    { label: 'Ожидают сравнения', value: stats.pendingComparison, icon: <GitCompareArrows className="h-5 w-5" />, gradient: 'from-pink-500 to-pink-600', iconBg: 'bg-pink-100 text-pink-600' },
-  ] : []
-
   return (
     <div className="space-y-6">
       {/* Stats Grid */}
@@ -76,16 +76,16 @@ export function DashboardModule() {
             </Card>
           ))
         ) : (
-          statCards.map((card) => (
+          statCardsConfig.map((card) => (
             <Card key={card.label} className="hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground font-medium">{card.label}</p>
-                    <p className="text-2xl font-bold mt-0.5">{card.value}</p>
+                    <p className="text-2xl font-bold mt-0.5">{stats ? stats[card.key] : 0}</p>
                   </div>
-                  <div className={`p-2.5 rounded-xl ${card.iconBg}`}>
-                    {card.icon}
+                  <div className={`p-2.5 rounded-full ${card.iconBg}`}>
+                    <card.icon className="h-5 w-5" />
                   </div>
                 </div>
               </CardContent>
@@ -99,7 +99,9 @@ export function DashboardModule() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="h-5 w-5 text-emerald-600" />
+              <div className="p-1.5 rounded-full bg-emerald-100">
+                <TrendingUp className="h-4 w-4 text-emerald-600" />
+              </div>
               Быстрые действия
             </CardTitle>
             <CardDescription>Основные операции системы</CardDescription>
@@ -107,7 +109,7 @@ export function DashboardModule() {
           <CardContent className="space-y-1.5">
             {quickActions.map((action) => (
               <div key={action.label} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/60 transition-colors cursor-pointer group" onClick={() => setActiveSection(action.section)}>
-                <div className={`p-1.5 rounded-lg ${action.bgColor}`}>
+                <div className={`p-1.5 rounded-full ${action.bgColor}`}>
                   <action.icon className={`h-4 w-4 ${action.color}`} />
                 </div>
                 <span className="text-sm flex-1">{action.label}</span>
@@ -121,7 +123,9 @@ export function DashboardModule() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <GitBranch className="h-5 w-5 text-orange-600" />
+              <div className="p-1.5 rounded-full bg-orange-100">
+                <GitBranch className="h-4 w-4 text-orange-600" />
+              </div>
               Последние действия
             </CardTitle>
             <CardDescription>Хронология событий</CardDescription>
