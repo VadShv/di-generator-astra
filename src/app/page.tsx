@@ -4,7 +4,7 @@ import { useAppStore, type ActiveSection } from '@/lib/store'
 import { useState } from 'react'
 import {
   LayoutDashboard, Users, BookOpen, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows,
-  Menu, ChevronLeft, Zap, Shield, History,
+  Menu, ChevronLeft, Zap, Shield, History, BookOpenIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -22,6 +22,7 @@ import { ComparisonModule } from '@/components/modules/comparison'
 import { MassGenerationModule } from '@/components/modules/mass-generation'
 import { AiAuditModule } from '@/components/modules/ai-audit'
 import { VersionHistoryModule } from '@/components/modules/version-history'
+import { InstructionsModule } from '@/components/modules/instructions'
 
 const navItems: { id: ActiveSection; label: string; icon: React.ElementType; iconBg: string; iconColor: string; group: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: LayoutDashboard, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', group: 'Обзор' },
@@ -36,6 +37,7 @@ const navItems: { id: ActiveSection; label: string; icon: React.ElementType; ico
   { id: 'version-history', label: 'Версионирование', icon: History, iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600', group: 'Жизненный цикл' },
   { id: 'comparison', label: 'Сравнение версий', icon: GitCompareArrows, iconBg: 'bg-pink-100', iconColor: 'text-pink-600', group: 'Жизненный цикл' },
   { id: 'ai-audit', label: 'AI-аудит', icon: Shield, iconBg: 'bg-red-100', iconColor: 'text-red-600', group: 'Анализ' },
+  { id: 'instructions', label: 'Инструкция', icon: BookOpen, iconBg: 'bg-gray-100', iconColor: 'text-gray-600', group: 'Помощь' },
 ]
 
 const modules: Record<ActiveSection, React.ReactNode> = {
@@ -51,12 +53,13 @@ const modules: Record<ActiveSection, React.ReactNode> = {
   'version-history': <VersionHistoryModule />,
   comparison: <ComparisonModule />,
   'ai-audit': <AiAuditModule />,
+  'instructions': <InstructionsModule />,
 }
 
 export default function HomePage() {
   const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen } = useAppStore()
   const [logoFlipped, setLogoFlipped] = useState(false)
-  const groups = ['Обзор', 'Данные', 'Настройка', 'Генерация', 'Жизненный цикл', 'Анализ']
+  const groups = ['Обзор', 'Данные', 'Настройка', 'Генерация', 'Жизненный цикл', 'Анализ', 'Помощь']
 
   return (
     <div className="min-h-screen flex bg-background">

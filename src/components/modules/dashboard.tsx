@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows, TrendingUp, ArrowRight, Zap, Shield, History } from 'lucide-react'
+import { Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows, TrendingUp, ArrowRight, Zap, Shield, History, BookOpen } from 'lucide-react'
 
 import { useAppStore, type ActiveSection } from '@/lib/store'
 
@@ -29,6 +29,7 @@ const quickActions = [
   { label: 'Настроить мастер-промпт', icon: Brain, color: 'text-purple-600', bgColor: 'bg-purple-100', section: 'master-prompts' as ActiveSection, badge: null },
   { label: 'Загрузить штатное расписание', icon: Users, color: 'text-emerald-600', bgColor: 'bg-emerald-100', section: 'staff-schedule' as ActiveSection, badge: null },
   { label: 'Создать шаблон ДИ', icon: FileText, color: 'text-rose-600', bgColor: 'bg-rose-100', section: 'templates' as ActiveSection, badge: null },
+  { label: 'Инструкция сервиса', icon: BookOpen, color: 'text-gray-600', bgColor: 'bg-gray-100', section: 'instructions' as ActiveSection, badge: null },
 ]
 
 const statCardsConfig = [
