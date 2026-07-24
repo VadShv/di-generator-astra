@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     if (manualMode && positionId) {
       const position = await db.position.findUnique({
         where: { id: positionId },
-        include: { department: true },
+        include: { department: true, businessFunction: true, project: true },
       })
 
       if (!position) {
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
       // Resolve master prompt
       const masterPrompt = await resolveMasterPromptInternal(
         position.departmentId,
-        position.domain,
+        position.businessFunctionId,
         position.grade
       )
 
@@ -44,7 +44,8 @@ export async function POST(request: Request) {
 Код должности: ${position.code}
 Подразделение: ${position.department.name}
 Грейд: ${position.grade || 'Не указан'}
-Домен: ${position.domain || 'Не указан'}
+Бизнес-функция: ${position.businessFunction?.name || 'Не указана'}
+Проект: ${position.project?.name || 'Не указан'}
 Количество штатных единиц: ${position.headcount}
 ${position.functions ? `Выполняемые функции: ${position.functions}` : ''}`
 
@@ -111,7 +112,7 @@ ${archiveContext}
     const generatedDI = await db.generatedDI.findUnique({
       where: { id: generatedDIId },
       include: {
-        position: { include: { department: true } },
+        position: { include: { department: true, businessFunction: true, project: true } },
         template: { include: { sections: { orderBy: { order: 'asc' } } } },
         sections: { orderBy: { order: 'asc' } },
       },
@@ -133,7 +134,7 @@ ${archiveContext}
     // Resolve master prompt
     const masterPrompt = await resolveMasterPromptInternal(
       generatedDI.position.departmentId,
-      generatedDI.position.domain,
+      generatedDI.position.businessFunctionId,
       generatedDI.position.grade
     )
 
@@ -152,7 +153,8 @@ ${archiveContext}
 Код должности: ${generatedDI.position.code}
 Подразделение: ${generatedDI.position.department.name}
 Грейд: ${generatedDI.position.grade || 'Не указан'}
-Домен: ${generatedDI.position.domain || 'Не указан'}
+Бизнес-функция: ${generatedDI.position.businessFunction?.name || 'Не указана'}
+Проект: ${generatedDI.position.project?.name || 'Не указан'}
 Количество штатных единиц: ${generatedDI.position.headcount}
 ${generatedDI.position.functions ? `Выполняемые функции: ${generatedDI.position.functions}` : ''}`
 
@@ -226,26 +228,26 @@ ${otherSections || 'Другие секции ещё не сгенерирова
 
 async function resolveMasterPromptInternal(
   departmentId: string,
-  domain: string | null,
+  businessFunctionId: string | null,
   grade: string | null
 ) {
   const combinations: Record<string, string | null>[] = []
 
-  if (departmentId && domain && grade) combinations.push({ departmentId, domain, grade })
-  if (departmentId && domain) combinations.push({ departmentId, domain, grade: null })
-  if (departmentId && grade) combinations.push({ departmentId, domain: null, grade })
-  if (departmentId) combinations.push({ departmentId, domain: null, grade: null })
-  if (domain && grade) combinations.push({ departmentId: null, domain, grade })
-  if (domain) combinations.push({ departmentId: null, domain, grade: null })
-  if (grade) combinations.push({ departmentId: null, domain: null, grade })
-  combinations.push({ departmentId: null, domain: null, grade: null })
+  if (departmentId && businessFunctionId && grade) combinations.push({ departmentId, businessFunctionId, grade })
+  if (departmentId && businessFunctionId) combinations.push({ departmentId, businessFunctionId, grade: null })
+  if (departmentId && grade) combinations.push({ departmentId, businessFunctionId: null, grade })
+  if (departmentId) combinations.push({ departmentId, businessFunctionId: null, grade: null })
+  if (businessFunctionId && grade) combinations.push({ departmentId: null, businessFunctionId, grade })
+  if (businessFunctionId) combinations.push({ departmentId: null, businessFunctionId, grade: null })
+  if (grade) combinations.push({ departmentId: null, businessFunctionId: null, grade })
+  combinations.push({ departmentId: null, businessFunctionId: null, grade: null })
 
   for (const combo of combinations) {
     const prompt = await db.masterPrompt.findFirst({
       where: {
         isActive: true,
         departmentId: combo.departmentId || null,
-        domain: combo.domain || null,
+        businessFunctionId: combo.businessFunctionId || null,
         grade: combo.grade || null,
       },
       orderBy: { version: 'desc' },

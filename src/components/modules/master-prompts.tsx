@@ -26,19 +26,35 @@ import { useToast } from '@/hooks/use-toast'
 import { Brain, Plus, Eye, Pencil, Trash2, GitBranch, Copy, CheckCircle2, XCircle, Sparkles } from 'lucide-react'
 
 interface Department { id: string; name: string; code: string }
+interface BusinessFunctionItem { id: string; name: string }
 interface MasterPrompt {
   id: string; name: string; content: string; version: number; isActive: boolean
-  departmentId: string | null; department: Department | null; domain: string | null
+  departmentId: string | null; department: Department | null
+  businessFunctionId: string | null; businessFunction: { id: string; name: string } | null
   grade: string | null; functionType: string | null; description: string | null
   createdAt: string; updatedAt: string
 }
-interface Position { id: string; title: string; code: string; departmentId: string; department: Department; grade: string | null; domain: string | null; functions: string | null }
+interface Position {
+  id: string; title: string; code: string; departmentId: string; department: Department
+  grade: string | null
+  businessFunctionId: string | null; businessFunction: { id: string; name: string } | null
+  projectId: string | null; project: { id: string; name: string } | null
+  functions: string | null
+}
 interface PromptGroup { name: string; prompts: MasterPrompt[]; activeVersion: MasterPrompt | undefined; latestVersion: MasterPrompt }
+
+const gradeLabel = (grade: string | null): string | null => {
+  if (!grade) return null
+  if (grade === 'линейная') return 'Линейная'
+  if (grade === 'руководитель') return 'Руководитель'
+  return grade
+}
 
 export function MasterPromptsModule() {
   const { toast } = useToast()
   const [prompts, setPrompts] = useState<MasterPrompt[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
+  const [businessFunctions, setBusinessFunctions] = useState<BusinessFunctionItem[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
   const [filterName, setFilterName] = useState('')
@@ -63,7 +79,7 @@ export function MasterPromptsModule() {
   const [formContent, setFormContent] = useState('')
   const [formDescription, setFormDescription] = useState('')
   const [formDepartmentId, setFormDepartmentId] = useState('')
-  const [formDomain, setFormDomain] = useState('')
+  const [formBusinessFunctionId, setFormBusinessFunctionId] = useState('')
   const [formGrade, setFormGrade] = useState('')
   const [formFunctionType, setFormFunctionType] = useState('')
 
@@ -93,12 +109,16 @@ export function MasterPromptsModule() {
     try { const res = await fetch('/api/departments'); if (res.ok) setDepartments(await res.json()) } catch { /* silent */ }
   }, [])
 
+  const fetchBusinessFunctions = useCallback(async () => {
+    try { const res = await fetch('/api/business-functions'); if (res.ok) setBusinessFunctions(await res.json()) } catch { /* silent */ }
+  }, [])
+
   const fetchPositions = useCallback(async () => {
     try { const res = await fetch('/api/positions'); if (res.ok) setPositions(await res.json()) } catch { /* silent */ }
   }, [])
 
   useEffect(() => { fetchPrompts() }, [fetchPrompts])
-  useEffect(() => { fetchDepartments(); fetchPositions() }, [fetchDepartments, fetchPositions])
+  useEffect(() => { fetchDepartments(); fetchBusinessFunctions(); fetchPositions() }, [fetchDepartments, fetchBusinessFunctions, fetchPositions])
 
   const groupedPrompts = useMemo(() => {
     const groups: Record<string, MasterPrompt[]> = {}
@@ -114,14 +134,14 @@ export function MasterPromptsModule() {
   const openCreateDialog = () => {
     setEditingPrompt(null)
     setFormName(''); setFormContent(''); setFormDescription(''); setFormDepartmentId('')
-    setFormDomain(''); setFormGrade(''); setFormFunctionType('')
+    setFormBusinessFunctionId(''); setFormGrade(''); setFormFunctionType('')
     setEditDialogOpen(true)
   }
 
   const openEditDialog = (p: MasterPrompt) => {
     setEditingPrompt(p)
     setFormName(p.name); setFormContent(p.content); setFormDescription(p.description || '')
-    setFormDepartmentId(p.departmentId || ''); setFormDomain(p.domain || '')
+    setFormDepartmentId(p.departmentId || ''); setFormBusinessFunctionId(p.businessFunctionId || '')
     setFormGrade(p.grade || ''); setFormFunctionType(p.functionType || '')
     setEditDialogOpen(true)
   }
@@ -131,7 +151,7 @@ export function MasterPromptsModule() {
       toast({ title: 'Ошибка', description: 'Название и содержимое обязательны', variant: 'destructive' }); return
     }
     try {
-      const body = { name: formName, content: formContent, description: formDescription, departmentId: formDepartmentId || null, domain: formDomain || null, grade: formGrade || null, functionType: formFunctionType || null }
+      const body = { name: formName, content: formContent, description: formDescription, departmentId: formDepartmentId || null, businessFunctionId: formBusinessFunctionId || null, grade: formGrade || null, functionType: formFunctionType || null }
       if (editingPrompt) {
         const res = await fetch('/api/master-prompts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingPrompt.id, ...body }) })
         if (!res.ok) throw new Error()
@@ -184,7 +204,7 @@ export function MasterPromptsModule() {
   const handleDuplicate = (p: MasterPrompt) => {
     setEditingPrompt(null)
     setFormName(p.name); setFormContent(p.content); setFormDescription(`Копия версии ${p.version}`)
-    setFormDepartmentId(p.departmentId || ''); setFormDomain(p.domain || '')
+    setFormDepartmentId(p.departmentId || ''); setFormBusinessFunctionId(p.businessFunctionId || '')
     setFormGrade(p.grade || ''); setFormFunctionType(p.functionType || '')
     setEditDialogOpen(true)
   }
@@ -263,14 +283,14 @@ export function MasterPromptsModule() {
               <AccordionContent className="px-4 pb-4">
                 <Table>
                   <TableHeader><TableRow>
-                    <TableHead>Версия</TableHead><TableHead>Подразделение</TableHead><TableHead>Домен</TableHead><TableHead>Статус</TableHead><TableHead>Дата</TableHead><TableHead className="text-right">Действия</TableHead>
+                    <TableHead>Версия</TableHead><TableHead>Подразделение</TableHead><TableHead>Бизнес-функция</TableHead><TableHead>Статус</TableHead><TableHead>Дата</TableHead><TableHead className="text-right">Действия</TableHead>
                   </TableRow></TableHeader>
                   <TableBody>
                     {group.prompts.map(p => (
                       <TableRow key={p.id} className={!p.isActive ? 'opacity-60' : ''}>
                         <TableCell><Badge variant="secondary">v{p.version}</Badge></TableCell>
                         <TableCell className="text-sm">{p.department?.name || 'Все'}</TableCell>
-                        <TableCell className="text-sm">{p.domain || 'Все'}</TableCell>
+                        <TableCell className="text-sm">{p.businessFunction?.name || 'Все'}</TableCell>
                         <TableCell>{p.isActive ? <Badge className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1" />Активна</Badge> : <Badge variant="secondary"><XCircle className="h-3 w-3 mr-1" />Неактивна</Badge>}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{new Date(p.createdAt).toLocaleDateString('ru-RU')}</TableCell>
                         <TableCell>
@@ -305,7 +325,7 @@ export function MasterPromptsModule() {
             <div><Label>Описание</Label><Input value={formDescription} onChange={e => setFormDescription(e.target.value)} placeholder="Описание версии" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="text-xs">Подразделение</Label><Select value={formDepartmentId} onValueChange={setFormDepartmentId}><SelectTrigger><SelectValue placeholder="Все" /></SelectTrigger><SelectContent><SelectItem value="_none">Все</SelectItem>{departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label className="text-xs">Домен</Label><Input value={formDomain} onChange={e => setFormDomain(e.target.value)} placeholder="IT, Финансы..." /></div>
+              <div><Label className="text-xs">Бизнес-функция</Label><Select value={formBusinessFunctionId} onValueChange={setFormBusinessFunctionId}><SelectTrigger><SelectValue placeholder="Все" /></SelectTrigger><SelectContent><SelectItem value="_none">Все</SelectItem>{businessFunctions.map(bf => <SelectItem key={bf.id} value={bf.id}>{bf.name}</SelectItem>)}</SelectContent></Select></div>
               <div><Label className="text-xs">Грейд</Label><Input value={formGrade} onChange={e => setFormGrade(e.target.value)} placeholder="G1, G2..." /></div>
               <div><Label className="text-xs">Тип функции</Label><Input value={formFunctionType} onChange={e => setFormFunctionType(e.target.value)} placeholder="Разработка, Аналитика..." /></div>
             </div>
@@ -319,7 +339,11 @@ export function MasterPromptsModule() {
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{viewingPrompt?.name} — v{viewingPrompt?.version}</DialogTitle></DialogHeader>
           <div className="space-y-2">
-            <div className="flex gap-2">{viewingPrompt?.isActive ? <Badge className="bg-green-600">Активна</Badge> : <Badge variant="secondary">Неактивна</Badge>}{viewingPrompt?.domain && <Badge variant="outline">{viewingPrompt.domain}</Badge>}{viewingPrompt?.grade && <Badge variant="outline">{viewingPrompt.grade}</Badge>}</div>
+            <div className="flex gap-2">
+              {viewingPrompt?.isActive ? <Badge className="bg-green-600">Активна</Badge> : <Badge variant="secondary">Неактивна</Badge>}
+              {viewingPrompt?.businessFunction && <Badge variant="outline">{viewingPrompt.businessFunction.name}</Badge>}
+              {gradeLabel(viewingPrompt?.grade ?? null) && <Badge variant="outline">{gradeLabel(viewingPrompt?.grade ?? null)}</Badge>}
+            </div>
             <pre className="whitespace-pre-wrap text-sm bg-muted p-4 rounded-lg max-h-[500px] overflow-y-auto">{viewingPrompt?.content}</pre>
           </div>
         </DialogContent>
@@ -359,6 +383,7 @@ export function MasterPromptsModule() {
             {resolverResult?.prompt && (
               <div className="border rounded-lg p-3 space-y-2">
                 <p className="font-medium">Резолвлен: {resolverResult.prompt.name} (v{resolverResult.prompt.version})</p>
+                {resolverResult.prompt.businessFunction && <p className="text-sm text-muted-foreground">Бизнес-функция: {resolverResult.prompt.businessFunction.name}</p>}
                 {resolverResult.resolution && <p className="text-sm text-muted-foreground">Score: {resolverResult.resolution.score} | Совпадения: {resolverResult.resolution.matchDetails.join(', ')}</p>}
               </div>
             )}

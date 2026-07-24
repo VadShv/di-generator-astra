@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const di = await db.generatedDI.findUnique({
       where: { id },
       include: {
-        position: { include: { department: true } },
+        position: { include: { department: true, businessFunction: true, project: true } },
         template: true,
         sections: { orderBy: { order: 'asc' } },
       },
@@ -48,6 +48,8 @@ function generateDIHtml(di: any): string {
     `)
     .join('')
 
+  const gradeLabel = di.position?.grade === 'руководитель' ? 'Руководитель' : di.position?.grade === 'линейная' ? 'Линейная позиция' : 'Не указан'
+
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -67,8 +69,12 @@ function generateDIHtml(di: any): string {
   <div class="meta">
     <p><strong>Должность:</strong> ${di.position?.title || ''}</p>
     <p><strong>Подразделение:</strong> ${di.position?.department?.name || ''}</p>
-    <p><strong>Грейд:</strong> ${di.position?.grade || 'Не указан'}</p>
+    <p><strong>Грейд:</strong> ${gradeLabel}</p>
+    <p><strong>Бизнес-функция:</strong> ${di.position?.businessFunction?.name || 'Не указана'}</p>
+    <p><strong>Проект:</strong> ${di.position?.project?.name || 'Не указан'}</p>
     <p><strong>Дата создания:</strong> ${new Date(di.createdAt).toLocaleDateString('ru-RU')}</p>
+    ${di.signedByEmployee ? '<p><strong>Подписана сотрудником:</strong> ✓ Да</p>' : ''}
+    ${di.signedAt ? `<p><strong>Дата подписания:</strong> ${new Date(di.signedAt).toLocaleDateString('ru-RU')}</p>` : ''}
   </div>
   <hr/>
   ${sections}

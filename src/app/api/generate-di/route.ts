@@ -103,7 +103,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
-    const { id, title, status, sections } = body
+    const { id, title, status, sections, signedByEmployee } = body
 
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'ID ДИ обязателен' }, { status: 400 })
@@ -123,6 +123,13 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Недопустимый статус' }, { status: 400 })
     }
 
+    // Handle signedByEmployee
+    const signedData: Record<string, unknown> = {}
+    if (signedByEmployee !== undefined) {
+      signedData.signedByEmployee = signedByEmployee
+      signedData.signedAt = signedByEmployee ? new Date() : null
+    }
+
     // Update sections if provided
     if (sections && Array.isArray(sections)) {
       // Delete existing sections and recreate
@@ -133,6 +140,7 @@ export async function PUT(request: Request) {
         data: {
           title: title !== undefined ? title.trim() : undefined,
           status: status !== undefined ? status : undefined,
+          ...signedData,
           sections: {
             create: sections.map((s: { sectionTitle: string; sectionContent: string; order: number; aiGenerated?: boolean; editedBy?: string }) => ({
               sectionTitle: s.sectionTitle.trim(),
@@ -155,6 +163,7 @@ export async function PUT(request: Request) {
         data: {
           title: title !== undefined ? title.trim() : undefined,
           status: status !== undefined ? status : undefined,
+          ...signedData,
         },
         include: {
           position: { include: { department: true } },

@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
 
     const position = await db.position.findUnique({
       where: { id: positionId },
-      include: { department: true },
+      include: { department: true, businessFunction: true, project: true },
     })
 
     if (!position) {
@@ -22,14 +22,14 @@ export async function POST(request: NextRequest) {
     // Get all active master prompts
     const activePrompts = await db.masterPrompt.findMany({
       where: { isActive: true },
-      include: { department: true },
+      include: { department: true, businessFunction: true },
     })
 
     if (activePrompts.length === 0) {
       return NextResponse.json({ prompt: null, resolution: null })
     }
 
-    // Priority logic: departmentId match > domain match > grade match > functionType match > global
+    // Priority logic: departmentId match > businessFunctionId match > grade match > functionType match > global
     // Score each prompt based on how specifically it matches the position
     const scored = activePrompts.map((prompt) => {
       let score = 0
@@ -44,11 +44,11 @@ export async function POST(request: NextRequest) {
         return { prompt, score: -1, matchDetails: [] }
       }
 
-      // Domain match
-      if (prompt.domain && position.domain && prompt.domain === position.domain) {
+      // Business function match
+      if (prompt.businessFunctionId && position.businessFunctionId && prompt.businessFunctionId === position.businessFunctionId) {
         score += 100
-        matchDetails.push('Домен')
-      } else if (prompt.domain !== null && prompt.domain !== position.domain) {
+        matchDetails.push('Бизнес-функция')
+      } else if (prompt.businessFunctionId !== null && prompt.businessFunctionId !== position.businessFunctionId) {
         return { prompt, score: -1, matchDetails: [] }
       }
 
@@ -112,7 +112,8 @@ export async function POST(request: NextRequest) {
           title: position.title,
           departmentId: position.departmentId,
           departmentName: position.department?.name,
-          domain: position.domain,
+          businessFunctionId: position.businessFunctionId,
+          businessFunctionName: position.businessFunction?.name,
           grade: position.grade,
           functions: position.functions,
         },

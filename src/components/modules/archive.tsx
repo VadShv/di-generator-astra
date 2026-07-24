@@ -26,8 +26,20 @@ import { useToast } from '@/hooks/use-toast'
 import { Archive, Plus, Eye, Pencil, Trash2, Upload, FileText, Loader2, CheckCircle2, XCircle, AlertCircle, FileUp } from 'lucide-react'
 
 interface Department { id: string; name: string; code: string }
-interface Position { id: string; title: string; code: string; departmentId: string; department: Department; grade: string | null; domain: string | null }
+interface Position {
+  id: string; title: string; code: string; departmentId: string; department: Department
+  grade: string | null
+  businessFunctionId: string | null; businessFunction: { id: string; name: string } | null
+  projectId: string | null; project: { id: string; name: string } | null
+}
 interface ArchiveDI { id: string; title: string; content: string; positionId: string; fileName: string | null; uploadedAt: string; createdAt: string; updatedAt: string; position: Position }
+
+const gradeLabel = (grade: string | null): string | null => {
+  if (!grade) return null
+  if (grade === 'линейная') return 'Линейная позиция'
+  if (grade === 'руководитель') return 'Руководитель'
+  return grade
+}
 
 export function ArchiveModule() {
   const { toast } = useToast()
@@ -467,9 +479,12 @@ export function ArchiveModule() {
             <DialogTitle>{viewDI?.title}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="gap-1"><FileText className="h-3 w-3" /> {viewDI?.position?.title}</Badge>
               <Badge variant="outline">{viewDI?.position?.department?.name}</Badge>
+              {viewDI?.position?.businessFunction && <Badge variant="outline">{viewDI.position.businessFunction.name}</Badge>}
+              {viewDI?.position?.project && <Badge variant="outline">{viewDI.position.project.name}</Badge>}
+              {gradeLabel(viewDI?.position?.grade ?? null) && <Badge variant="secondary">{gradeLabel(viewDI?.position?.grade ?? null)}</Badge>}
               {viewDI?.fileName && <Badge variant="secondary" className="text-xs">{viewDI.fileName}</Badge>}
             </div>
             <pre className="whitespace-pre-wrap text-sm bg-muted/50 p-4 rounded-lg max-h-[500px] overflow-y-auto border">{viewDI?.content}</pre>

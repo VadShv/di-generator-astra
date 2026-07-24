@@ -3,7 +3,7 @@
 import { useAppStore, type ActiveSection } from '@/lib/store'
 import { useState } from 'react'
 import {
-  LayoutDashboard, Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows,
+  LayoutDashboard, Users, BookOpen, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows,
   Menu, ChevronLeft,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -17,11 +17,13 @@ import { TemplatesModule } from '@/components/modules/templates'
 import { MasterPromptsModule } from '@/components/modules/master-prompts'
 import { GenerationModule } from '@/components/modules/generation'
 import { TrackingModule } from '@/components/modules/tracking'
+import { DictionariesModule } from '@/components/modules/dictionaries'
 import { ComparisonModule } from '@/components/modules/comparison'
 
 const navItems: { id: ActiveSection; label: string; icon: React.ReactNode; group: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: <LayoutDashboard className="h-4 w-4" />, group: 'Обзор' },
   { id: 'staff-schedule', label: 'Штатное расписание', icon: <Users className="h-4 w-4" />, group: 'Данные' },
+  { id: 'dictionaries', label: 'Справочники', icon: <BookOpen className="h-4 w-4" />, group: 'Данные' },
   { id: 'archive', label: 'Архив ДИ', icon: <Archive className="h-4 w-4" />, group: 'Данные' },
   { id: 'templates', label: 'Шаблоны ДИ', icon: <FileText className="h-4 w-4" />, group: 'Настройка' },
   { id: 'master-prompts', label: 'Мастер-промпты', icon: <Brain className="h-4 w-4" />, group: 'Настройка' },
@@ -33,6 +35,7 @@ const navItems: { id: ActiveSection; label: string; icon: React.ReactNode; group
 const modules: Record<ActiveSection, React.ReactNode> = {
   dashboard: <DashboardModule />,
   'staff-schedule': <StaffScheduleModule />,
+  'dictionaries': <DictionariesModule />,
   archive: <ArchiveModule />,
   templates: <TemplatesModule />,
   'master-prompts': <MasterPromptsModule />,

@@ -22,7 +22,7 @@ export async function POST(request: Request) {
       include: {
         generatedDI: {
           include: {
-            position: { include: { department: true } },
+            position: { include: { department: true, businessFunction: true, project: true } },
           },
         },
       },
@@ -39,10 +39,11 @@ export async function POST(request: Request) {
     const positionContext = `Должность: ${section.generatedDI.position.title}
 Подразделение: ${section.generatedDI.position.department.name}
 Грейд: ${section.generatedDI.position.grade || 'Не указан'}
-Домен: ${section.generatedDI.position.domain || 'Не указан'}`
+Бизнес-функция: ${section.generatedDI.position.businessFunction?.name || 'Не указана'}
+Проект: ${section.generatedDI.position.project?.name || 'Не указан'}`
 
     const systemPrompt = `Ты — эксперт по созданию и улучшению должностных инструкций для компании Группа Астра.
-Ты работаешь с существующим текстом секции должностной инструкции и улучшаешь его по указанию пользователя.
+Ты работаетешь с существующим текстом секции должностной инструкции и улучшаешь его по указанию пользователя.
 
 КОНТЕКСТ:
 ${positionContext}

@@ -29,7 +29,7 @@ import {
   Upload, FileSpreadsheet, FileText, Loader2, CheckCircle2, XCircle, AlertCircle,
   FileCheck, FileClock, FileX2, Landmark, FolderTree, Percent, Eye,
   ChevronUp, ChevronDown as ChevronDownIcon, MapPin, GraduationCap, Briefcase, Shield,
-  Clock, UserCheck, Scale, TrendingUp
+  Clock, UserCheck, Scale, TrendingUp, CheckSquare2
 } from 'lucide-react'
 
 // ============ Interfaces ============
@@ -48,10 +48,24 @@ interface Department {
   createdAt: string; updatedAt: string;
 }
 
-interface GDI { id: string; status: string }
+interface BusinessFunction {
+  id: string; name: string; code: string; description: string | null;
+  isActive: boolean; _count?: Record<string, number>;
+  createdAt: string; updatedAt: string;
+}
+
+interface Project {
+  id: string; name: string; code: string; description: string | null;
+  isActive: boolean; _count?: Record<string, number>;
+  createdAt: string; updatedAt: string;
+}
+
+interface GDI { id: string; status: string; signedByEmployee: boolean | null }
 interface Position {
   id: string; title: string; code: string; departmentId: string;
-  department: Department; grade: string | null; domain: string | null;
+  department: Department; grade: string | null;
+  businessFunctionId: string | null; businessFunction: { id: string; name: string } | null;
+  projectId: string | null; project: { id: string; name: string } | null;
   headcount: number; functions: string | null;
   generatedDIs: GDI[]; archiveDIs: { id: string }[];
   createdAt: string; updatedAt: string;
@@ -67,6 +81,14 @@ function getDIStatus(pos: Position) {
   if (hasGenerated) return { label: 'Сгенерирована', color: 'bg-amber-500', icon: FileClock, textColor: 'text-amber-700' }
   if (hasArchive) return { label: 'Архивная', color: 'bg-slate-400', icon: FileText, textColor: 'text-slate-600' }
   return { label: 'Нет ДИ', color: 'bg-red-400', icon: FileX2, textColor: 'text-red-600' }
+}
+
+// ============ Helper: Grade label ============
+function getGradeLabel(grade: string | null) {
+  if (!grade) return null
+  if (grade === 'руководитель') return 'Руководитель'
+  if (grade === 'линейная') return 'Линейная'
+  return grade
 }
 
 // ============ Helper: DI coverage for a department ============
@@ -96,6 +118,8 @@ export function StaffScheduleModule() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [positions, setPositions] = useState<Position[]>([])
+  const [businessFunctions, setBusinessFunctions] = useState<BusinessFunction[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [expandedCompanyIds, setExpandedCompanyIds] = useState<Set<string>>(new Set())
@@ -122,7 +146,7 @@ export function StaffScheduleModule() {
   // Pos dialog
   const [posDialogOpen, setPosDialogOpen] = useState(false)
   const [posDialogMode, setPosDialogMode] = useState<'create' | 'edit'>('create')
-  const [posForm, setPosForm] = useState({ id: '', title: '', code: '', departmentId: '', grade: '', domain: '', headcount: 1, functions: '' })
+  const [posForm, setPosForm] = useState({ id: '', title: '', code: '', departmentId: '', grade: '', businessFunctionId: '', projectId: '', headcount: 1, functions: '' })
   const [posSubmitting, setPosSubmitting] = useState(false)
   const [posDeleteOpen, setPosDeleteOpen] = useState(false)
   const [posToDelete, setPosToDelete] = useState<Position | null>(null)
@@ -157,14 +181,20 @@ export function StaffScheduleModule() {
   const fetchPositions = useCallback(async () => {
     try { const res = await fetch('/api/positions'); if (res.ok) setPositions(await res.json()) } catch { /* silent */ }
   }, [])
+  const fetchBusinessFunctions = useCallback(async () => {
+    try { const res = await fetch('/api/business-functions'); if (res.ok) setBusinessFunctions(await res.json()) } catch { /* silent */ }
+  }, [])
+  const fetchProjects = useCallback(async () => {
+    try { const res = await fetch('/api/projects'); if (res.ok) setProjects(await res.json()) } catch { /* silent */ }
+  }, [])
 
   useEffect(() => {
     (async () => {
       setLoading(true)
-      await Promise.all([fetchCompanies(), fetchDepartments(), fetchPositions()])
+      await Promise.all([fetchCompanies(), fetchDepartments(), fetchPositions(), fetchBusinessFunctions(), fetchProjects()])
       setLoading(false)
     })()
-  }, [fetchCompanies, fetchDepartments, fetchPositions])
+  }, [fetchCompanies, fetchDepartments, fetchPositions, fetchBusinessFunctions, fetchProjects])
 
   // ============ Tree helpers ============
   const toggleExpand = (id: string) => setExpandedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
@@ -187,7 +217,9 @@ export function StaffScheduleModule() {
       const q = searchQuery.toLowerCase()
       return p.title.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) ||
         (p.department?.name || '').toLowerCase().includes(q) ||
-        (p.grade || '').toLowerCase().includes(q) || (p.domain || '').toLowerCase().includes(q)
+        (p.grade || '').toLowerCase().includes(q) ||
+        (p.businessFunction?.name || '').toLowerCase().includes(q) ||
+        (p.project?.name || '').toLowerCase().includes(q)
     }
     if (filterDIStatus !== 'all') {
       const diSt = getDIStatus(p)
@@ -200,7 +232,7 @@ export function StaffScheduleModule() {
 
   // ============ Stats ============
   const totalHeadcount = positions.reduce((sum, p) => sum + p.headcount, 0)
-  const uniqueDomains = [...new Set(positions.map(p => p.domain).filter(Boolean))]
+  const uniqueBusinessFunctions = [...new Set(positions.map(p => p.businessFunction?.name).filter(Boolean))]
   const totalApproved = positions.filter(p => p.generatedDIs.some(d => d.status === 'approved')).length
   const totalGenerated = positions.filter(p => p.generatedDIs.length > 0).length
   const coveragePercent = positions.length > 0 ? Math.round((totalApproved / positions.length) * 100) : 0
@@ -300,12 +332,16 @@ export function StaffScheduleModule() {
   // ============ Position handlers ============
   const openCreatePos = (departmentId?: string) => {
     setPosDialogMode('create')
-    setPosForm({ id: '', title: '', code: '', departmentId: departmentId || selectedDeptId || '', grade: '', domain: '', headcount: 1, functions: '' })
+    setPosForm({ id: '', title: '', code: '', departmentId: departmentId || selectedDeptId || '', grade: '', businessFunctionId: '', projectId: '', headcount: 1, functions: '' })
     setPosDialogOpen(true)
   }
   const openEditPos = (p: Position) => {
     setPosDialogMode('edit')
-    setPosForm({ id: p.id, title: p.title, code: p.code, departmentId: p.departmentId, grade: p.grade || '', domain: p.domain || '', headcount: p.headcount, functions: p.functions || '' })
+    setPosForm({
+      id: p.id, title: p.title, code: p.code, departmentId: p.departmentId,
+      grade: p.grade || '', businessFunctionId: p.businessFunctionId || '', projectId: p.projectId || '',
+      headcount: p.headcount, functions: p.functions || ''
+    })
     setPosDialogOpen(true)
   }
 
@@ -317,7 +353,9 @@ export function StaffScheduleModule() {
     try {
       const body: Record<string, unknown> = {
         title: posForm.title.trim(), code: posForm.code.trim(), departmentId: posForm.departmentId,
-        grade: posForm.grade || null, domain: posForm.domain || null,
+        grade: posForm.grade || null,
+        businessFunctionId: posForm.businessFunctionId || null,
+        projectId: posForm.projectId || null,
         headcount: posForm.headcount || 1, functions: posForm.functions || null
       }
       if (posDialogMode === 'edit') body.id = posForm.id
@@ -349,14 +387,24 @@ export function StaffScheduleModule() {
     try {
       const lines = bulkText.trim().split('\n').filter(l => l.trim()); let created = 0; let errors = 0
       for (const line of lines) {
-        const [code, title, deptCode, grade, domain, headcountStr, functions] = line.split(';').map(s => s.trim())
+        const [code, title, deptCode, grade, businessFunctionCode, projectCode, headcountStr, functions] = line.split(';').map(s => s.trim())
         if (!code || !title || !deptCode) { errors++; continue }
         const dept = departments.find(d => d.code === deptCode)
         if (!dept || positions.find(p => p.code === code)) { errors++; continue }
+        // Lookup business function and project by code
+        const bf = businessFunctions.find(b => b.code === businessFunctionCode)
+        const proj = projects.find(pr => pr.code === projectCode)
         try {
           const res = await fetch('/api/positions', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code, title, departmentId: dept.id, grade: grade || null, domain: domain || null, headcount: headcountStr ? parseInt(headcountStr, 10) || 1 : 1, functions: functions || null })
+            body: JSON.stringify({
+              code, title, departmentId: dept.id,
+              grade: grade || null,
+              businessFunctionId: bf?.id || null,
+              projectId: proj?.id || null,
+              headcount: headcountStr ? parseInt(headcountStr, 10) || 1 : 1,
+              functions: functions || null
+            })
           })
           if (res.ok) created++; else errors++
         } catch { errors++ }
@@ -705,10 +753,10 @@ export function StaffScheduleModule() {
         <Card className="bg-gradient-to-br from-violet-50 to-violet-100/50 border-violet-200/50">
           <CardContent className="p-3">
             <div className="flex items-center gap-1.5 mb-1">
-              <GraduationCap className="h-3.5 w-3.5 text-violet-700" />
-              <p className="text-xs text-violet-700 font-medium">Доменов</p>
+              <Briefcase className="h-3.5 w-3.5 text-violet-700" />
+              <p className="text-xs text-violet-700 font-medium">Бизнес-функций</p>
             </div>
-            <p className="text-2xl font-bold text-violet-800">{uniqueDomains.length}</p>
+            <p className="text-2xl font-bold text-violet-800">{uniqueBusinessFunctions.length}</p>
           </CardContent>
         </Card>
       </div>
@@ -812,7 +860,7 @@ export function StaffScheduleModule() {
             <div className="px-4 pb-3 flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Поиск по названию, коду, подразделению..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-8" />
+                <Input placeholder="Поиск по названию, коду, подразделению, бизнес-функции, проекту..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-8" />
               </div>
               <Select value={filterDIStatus} onValueChange={setFilterDIStatus}>
                 <SelectTrigger className="w-[160px]">
@@ -846,6 +894,7 @@ export function StaffScheduleModule() {
                 {filteredPositions.map(p => {
                   const diStatus = getDIStatus(p)
                   const DiIcon = diStatus.icon
+                  const signedByEmployee = p.generatedDIs.some(d => d.signedByEmployee)
                   return (
                     <div key={p.id} className="group border rounded-xl p-3 hover:bg-muted/30 transition-all hover:shadow-sm">
                       <div className="flex items-start gap-3">
@@ -861,6 +910,9 @@ export function StaffScheduleModule() {
                             <Badge variant="secondary" className="text-xs h-5 font-mono">{p.code}</Badge>
                             <Badge className={`text-xs h-5 ${diStatus.textColor} border-current/20`} variant="outline">
                               {diStatus.label}
+                              {signedByEmployee && (
+                                <CheckSquare2 className="h-3 w-3 ml-1 text-emerald-600" />
+                              )}
                             </Badge>
                           </div>
 
@@ -883,15 +935,23 @@ export function StaffScheduleModule() {
                             {p.grade && (
                               <span className="flex items-center gap-1">
                                 <GraduationCap className="h-3 w-3 text-violet-500" />
-                                Грейд: {p.grade}
+                                {getGradeLabel(p.grade)}
                               </span>
                             )}
 
-                            {/* Domain */}
-                            {p.domain && (
+                            {/* Business Function */}
+                            {p.businessFunction && (
                               <span className="flex items-center gap-1">
-                                <MapPin className="h-3 w-3 text-cyan-500" />
-                                {p.domain}
+                                <Briefcase className="h-3 w-3 text-cyan-500" />
+                                {p.businessFunction.name}
+                              </span>
+                            )}
+
+                            {/* Project */}
+                            {p.project && (
+                              <span className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3 text-amber-500" />
+                                {p.project.name}
                               </span>
                             )}
 
@@ -1045,10 +1105,39 @@ export function StaffScheduleModule() {
               </Select>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label>Грейд</Label><Input value={posForm.grade} onChange={e => setPosForm(p => ({ ...p, grade: e.target.value }))} placeholder="G3" /></div>
-              <div><Label>Домен</Label><Input value={posForm.domain} onChange={e => setPosForm(p => ({ ...p, domain: e.target.value }))} placeholder="Продажи" /></div>
-              <div><Label>Штатных единиц</Label><Input type="number" min={1} value={posForm.headcount} onChange={e => setPosForm(p => ({ ...p, headcount: parseInt(e.target.value) || 1 }))} /></div>
+              <div>
+                <Label>Грейд</Label>
+                <Select value={posForm.grade || '_none'} onValueChange={v => setPosForm(p => ({ ...p, grade: v === '_none' ? '' : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Не указан" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Не указан</SelectItem>
+                    <SelectItem value="линейная">Линейная позиция</SelectItem>
+                    <SelectItem value="руководитель">Руководитель</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Бизнес-функция</Label>
+                <Select value={posForm.businessFunctionId || '_none'} onValueChange={v => setPosForm(p => ({ ...p, businessFunctionId: v === '_none' ? '' : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Не указана" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Не указана</SelectItem>
+                    {businessFunctions.filter(bf => bf.isActive).map(bf => <SelectItem key={bf.id} value={bf.id}>{bf.name} ({bf.code})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Проект</Label>
+                <Select value={posForm.projectId || '_none'} onValueChange={v => setPosForm(p => ({ ...p, projectId: v === '_none' ? '' : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Не указан" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Не указан</SelectItem>
+                    {projects.filter(pr => pr.isActive).map(pr => <SelectItem key={pr.id} value={pr.id}>{pr.name} ({pr.code})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+            <div><Label>Штатных единиц</Label><Input type="number" min={1} value={posForm.headcount} onChange={e => setPosForm(p => ({ ...p, headcount: parseInt(e.target.value) || 1 }))} /></div>
             <div><Label>Функции</Label><Textarea value={posForm.functions} onChange={e => setPosForm(p => ({ ...p, functions: e.target.value }))} className="min-h-[60px]" placeholder="Управление отделом, планирование..." /></div>
           </div>
           <DialogFooter>
@@ -1065,8 +1154,9 @@ export function StaffScheduleModule() {
             <DialogTitle>Массовая загрузка должностей</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Формат: Код;Название;Код_подразделения;Грейд;Домен;Штат;Функции</p>
-            <Textarea value={bulkText} onChange={e => setBulkText(e.target.value)} placeholder="DEV001;Разработчик;IT;G3;IT;5;Разработка ПО" className="min-h-[150px] font-mono text-sm" />
+            <p className="text-sm text-muted-foreground">Формат: Код;Название;Код_подразделения;Грейд;Код_БФ;Код_проекта;Штат;Функции</p>
+            <p className="text-xs text-muted-foreground">Грейд: «линейная» или «руководитель». Код БФ и проекта — из справочников.</p>
+            <Textarea value={bulkText} onChange={e => setBulkText(e.target.value)} placeholder="DEV001;Разработчик;IT;линейная;BF_IT;PROJ_MAIN;5;Разработка ПО" className="min-h-[150px] font-mono text-sm" />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>Отмена</Button>

@@ -1,14 +1,8 @@
 import { create } from 'zustand'
 
 export type ActiveSection = 
-  | 'dashboard'
-  | 'staff-schedule'
-  | 'archive'
-  | 'templates'
-  | 'master-prompts'
-  | 'generation'
-  | 'tracking'
-  | 'comparison'
+  | 'dashboard' | 'staff-schedule' | 'dictionaries' | 'archive' | 'templates'
+  | 'master-prompts' | 'generation' | 'tracking' | 'comparison'
 
 interface AppState {
   activeSection: ActiveSection

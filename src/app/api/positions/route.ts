@@ -1,23 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+const VALID_GRADES = ['линейная', 'руководитель']
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const departmentId = searchParams.get('departmentId')
     const grade = searchParams.get('grade')
-    const domain = searchParams.get('domain')
+    const businessFunctionId = searchParams.get('businessFunctionId')
+    const projectId = searchParams.get('projectId')
 
     const where: Record<string, unknown> = {}
     if (departmentId) where.departmentId = departmentId
     if (grade) where.grade = grade
-    if (domain) where.domain = domain
+    if (businessFunctionId) where.businessFunctionId = businessFunctionId
+    if (projectId) where.projectId = projectId
 
     const positions = await db.position.findMany({
       where,
       include: {
         department: { include: { company: true } },
-        generatedDIs: { select: { id: true, status: true } },
+        businessFunction: true,
+        project: true,
+        generatedDIs: { select: { id: true, status: true, signedByEmployee: true } },
         archiveDIs: { select: { id: true } },
       },
       orderBy: { title: 'asc' }
@@ -33,10 +39,15 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { title, code, departmentId, grade, domain, headcount, functions } = body
+    const { title, code, departmentId, grade, businessFunctionId, projectId, headcount, functions } = body
 
     if (!title || !code || !departmentId) {
       return NextResponse.json({ error: 'Название, код и подразделение обязательны' }, { status: 400 })
+    }
+
+    // Validate grade if provided
+    if (grade && !VALID_GRADES.includes(grade)) {
+      return NextResponse.json({ error: 'Грейд должен быть "линейная" или "руководитель"' }, { status: 400 })
     }
 
     // Check for unique code
@@ -51,19 +62,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Подразделение не найдено' }, { status: 404 })
     }
 
+    // Validate business function if provided
+    if (businessFunctionId) {
+      const bf = await db.businessFunction.findUnique({ where: { id: businessFunctionId } })
+      if (!bf) {
+        return NextResponse.json({ error: 'Бизнес-функция не найдена' }, { status: 404 })
+      }
+    }
+
+    // Validate project if provided
+    if (projectId) {
+      const proj = await db.project.findUnique({ where: { id: projectId } })
+      if (!proj) {
+        return NextResponse.json({ error: 'Проект не найден' }, { status: 404 })
+      }
+    }
+
     const position = await db.position.create({
       data: {
         title,
         code,
         departmentId,
         grade: grade || null,
-        domain: domain || null,
+        businessFunctionId: businessFunctionId || null,
+        projectId: projectId || null,
         headcount: headcount || 1,
         functions: functions || null,
       },
       include: {
         department: { include: { company: true } },
-        generatedDIs: { select: { id: true, status: true } },
+        businessFunction: true,
+        project: true,
+        generatedDIs: { select: { id: true, status: true, signedByEmployee: true } },
         archiveDIs: { select: { id: true } },
       }
     })
@@ -78,7 +108,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, title, code, departmentId, grade, domain, headcount, functions } = body
+    const { id, title, code, departmentId, grade, businessFunctionId, projectId, headcount, functions } = body
 
     if (!id) {
       return NextResponse.json({ error: 'ID обязателен' }, { status: 400 })
@@ -87,6 +117,11 @@ export async function PUT(request: NextRequest) {
     const existing = await db.position.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Должность не найдена' }, { status: 404 })
+    }
+
+    // Validate grade if provided
+    if (grade && !VALID_GRADES.includes(grade)) {
+      return NextResponse.json({ error: 'Грейд должен быть "линейная" или "руководитель"' }, { status: 400 })
     }
 
     // Check unique code if changing
@@ -105,6 +140,22 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    // Validate business function if provided
+    if (businessFunctionId) {
+      const bf = await db.businessFunction.findUnique({ where: { id: businessFunctionId } })
+      if (!bf) {
+        return NextResponse.json({ error: 'Бизнес-функция не найдена' }, { status: 404 })
+      }
+    }
+
+    // Validate project if provided
+    if (projectId) {
+      const proj = await db.project.findUnique({ where: { id: projectId } })
+      if (!proj) {
+        return NextResponse.json({ error: 'Проект не найден' }, { status: 404 })
+      }
+    }
+
     const position = await db.position.update({
       where: { id },
       data: {
@@ -112,13 +163,16 @@ export async function PUT(request: NextRequest) {
         ...(code !== undefined && { code }),
         ...(departmentId !== undefined && { departmentId }),
         ...(grade !== undefined && { grade: grade || null }),
-        ...(domain !== undefined && { domain: domain || null }),
+        ...(businessFunctionId !== undefined && { businessFunctionId: businessFunctionId || null }),
+        ...(projectId !== undefined && { projectId: projectId || null }),
         ...(headcount !== undefined && { headcount }),
         ...(functions !== undefined && { functions: functions || null }),
       },
       include: {
         department: { include: { company: true } },
-        generatedDIs: { select: { id: true, status: true } },
+        businessFunction: true,
+        project: true,
+        generatedDIs: { select: { id: true, status: true, signedByEmployee: true } },
         archiveDIs: { select: { id: true } },
       }
     })

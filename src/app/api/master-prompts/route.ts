@@ -7,12 +7,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const activeOnly = searchParams.get('active') === 'true'
     const departmentId = searchParams.get('departmentId')
-    const domain = searchParams.get('domain')
+    const businessFunctionId = searchParams.get('businessFunctionId')
     const grade = searchParams.get('grade')
 
     // If resolve params are provided, resolve the most specific master prompt
-    if (departmentId || domain || grade) {
-      return await resolveMasterPrompt(departmentId, domain, grade)
+    if (departmentId || businessFunctionId || grade) {
+      return await resolveMasterPrompt(departmentId, businessFunctionId, grade)
     }
 
     const where: Record<string, unknown> = {}
@@ -22,10 +22,11 @@ export async function GET(request: NextRequest) {
       where,
       include: {
         department: true,
+        businessFunction: true,
       },
       orderBy: [
         { departmentId: 'desc' }, // More specific first
-        { domain: 'desc' },
+        { businessFunctionId: 'desc' },
         { grade: 'desc' },
         { version: 'desc' },
       ],
@@ -39,10 +40,10 @@ export async function GET(request: NextRequest) {
 }
 
 // Resolve the most specific master prompt for given criteria
-// Priority: department+domain+grade > department+domain > department+grade > department > domain+grade > domain > grade > global
+// Priority: department+businessFunction+grade > department+businessFunction > department+grade > department > businessFunction+grade > businessFunction > grade > global
 async function resolveMasterPrompt(
   departmentId: string | null,
-  domain: string | null,
+  businessFunctionId: string | null,
   grade: string | null
 ) {
   try {
@@ -50,39 +51,39 @@ async function resolveMasterPrompt(
     const combinations: Record<string, string | null>[] = []
 
     // Most specific to least specific
-    if (departmentId && domain && grade) {
-      combinations.push({ departmentId, domain, grade })
+    if (departmentId && businessFunctionId && grade) {
+      combinations.push({ departmentId, businessFunctionId, grade })
     }
-    if (departmentId && domain) {
-      combinations.push({ departmentId, domain, grade: null })
+    if (departmentId && businessFunctionId) {
+      combinations.push({ departmentId, businessFunctionId, grade: null })
     }
     if (departmentId && grade) {
-      combinations.push({ departmentId, domain: null, grade })
+      combinations.push({ departmentId, businessFunctionId: null, grade })
     }
     if (departmentId) {
-      combinations.push({ departmentId, domain: null, grade: null })
+      combinations.push({ departmentId, businessFunctionId: null, grade: null })
     }
-    if (domain && grade) {
-      combinations.push({ departmentId: null, domain, grade })
+    if (businessFunctionId && grade) {
+      combinations.push({ departmentId: null, businessFunctionId, grade })
     }
-    if (domain) {
-      combinations.push({ departmentId: null, domain, grade: null })
+    if (businessFunctionId) {
+      combinations.push({ departmentId: null, businessFunctionId, grade: null })
     }
     if (grade) {
-      combinations.push({ departmentId: null, domain: null, grade })
+      combinations.push({ departmentId: null, businessFunctionId: null, grade })
     }
     // Global fallback
-    combinations.push({ departmentId: null, domain: null, grade: null })
+    combinations.push({ departmentId: null, businessFunctionId: null, grade: null })
 
     for (const combo of combinations) {
       const prompt = await db.masterPrompt.findFirst({
         where: {
           isActive: true,
           departmentId: combo.departmentId || null,
-          domain: combo.domain || null,
+          businessFunctionId: combo.businessFunctionId || null,
           grade: combo.grade || null,
         },
-        include: { department: true },
+        include: { department: true, businessFunction: true },
         orderBy: { version: 'desc' },
       })
       if (prompt) {
@@ -102,7 +103,7 @@ async function resolveMasterPrompt(
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { name, content, departmentId, domain, grade, functionType, description } = body
+    const { name, content, departmentId, businessFunctionId, grade, functionType, description } = body
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return NextResponse.json({ error: 'Название промпта обязательно' }, { status: 400 })
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
       where: {
         name: name.trim(),
         departmentId: departmentId || null,
-        domain: domain || null,
+        businessFunctionId: businessFunctionId || null,
         grade: grade || null,
         functionType: functionType || null,
       },
@@ -132,12 +133,12 @@ export async function POST(request: Request) {
         content: content.trim(),
         version,
         departmentId: departmentId || null,
-        domain: domain || null,
+        businessFunctionId: businessFunctionId || null,
         grade: grade || null,
         functionType: functionType || null,
         description: description?.trim() || null,
       },
-      include: { department: true },
+      include: { department: true, businessFunction: true },
     })
 
     return NextResponse.json(prompt, { status: 201 })
@@ -151,7 +152,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
-    const { id, name, content, isActive, departmentId, domain, grade, functionType, description } = body
+    const { id, name, content, isActive, departmentId, businessFunctionId, grade, functionType, description } = body
 
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'ID промпта обязателен' }, { status: 400 })
@@ -169,12 +170,12 @@ export async function PUT(request: Request) {
         content: content !== undefined ? content.trim() : undefined,
         isActive: isActive !== undefined ? isActive : undefined,
         departmentId: departmentId !== undefined ? (departmentId || null) : undefined,
-        domain: domain !== undefined ? (domain || null) : undefined,
+        businessFunctionId: businessFunctionId !== undefined ? (businessFunctionId || null) : undefined,
         grade: grade !== undefined ? (grade || null) : undefined,
         functionType: functionType !== undefined ? (functionType || null) : undefined,
         description: description !== undefined ? (description?.trim() || null) : undefined,
       },
-      include: { department: true },
+      include: { department: true, businessFunction: true },
     })
 
     return NextResponse.json(prompt)

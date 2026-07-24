@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const di = await db.generatedDI.findUnique({
       where: { id },
       include: {
-        position: { include: { department: true } },
+        position: { include: { department: true, businessFunction: true, project: true } },
         template: true,
         sections: { orderBy: { order: 'asc' } },
       },
@@ -23,15 +23,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'ДИ не найдена' }, { status: 404 })
     }
 
+    const gradeLabel = di.position?.grade === 'руководитель' ? 'Руководитель' : di.position?.grade === 'линейная' ? 'Линейная позиция' : 'Не указан'
+
     // Return the DI data as JSON for client-side DOCX generation
-    // The actual DOCX generation is complex and requires the docx npm package
     return NextResponse.json({
       id: di.id,
       title: di.title,
       position: di.position?.title,
       department: di.position?.department?.name,
-      grade: di.position?.grade,
+      grade: gradeLabel,
+      businessFunction: di.position?.businessFunction?.name,
+      project: di.position?.project?.name,
       status: di.status,
+      signedByEmployee: di.signedByEmployee,
+      signedAt: di.signedAt,
       createdAt: di.createdAt,
       sections: di.sections.map((s: any) => ({
         title: s.sectionTitle,

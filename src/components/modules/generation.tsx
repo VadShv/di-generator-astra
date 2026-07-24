@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
+import { Switch } from '@/components/ui/switch'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -26,12 +27,14 @@ import { useToast } from '@/hooks/use-toast'
 import { Plus, Pencil, Trash2, Eye, Loader2, Sparkles, FileText, PenLine, Wand2, Download, ChevronDown, ChevronRight, CheckCircle2, RotateCcw, BookOpen, Zap, Crown, Star, LayoutTemplate, ArrowUp, ArrowDown, Settings2 } from 'lucide-react'
 
 interface Department { id: string; name: string; code: string }
-interface Position { id: string; title: string; code: string; departmentId: string; department: Department; grade?: string | null; domain?: string | null; headcount: number; functions?: string | null }
+interface BusinessFunction { id: string; name: string }
+interface Project { id: string; name: string }
+interface Position { id: string; title: string; code: string; departmentId: string; department: Department; grade?: string | null; businessFunctionId?: string | null; businessFunction?: BusinessFunction | null; projectId?: string | null; project?: Project | null; headcount: number; functions?: string | null }
 interface TemplateSection { id: string; title: string; order: number; promptGuidance?: string | null; isRequired: boolean; content?: string | null }
 interface Template { id: string; name: string; description?: string | null; isActive: boolean; isPrimary: boolean; sections: TemplateSection[] }
-interface MasterPrompt { id: string; name: string; content: string; version: number; isActive: boolean; departmentId?: string | null; domain?: string | null; grade?: string | null; description?: string | null }
+interface MasterPrompt { id: string; name: string; content: string; version: number; isActive: boolean; departmentId?: string | null; businessFunctionId?: string | null; businessFunction?: BusinessFunction | null; grade?: string | null; description?: string | null }
 interface GeneratedDISection { id: string; sectionTitle: string; sectionContent: string; order: number; aiGenerated: boolean; editedBy?: string | null }
-interface GeneratedDI { id: string; positionId: string; templateId?: string | null; title: string; status: string; position: Position & { department: Department }; template?: Template | null; sections: GeneratedDISection[]; createdAt: string; updatedAt: string }
+interface GeneratedDI { id: string; positionId: string; templateId?: string | null; title: string; status: string; signedByEmployee: boolean; position: Position & { department: Department }; template?: Template | null; sections: GeneratedDISection[]; createdAt: string; updatedAt: string }
 
 // Manual section type (extends template section with content and generation state)
 interface ManualSection {
@@ -50,6 +53,13 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   approved: { label: 'Утверждено', variant: 'default' },
   exported: { label: 'Экспортировано', variant: 'default' },
 }
+
+const GRADE_LABELS: Record<string, string> = {
+  'линейная': 'Линейная позиция',
+  'руководитель': 'Руководитель',
+}
+
+const gradeLabel = (grade?: string | null) => grade ? GRADE_LABELS[grade] || grade : null
 
 export function GenerationModule() {
   const { toast } = useToast()
@@ -70,6 +80,7 @@ export function GenerationModule() {
   const [manualPositionId, setManualPositionId] = useState('')
   const [manualDepartment, setManualDepartment] = useState('')
   const [manualCategory, setManualCategory] = useState('Руководители')
+  const [manualSignedByEmployee, setManualSignedByEmployee] = useState(false)
   const [manualSections, setManualSections] = useState<ManualSection[]>([])
   const [manualPresetId, setManualPresetId] = useState<string>('')
   const [manualSaving, setManualSaving] = useState(false)
@@ -82,6 +93,7 @@ export function GenerationModule() {
   const [editingDI, setEditingDI] = useState<GeneratedDI | null>(null)
   const [editSections, setEditSections] = useState<GeneratedDISection[]>([])
   const [editTitle, setEditTitle] = useState('')
+  const [editSignedByEmployee, setEditSignedByEmployee] = useState(false)
   const [sectionGenerating, setSectionGenerating] = useState<Record<number, boolean>>({})
   const [improveDialogOpen, setImproveDialogOpen] = useState(false)
   const [improveSectionId, setImproveSectionId] = useState('')
@@ -112,7 +124,7 @@ export function GenerationModule() {
   const startGenerate = () => { setSelPositionId(''); setSelTemplateId(''); setGenerating(false); setViewMode('generate') }
 
   const startManual = () => {
-    setManualTitle(''); setManualPositionId(''); setManualDepartment(''); setManualCategory('Руководители')
+    setManualTitle(''); setManualPositionId(''); setManualDepartment(''); setManualCategory('Руководители'); setManualSignedByEmployee(false)
     setManualSections([])
     // Pre-select the primary template if one exists
     const primaryTemplate = templates.find(t => t.isPrimary)
@@ -208,7 +220,7 @@ export function GenerationModule() {
       const res = await fetch('/api/generate-di/ai-generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ positionId: selPositionId, templateId: selTemplateId }) })
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Ошибка') }
       const data = await res.json()
-      setEditingDI(data); setEditSections(data.sections || []); setEditTitle(data.title)
+      setEditingDI(data); setEditSections(data.sections || []); setEditTitle(data.title); setEditSignedByEmployee(data.signedByEmployee ?? false)
       toast({ title: 'Успех', description: 'ДИ сгенерирована' }); setViewMode('editor')
     } catch (e) {
       toast({ title: 'Ошибка генерации', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' })
@@ -240,7 +252,10 @@ export function GenerationModule() {
             title: position.title,
             department: position.department?.name,
             grade: position.grade,
-            domain: position.domain,
+            businessFunctionId: position.businessFunctionId,
+            businessFunctionName: position.businessFunction?.name,
+            projectId: position.projectId,
+            projectName: position.project?.name,
             functions: position.functions,
           } : null,
         }),
@@ -289,6 +304,7 @@ export function GenerationModule() {
           positionId: manualPositionId,
           templateId: manualPresetId || undefined,
           title: manualTitle.trim(),
+          signedByEmployee: manualSignedByEmployee,
           sections: manualSections.map(s => ({
             sectionTitle: s.title,
             sectionContent: s.content,
@@ -303,7 +319,7 @@ export function GenerationModule() {
       const data = await res.json()
       
       toast({ title: 'ДИ сохранена', description: manualTitle })
-      setEditingDI(data); setEditSections(data.sections || []); setEditTitle(data.title)
+      setEditingDI(data); setEditSections(data.sections || []); setEditTitle(data.title); setEditSignedByEmployee(data.signedByEmployee ?? false)
       setViewMode('editor')
       fetchDIs()
     } catch (e) {
@@ -322,7 +338,7 @@ export function GenerationModule() {
         const sections = templates.find(t => t.id === selTemplateId)?.sections.map(s => ({ sectionTitle: s.title, sectionContent: '', order: s.order })) || []
         const cr = await fetch('/api/generate-di', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ positionId: selPositionId, templateId: selTemplateId, title: `ДИ — ${position?.title || ''}`, sections }) })
         if (!cr.ok) throw new Error('Не удалось создать ДИ')
-        const created = await cr.json(); diId = created.id; setEditingDI(created); setEditSections(created.sections || []); setEditTitle(created.title)
+        const created = await cr.json(); diId = created.id; setEditingDI(created); setEditSections(created.sections || []); setEditTitle(created.title); setEditSignedByEmployee(created.signedByEmployee ?? false)
       }
       const res = await fetch('/api/generate-di/ai-section', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ generatedDIId: diId, sectionOrder }) })
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Ошибка') }
@@ -352,10 +368,25 @@ export function GenerationModule() {
   const handleSaveDI = async () => {
     if (!editingDI) return
     try {
-      const res = await fetch('/api/generate-di', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingDI.id, title: editTitle, sections: editSections.map(s => ({ sectionTitle: s.sectionTitle, sectionContent: s.sectionContent, order: s.order, aiGenerated: s.aiGenerated, editedBy: s.editedBy })) }) })
+      const res = await fetch('/api/generate-di', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingDI.id, title: editTitle, signedByEmployee: editSignedByEmployee, sections: editSections.map(s => ({ sectionTitle: s.sectionTitle, sectionContent: s.sectionContent, order: s.order, aiGenerated: s.aiGenerated, editedBy: s.editedBy })) }) })
       if (!res.ok) throw new Error()
       toast({ title: 'Сохранено' }); fetchDIs()
     } catch { toast({ title: 'Ошибка', description: 'Не удалось сохранить', variant: 'destructive' }) }
+  }
+
+  // Toggle signedByEmployee via separate PUT call
+  const handleToggleSigned = async (diId: string, value: boolean) => {
+    try {
+      const res = await fetch('/api/generate-di', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: diId, signedByEmployee: value }) })
+      if (!res.ok) throw new Error()
+      toast({ title: value ? 'Подписана сотрудником' : 'Подпись снята' })
+      fetchDIs()
+      // Also update local editingDI state if in editor
+      if (editingDI && editingDI.id === diId) {
+        setEditingDI({ ...editingDI, signedByEmployee: value })
+        setEditSignedByEmployee(value)
+      }
+    } catch { toast({ title: 'Ошибка', description: 'Не удалось обновить статус подписи', variant: 'destructive' }) }
   }
 
   const handleDelete = async () => {
@@ -368,7 +399,7 @@ export function GenerationModule() {
     finally { setDeleteId(null) }
   }
 
-  const openEditor = (di: GeneratedDI) => { setEditingDI(di); setEditSections([...di.sections]); setEditTitle(di.title); setViewMode('editor') }
+  const openEditor = (di: GeneratedDI) => { setEditingDI(di); setEditSections([...di.sections]); setEditTitle(di.title); setEditSignedByEmployee(di.signedByEmployee ?? false); setViewMode('editor') }
 
   const filteredDIs = generatedDIs.filter(di => !searchQuery || di.title.toLowerCase().includes(searchQuery.toLowerCase()) || di.position?.title?.toLowerCase().includes(searchQuery.toLowerCase()))
 
@@ -385,6 +416,20 @@ export function GenerationModule() {
 
   const primaryTemplate = templates.find(t => t.isPrimary)
   const selectedPreset = templates.find(t => t.id === manualPresetId)
+
+  // Helper: render position context info (business function + project)
+  const renderPositionContextInfo = (position: Position | null | undefined) => {
+    if (!position) return null
+    const gLabel = gradeLabel(position.grade)
+    return (
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        {position.department && <span>Подразделение: {position.department.name}</span>}
+        {gLabel && <span>Грейд: {gLabel}</span>}
+        {position.businessFunction && <span>Бизнес-функция: {position.businessFunction.name}</span>}
+        {position.project && <span>Проект: {position.project.name}</span>}
+      </div>
+    )
+  }
 
   // ===================== LIST VIEW =====================
   if (viewMode === 'list') return (
@@ -481,8 +526,21 @@ export function GenerationModule() {
                 {filteredDIs.map(di => (
                   <TableRow key={di.id} className="hover:bg-muted/40">
                     <TableCell className="font-medium">{di.title}</TableCell>
-                    <TableCell className="text-sm">{di.position?.title}</TableCell>
-                    <TableCell><Badge variant={STATUS_MAP[di.status]?.variant || 'secondary'}>{STATUS_MAP[di.status]?.label || di.status}</Badge></TableCell>
+                    <TableCell className="text-sm">
+                      <div>{di.position?.title}</div>
+                      {di.position?.grade && <div className="text-xs text-muted-foreground">{gradeLabel(di.position.grade)}</div>}
+                      {di.position?.businessFunction && <div className="text-xs text-muted-foreground">БФ: {di.position.businessFunction.name}</div>}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant={STATUS_MAP[di.status]?.variant || 'secondary'}>{STATUS_MAP[di.status]?.label || di.status}</Badge>
+                        {di.signedByEmployee && (
+                          <Badge className="bg-emerald-600 text-white text-xs gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Подписана
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-sm text-muted-foreground hidden sm:table-cell">{new Date(di.createdAt).toLocaleDateString('ru-RU')}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-0.5">
@@ -502,7 +560,20 @@ export function GenerationModule() {
       {/* View Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{viewingDI?.title}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {viewingDI?.title}
+              {viewingDI?.signedByEmployee && (
+                <Badge className="bg-emerald-600 text-white text-xs gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Подписана сотрудником
+                </Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          {/* Position context info */}
+          {viewingDI?.position && (
+            <div className="mb-2">{renderPositionContextInfo(viewingDI.position)}</div>
+          )}
           <div className="space-y-4">{viewingDI?.sections.map(s => (
             <div key={s.id} className="border rounded-lg p-4">
               <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
@@ -512,6 +583,19 @@ export function GenerationModule() {
               <p className="text-sm whitespace-pre-wrap bg-muted/50 p-3 rounded">{s.sectionContent || '—'}</p>
             </div>
           ))}</div>
+          {/* Signed toggle in view dialog */}
+          {viewingDI && (
+            <div className="flex items-center gap-3 pt-2 border-t">
+              <Switch
+                checked={viewingDI.signedByEmployee}
+                onCheckedChange={(checked) => {
+                  handleToggleSigned(viewingDI.id, checked)
+                  setViewingDI({ ...viewingDI, signedByEmployee: checked })
+                }}
+              />
+              <Label className="text-sm cursor-pointer">Подписана сотрудником</Label>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
       <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
@@ -521,56 +605,71 @@ export function GenerationModule() {
   )
 
   // ===================== AI GENERATE VIEW =====================
-  if (viewMode === 'generate') return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Button variant="outline" onClick={() => setViewMode('list')}>← Назад</Button>
-        <h1 className="text-2xl font-bold flex items-center gap-2"><Wand2 className="h-6 w-6 text-purple-600" /> ИИ-генерация ДИ</h1>
-      </div>
-      <Card>
-        <CardContent className="p-6 space-y-4">
-          <div>
-            <Label>Должность *</Label>
-            <Select value={selPositionId} onValueChange={setSelPositionId}>
-              <SelectTrigger><SelectValue placeholder="Выберите должность" /></SelectTrigger>
-              <SelectContent>{positions.map(p => <SelectItem key={p.id} value={p.id}>{p.title} ({p.department?.name})</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Шаблон *</Label>
-            <Select value={selTemplateId} onValueChange={setSelTemplateId}>
-              <SelectTrigger><SelectValue placeholder="Выберите шаблон" /></SelectTrigger>
-              <SelectContent>{templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name} {t.isPrimary ? '⭐ Основной' : ''}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <Button onClick={handleGenerateAll} disabled={generating} className="bg-purple-600 hover:bg-purple-700">
-            {generating ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Генерация всех секций...</> : <><Wand2 className="h-4 w-4 mr-1.5" /> Сгенерировать всё</>}
-          </Button>
-        </CardContent>
-      </Card>
-      {selTemplateId && templates.find(t => t.id === selTemplateId) && (
+  if (viewMode === 'generate') {
+    const selectedPosition = positions.find(p => p.id === selPositionId)
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => setViewMode('list')}>← Назад</Button>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><Wand2 className="h-6 w-6 text-purple-600" /> ИИ-генерация ДИ</h1>
+        </div>
         <Card>
-          <CardHeader><CardTitle className="text-base">Секции шаблона</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {templates.find(t => t.id === selTemplateId)!.sections.map(s => (
-              <div key={s.id} className="flex items-center justify-between p-2.5 border rounded-lg">
-                <div>
-                  <span className="text-sm font-medium">{s.title}</span>
-                  {s.isRequired && <span className="text-destructive ml-1">*</span>}
-                </div>
-                {s.promptGuidance && <Badge variant="outline" className="text-xs">Промпт</Badge>}
-              </div>
-            ))}
+          <CardContent className="p-6 space-y-4">
+            <div>
+              <Label>Должность *</Label>
+              <Select value={selPositionId} onValueChange={setSelPositionId}>
+                <SelectTrigger><SelectValue placeholder="Выберите должность" /></SelectTrigger>
+                <SelectContent>{positions.map(p => {
+                  const gLabel = gradeLabel(p.grade)
+                  return <SelectItem key={p.id} value={p.id}>{p.title} ({p.department?.name}){gLabel ? ` — ${gLabel}` : ''}</SelectItem>
+                })}</SelectContent>
+              </Select>
+            </div>
+            {/* Position context info when selected */}
+            {selectedPosition && (
+              <Card className="bg-muted/30 border-muted">
+                <CardContent className="p-3">
+                  {renderPositionContextInfo(selectedPosition)}
+                </CardContent>
+              </Card>
+            )}
+            <div>
+              <Label>Шаблон *</Label>
+              <Select value={selTemplateId} onValueChange={setSelTemplateId}>
+                <SelectTrigger><SelectValue placeholder="Выберите шаблон" /></SelectTrigger>
+                <SelectContent>{templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name} {t.isPrimary ? '⭐ Основной' : ''}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleGenerateAll} disabled={generating} className="bg-purple-600 hover:bg-purple-700">
+              {generating ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Генерация всех секций...</> : <><Wand2 className="h-4 w-4 mr-1.5" /> Сгенерировать всё</>}
+            </Button>
           </CardContent>
         </Card>
-      )}
-    </div>
-  )
+        {selTemplateId && templates.find(t => t.id === selTemplateId) && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Секции шаблона</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {templates.find(t => t.id === selTemplateId)!.sections.map(s => (
+                <div key={s.id} className="flex items-center justify-between p-2.5 border rounded-lg">
+                  <div>
+                    <span className="text-sm font-medium">{s.title}</span>
+                    {s.isRequired && <span className="text-destructive ml-1">*</span>}
+                  </div>
+                  {s.promptGuidance && <Badge variant="outline" className="text-xs">Промпт</Badge>}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    )
+  }
 
   // ===================== MANUAL CREATION VIEW =====================
   if (viewMode === 'manual') {
     const generatedCount = manualSections.filter(s => s.content.trim()).length
     const aiGeneratedCount = manualSections.filter(s => s.aiGenerated).length
+    const selectedManualPosition = positions.find(p => p.id === manualPositionId)
 
     // Step 1: Preset selection (only if no primary template was found)
     if (manualStep === 'preset') {
@@ -716,10 +815,21 @@ export function GenerationModule() {
                 <Label>Должность *</Label>
                 <Select value={manualPositionId} onValueChange={setManualPositionId}>
                   <SelectTrigger><SelectValue placeholder="Выберите должность" /></SelectTrigger>
-                  <SelectContent>{positions.map(p => <SelectItem key={p.id} value={p.id}>{p.title} ({p.department?.name})</SelectItem>)}</SelectContent>
+                  <SelectContent>{positions.map(p => {
+                    const gLabel = gradeLabel(p.grade)
+                    return <SelectItem key={p.id} value={p.id}>{p.title} ({p.department?.name}){gLabel ? ` — ${gLabel}` : ''}</SelectItem>
+                  })}</SelectContent>
                 </Select>
               </div>
             </div>
+            {/* Position context info when selected */}
+            {selectedManualPosition && (
+              <Card className="bg-muted/30 border-muted">
+                <CardContent className="p-3">
+                  {renderPositionContextInfo(selectedManualPosition)}
+                </CardContent>
+              </Card>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Подразделение</Label>
@@ -736,6 +846,14 @@ export function GenerationModule() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            {/* Signed toggle in manual creation */}
+            <div className="flex items-center gap-3 pt-2">
+              <Switch
+                checked={manualSignedByEmployee}
+                onCheckedChange={setManualSignedByEmployee}
+              />
+              <Label className="text-sm cursor-pointer">Подписана сотрудником</Label>
             </div>
           </CardContent>
         </Card>
@@ -853,6 +971,7 @@ export function GenerationModule() {
             <div className="text-sm text-muted-foreground">
               Заполнено {generatedCount} из {manualSections.length} секций
               {selectedPreset && <span className="text-xs ml-2">• Пресет: {selectedPreset.name}</span>}
+              {manualSignedByEmployee && <span className="text-xs ml-2 text-emerald-600">• Подписана сотрудником</span>}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setViewMode('list')}>Отмена</Button>
@@ -876,6 +995,27 @@ export function GenerationModule() {
       <Card>
         <CardContent className="p-4">
           <div className="mb-4"><Label>Название</Label><Input value={editTitle} onChange={e => setEditTitle(e.target.value)} /></div>
+          {/* Position context info */}
+          {editingDI?.position && (
+            <div className="mb-4 bg-muted/30 p-3 rounded-lg">
+              {renderPositionContextInfo(editingDI.position)}
+            </div>
+          )}
+          {/* Signed toggle in editor */}
+          {editingDI && (
+            <div className="mb-4 flex items-center gap-3">
+              <Switch
+                checked={editSignedByEmployee}
+                onCheckedChange={(checked) => handleToggleSigned(editingDI!.id, checked)}
+              />
+              <Label className="text-sm cursor-pointer">Подписана сотрудником</Label>
+              {editSignedByEmployee && (
+                <Badge className="bg-emerald-600 text-white text-xs gap-1 ml-2">
+                  <CheckCircle2 className="h-3 w-3" /> Подписана сотрудником
+                </Badge>
+              )}
+            </div>
+          )}
           <div className="space-y-3">
             {editSections.map(section => (
               <div key={section.id} className="border rounded-lg p-3 space-y-2">

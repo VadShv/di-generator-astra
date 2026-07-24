@@ -42,22 +42,54 @@ model Department {
 }
 
 // ==========================================
+// Справочник — Бизнес-функции
+// ==========================================
+model BusinessFunction {
+  id          String   @id @default(cuid())
+  name        String   @unique // Название бизнес-функции
+  code        String?  // Код
+  description String?  // Описание
+  isActive    Boolean  @default(true)
+  positions   Position[]
+  masterPrompts MasterPrompt[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ==========================================
+// Справочник — Проекты
+// ==========================================
+model Project {
+  id          String   @id @default(cuid())
+  name        String   @unique // Название проекта
+  code        String?  // Код
+  description String?  // Описание
+  isActive    Boolean  @default(true)
+  positions   Position[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ==========================================
 // Штатное расписание - Должности
 // ==========================================
 model Position {
-  id           String   @id @default(cuid())
-  title        String
-  code         String   @unique
-  departmentId String
-  department   Department  @relation(fields: [departmentId], references: [id])
-  grade        String?     // Грейд (например: G1, G2, G3...)
-  domain       String?     // Домен (например: IT, Финансы, HR...)
-  headcount    Int      @default(1)
-  functions    String?     // Выполняемые функции (JSON строка с массивом)
-  archiveDIs   ArchiveDI[]
-  generatedDIs GeneratedDI[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  title               String
+  code                String   @unique
+  departmentId        String
+  department          Department  @relation(fields: [departmentId], references: [id])
+  grade               String?     // Грейд: "линейная" или "руководитель"
+  businessFunctionId  String?     // Бизнес-функция (FK → BusinessFunction)
+  businessFunction    BusinessFunction? @relation(fields: [businessFunctionId], references: [id])
+  projectId           String?     // Проект (FK → Project)
+  project             Project? @relation(fields: [projectId], references: [id])
+  headcount           Int      @default(1)
+  functions           String?     // Выполняемые функции (JSON строка с массивом)
+  archiveDIs          ArchiveDI[]
+  generatedDIs        GeneratedDI[]
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 // ==========================================
@@ -107,38 +139,41 @@ model DITemplateSection {
 // Мастер-промпты с версионированием
 // ==========================================
 model MasterPrompt {
-  id          String   @id @default(cuid())
-  name        String
-  content     String   // Содержимое промпта
-  version     Int      @default(1)
-  isActive    Boolean  @default(true)
+  id                  String   @id @default(cuid())
+  name                String
+  content             String   // Содержимое промпта
+  version             Int      @default(1)
+  isActive            Boolean  @default(true)
   // Логика применимости
-  departmentId String?  // Применимо к подразделению (null = все)
-  department   Department? @relation(fields: [departmentId], references: [id])
-  domain       String?  // Применимо к домену (null = все)
-  grade        String?  // Применимо к грейду (null = все)
-  functionType String?  // Применимо к функции (null = все)
-  description  String?  // Описание версии
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  departmentId        String?  // Применимо к подразделению (null = все)
+  department          Department? @relation(fields: [departmentId], references: [id])
+  businessFunctionId  String?  // Применимо к бизнес-функции (null = все)
+  businessFunction    BusinessFunction? @relation(fields: [businessFunctionId], references: [id])
+  grade               String?  // Применимо к грейду (null = все): "линейная" / "руководитель"
+  functionType        String?  // Применимо к функции (null = все)
+  description         String?  // Описание версии
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 // ==========================================
 // Сгенерированные должностные инструкции
 // ==========================================
 model GeneratedDI {
-  id          String   @id @default(cuid())
-  positionId  String
-  position    Position   @relation(fields: [positionId], references: [id])
-  templateId  String?
-  template    DITemplate? @relation(fields: [templateId], references: [id])
-  title       String
-  status      String   @default("draft") // draft, review, approved, exported
-  sections    GeneratedDISection[]
-  trackings   DITracking[]
-  versions    DIVersion[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(cuid())
+  positionId       String
+  position         Position   @relation(fields: [positionId], references: [id])
+  templateId       String?
+  template         DITemplate? @relation(fields: [templateId], references: [id])
+  title            String
+  status           String   @default("draft") // draft, review, approved, exported
+  signedByEmployee Boolean  @default(false)   // Подписана сотрудником
+  signedAt         DateTime?                   // Дата подписания сотрудником
+  sections         GeneratedDISection[]
+  trackings        DITracking[]
+  versions         DIVersion[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model GeneratedDISection {
