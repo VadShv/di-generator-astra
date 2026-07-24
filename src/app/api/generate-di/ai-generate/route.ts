@@ -136,6 +136,7 @@ ${section.content ? `Примерное содержание/шаблон: ${sec
         templateId,
         title: `ДИ — ${position.title}`,
         status: 'draft',
+        currentVersion: 1,
         signedByEmployee: false,
         sections: {
           create: generatedSections,
@@ -145,6 +146,22 @@ ${section.content ? `Примерное содержание/шаблон: ${sec
         position: { include: { department: true, businessFunction: true, project: true } },
         template: true,
         sections: { orderBy: { order: 'asc' } },
+      },
+    })
+
+    // Create initial version record v1
+    const versionContent = JSON.stringify({
+      title: generatedDI.title,
+      sections: generatedDI.sections.map(s => ({ title: s.sectionTitle, content: s.sectionContent })),
+    })
+    await db.dIVersion.create({
+      data: {
+        generatedDIId: generatedDI.id,
+        content: versionContent,
+        version: 1,
+        isOriginal: true,
+        changeDescription: 'Начальная AI-генерация',
+        uploadedBy: 'ai-generate',
       },
     })
 

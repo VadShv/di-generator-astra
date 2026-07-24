@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows, TrendingUp, ArrowRight } from 'lucide-react'
+import { Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows, TrendingUp, ArrowRight, Zap, Shield, History } from 'lucide-react'
 
 interface Stats {
   departments: number
@@ -17,18 +17,24 @@ interface Stats {
   pendingComparison: number
 }
 
+import { useAppStore, type ActiveSection } from '@/lib/store'
+
 const quickActions = [
-  { label: 'Сгенерировать новую ДИ', icon: Sparkles, color: 'text-cyan-600', bgColor: 'bg-cyan-100', section: 'generation' as const, badge: 'AI' },
-  { label: 'Загрузить архивную ДИ', icon: Archive, color: 'text-amber-600', bgColor: 'bg-amber-100', section: 'archive' as const, badge: null },
-  { label: 'Сравнить версии ДИ', icon: GitCompareArrows, color: 'text-pink-600', bgColor: 'bg-pink-100', section: 'comparison' as const, badge: 'New' },
-  { label: 'Настроить мастер-промпт', icon: Brain, color: 'text-purple-600', bgColor: 'bg-purple-100', section: 'master-prompts' as const, badge: null },
-  { label: 'Загрузить штатное расписание', icon: Users, color: 'text-emerald-600', bgColor: 'bg-emerald-100', section: 'staff-schedule' as const, badge: null },
-  { label: 'Создать шаблон ДИ', icon: FileText, color: 'text-rose-600', bgColor: 'bg-rose-100', section: 'templates' as const, badge: null },
+  { label: 'Сгенерировать новую ДИ', icon: Sparkles, color: 'text-cyan-600', bgColor: 'bg-cyan-100', section: 'generation' as ActiveSection, badge: 'AI' },
+  { label: 'Массовая генерация ДИ', icon: Zap, color: 'text-orange-600', bgColor: 'bg-orange-100', section: 'mass-generation' as ActiveSection, badge: 'New' },
+  { label: 'AI-аудит ДИ', icon: Shield, color: 'text-red-600', bgColor: 'bg-red-100', section: 'ai-audit' as ActiveSection, badge: 'New' },
+  { label: 'Версионирование ДИ', icon: History, color: 'text-indigo-600', bgColor: 'bg-indigo-100', section: 'version-history' as ActiveSection, badge: 'New' },
+  { label: 'Загрузить архивную ДИ', icon: Archive, color: 'text-amber-600', bgColor: 'bg-amber-100', section: 'archive' as ActiveSection, badge: null },
+  { label: 'Сравнить версии ДИ', icon: GitCompareArrows, color: 'text-pink-600', bgColor: 'bg-pink-100', section: 'comparison' as ActiveSection, badge: null },
+  { label: 'Настроить мастер-промпт', icon: Brain, color: 'text-purple-600', bgColor: 'bg-purple-100', section: 'master-prompts' as ActiveSection, badge: null },
+  { label: 'Загрузить штатное расписание', icon: Users, color: 'text-emerald-600', bgColor: 'bg-emerald-100', section: 'staff-schedule' as ActiveSection, badge: null },
+  { label: 'Создать шаблон ДИ', icon: FileText, color: 'text-rose-600', bgColor: 'bg-rose-100', section: 'templates' as ActiveSection, badge: null },
 ]
 
 export function DashboardModule() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
+  const { setActiveSection } = useAppStore()
 
   useEffect(() => {
     async function loadStats() {
@@ -100,7 +106,7 @@ export function DashboardModule() {
           </CardHeader>
           <CardContent className="space-y-1.5">
             {quickActions.map((action) => (
-              <div key={action.label} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/60 transition-colors cursor-pointer group">
+              <div key={action.label} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/60 transition-colors cursor-pointer group" onClick={() => setActiveSection(action.section)}>
                 <div className={`p-1.5 rounded-lg ${action.bgColor}`}>
                   <action.icon className={`h-4 w-4 ${action.color}`} />
                 </div>

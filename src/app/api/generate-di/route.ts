@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
           orderBy: { order: 'asc' },
         },
         _count: {
-          select: { sections: true },
+          select: { sections: true, versions: true },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -73,6 +73,7 @@ export async function POST(request: Request) {
         templateId: templateId || null,
         title: title.trim(),
         status: 'draft',
+        currentVersion: 1,
         sections: sections && Array.isArray(sections) && sections.length > 0
           ? {
               create: sections.map((s: { sectionTitle: string; sectionContent: string; order: number }) => ({
@@ -92,6 +93,22 @@ export async function POST(request: Request) {
       },
     })
 
+    // Create initial version record v1
+    const versionContent = JSON.stringify({
+      title: generatedDI.title,
+      sections: generatedDI.sections.map(s => ({ title: s.sectionTitle, content: s.sectionContent })),
+    })
+    await db.dIVersion.create({
+      data: {
+        generatedDIId: generatedDI.id,
+        content: versionContent,
+        version: 1,
+        isOriginal: true,
+        changeDescription: 'Начальная версия (ручное создание)',
+        uploadedBy: 'manual',
+      },
+    })
+
     return NextResponse.json(generatedDI, { status: 201 })
   } catch (error) {
     console.error('GenerateDI POST error:', error)
@@ -99,11 +116,11 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT /api/generate-di - Update generated DI
+// PUT /api/generate-di - Update generated DI with auto-versioning
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
-    const { id, title, status, sections, signedByEmployee } = body
+    const { id, title, status, sections, signedByEmployee, changeDescription } = body
 
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'ID ДИ обязателен' }, { status: 400 })
@@ -130,8 +147,39 @@ export async function PUT(request: Request) {
       signedData.signedAt = signedByEmployee ? new Date() : null
     }
 
-    // Update sections if provided
-    if (sections && Array.isArray(sections)) {
+    // Determine if we need to create a new version (sections changed)
+    const sectionsChanged = sections && Array.isArray(sections)
+    let newVersionNumber = existing.currentVersion
+
+    if (sectionsChanged) {
+      // Save current state as version before updating
+      const currentContent = JSON.stringify({
+        title: existing.title,
+        sections: existing.sections.map(s => ({ title: s.sectionTitle, content: s.sectionContent })),
+      })
+
+      // Check if there's an existing version for currentVersion
+      const existingVersion = await db.dIVersion.findFirst({
+        where: { generatedDIId: id, version: existing.currentVersion },
+      })
+
+      if (!existingVersion) {
+        // No version exists for current version number — create it
+        await db.dIVersion.create({
+          data: {
+            generatedDIId: id,
+            content: currentContent,
+            version: existing.currentVersion,
+            isOriginal: existing.currentVersion === 1,
+            changeDescription: `Версия v${existing.currentVersion} (авто-сохранение перед изменением)`,
+            uploadedBy: 'system',
+          },
+        })
+      }
+
+      // Increment version number
+      newVersionNumber = existing.currentVersion + 1
+
       // Delete existing sections and recreate
       await db.generatedDISection.deleteMany({ where: { generatedDIId: id } })
 
@@ -140,6 +188,7 @@ export async function PUT(request: Request) {
         data: {
           title: title !== undefined ? title.trim() : undefined,
           status: status !== undefined ? status : undefined,
+          currentVersion: newVersionNumber,
           ...signedData,
           sections: {
             create: sections.map((s: { sectionTitle: string; sectionContent: string; order: number; aiGenerated?: boolean; editedBy?: string }) => ({
@@ -157,7 +206,29 @@ export async function PUT(request: Request) {
           sections: { orderBy: { order: 'asc' } },
         },
       })
+
+      // Create new version record
+      const updated = await db.generatedDI.findUnique({
+        where: { id },
+        include: { sections: { orderBy: { order: 'asc' } } },
+      })
+      const newContent = JSON.stringify({
+        title: updated?.title || existing.title,
+        sections: updated?.sections.map(s => ({ title: s.sectionTitle, content: s.sectionContent })) || [],
+      })
+
+      await db.dIVersion.create({
+        data: {
+          generatedDIId: id,
+          content: newContent,
+          version: newVersionNumber,
+          isOriginal: false,
+          changeDescription: changeDescription || `Обновление до версии v${newVersionNumber}`,
+          uploadedBy: 'manual-edit',
+        },
+      })
     } else {
+      // No sections change — just update metadata
       await db.generatedDI.update({
         where: { id },
         data: {
@@ -173,17 +244,18 @@ export async function PUT(request: Request) {
       })
     }
 
-    // Fetch the updated DI
-    const updated = await db.generatedDI.findUnique({
+    // Fetch the updated DI with version info
+    const finalDI = await db.generatedDI.findUnique({
       where: { id },
       include: {
         position: { include: { department: true } },
         template: true,
         sections: { orderBy: { order: 'asc' } },
+        versions: { orderBy: { version: 'desc' } },
       },
     })
 
-    return NextResponse.json(updated)
+    return NextResponse.json(finalDI)
   } catch (error) {
     console.error('GenerateDI PUT error:', error)
     return NextResponse.json({ error: 'Ошибка обновления ДИ' }, { status: 500 })

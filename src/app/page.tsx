@@ -4,7 +4,7 @@ import { useAppStore, type ActiveSection } from '@/lib/store'
 import { useState } from 'react'
 import {
   LayoutDashboard, Users, BookOpen, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows,
-  Menu, ChevronLeft,
+  Menu, ChevronLeft, Zap, Shield, History,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -19,6 +19,9 @@ import { GenerationModule } from '@/components/modules/generation'
 import { TrackingModule } from '@/components/modules/tracking'
 import { DictionariesModule } from '@/components/modules/dictionaries'
 import { ComparisonModule } from '@/components/modules/comparison'
+import { MassGenerationModule } from '@/components/modules/mass-generation'
+import { AiAuditModule } from '@/components/modules/ai-audit'
+import { VersionHistoryModule } from '@/components/modules/version-history'
 
 const navItems: { id: ActiveSection; label: string; icon: React.ReactNode; group: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: <LayoutDashboard className="h-4 w-4" />, group: 'Обзор' },
@@ -28,8 +31,11 @@ const navItems: { id: ActiveSection; label: string; icon: React.ReactNode; group
   { id: 'templates', label: 'Шаблоны ДИ', icon: <FileText className="h-4 w-4" />, group: 'Настройка' },
   { id: 'master-prompts', label: 'Мастер-промпты', icon: <Brain className="h-4 w-4" />, group: 'Настройка' },
   { id: 'generation', label: 'Генерация ДИ', icon: <Sparkles className="h-4 w-4" />, group: 'Генерация' },
+  { id: 'mass-generation', label: 'Массовая генерация', icon: <Zap className="h-4 w-4" />, group: 'Генерация' },
   { id: 'tracking', label: 'Отслеживание', icon: <GitBranch className="h-4 w-4" />, group: 'Жизненный цикл' },
+  { id: 'version-history', label: 'Версионирование', icon: <History className="h-4 w-4" />, group: 'Жизненный цикл' },
   { id: 'comparison', label: 'Сравнение версий', icon: <GitCompareArrows className="h-4 w-4" />, group: 'Жизненный цикл' },
+  { id: 'ai-audit', label: 'AI-аудит', icon: <Shield className="h-4 w-4" />, group: 'Анализ' },
 ]
 
 const modules: Record<ActiveSection, React.ReactNode> = {
@@ -40,14 +46,17 @@ const modules: Record<ActiveSection, React.ReactNode> = {
   templates: <TemplatesModule />,
   'master-prompts': <MasterPromptsModule />,
   generation: <GenerationModule />,
+  'mass-generation': <MassGenerationModule />,
   tracking: <TrackingModule />,
+  'version-history': <VersionHistoryModule />,
   comparison: <ComparisonModule />,
+  'ai-audit': <AiAuditModule />,
 }
 
 export default function HomePage() {
   const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen } = useAppStore()
   const [logoFlipped, setLogoFlipped] = useState(false)
-  const groups = ['Обзор', 'Данные', 'Настройка', 'Генерация', 'Жизненный цикл']
+  const groups = ['Обзор', 'Данные', 'Настройка', 'Генерация', 'Жизненный цикл', 'Анализ']
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -124,7 +133,7 @@ export default function HomePage() {
             )
           })}
         </ScrollArea>
-        <div className="p-3 border-t">{sidebarOpen && <p className="text-xs text-muted-foreground text-center">v1.0 • Группа Астра</p>}</div>
+        <div className="p-3 border-t">{sidebarOpen && <p className="text-xs text-muted-foreground text-center">v2.0 • Группа Астра</p>}</div>
       </aside>
       <main className={cn('flex-1 transition-all duration-300', sidebarOpen ? 'ml-64' : 'ml-16')}>
         <div className="p-6 max-w-[1600px] mx-auto">

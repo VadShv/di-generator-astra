@@ -3,6 +3,7 @@ import { create } from 'zustand'
 export type ActiveSection = 
   | 'dashboard' | 'staff-schedule' | 'dictionaries' | 'archive' | 'templates'
   | 'master-prompts' | 'generation' | 'tracking' | 'comparison'
+  | 'mass-generation' | 'ai-audit' | 'version-history'
 
 interface AppState {
   activeSection: ActiveSection

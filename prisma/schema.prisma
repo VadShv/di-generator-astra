@@ -167,11 +167,13 @@ model GeneratedDI {
   template         DITemplate? @relation(fields: [templateId], references: [id])
   title            String
   status           String   @default("draft") // draft, review, approved, exported
+  currentVersion   Int      @default(1)        // Текущая версия ДИ
   signedByEmployee Boolean  @default(false)   // Подписана сотрудником
   signedAt         DateTime?                   // Дата подписания сотрудником
   sections         GeneratedDISection[]
   trackings        DITracking[]
   versions         DIVersion[]
+  auditResults     DIAuditResult[]
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
@@ -203,17 +205,36 @@ model DITracking {
 }
 
 // ==========================================
-// Версии ДИ (для сравнения)
+// Версии ДИ (для сравнения и истории)
 // ==========================================
 model DIVersion {
-  id             String   @id @default(cuid())
-  generatedDIId  String
-  generatedDI    GeneratedDI @relation(fields: [generatedDIId], references: [id], onDelete: Cascade)
-  content        String   // Полный текст версии (JSON)
-  version        Int      @default(1)
-  isOriginal     Boolean  @default(false) // true = сгенерированная, false = загруженная после правок
-  uploadedBy     String?  // Кто загрузил
-  fileName       String?  // Имя файла
-  diffSummary    String?  // Краткое резюме различий (ИИ-сгенерированное)
-  createdAt      DateTime @default(now())
+  id                String   @id @default(cuid())
+  generatedDIId     String
+  generatedDI       GeneratedDI @relation(fields: [generatedDIId], references: [id], onDelete: Cascade)
+  content           String   // Полный текст версии (JSON)
+  version           Int      @default(1)
+  isOriginal        Boolean  @default(false) // true = сгенерированная, false = загруженная после правок
+  uploadedBy        String?  // Кто загрузил
+  fileName          String?  // Имя файла
+  diffSummary       String?  // Краткое резюме различий (ИИ-сгенерированное)
+  changeDescription String?  // Описание изменений в данной версии
+  createdAt         DateTime @default(now())
+}
+
+// ==========================================
+// Результаты AI-аудита ДИ
+// ==========================================
+model DIAuditResult {
+  id               String   @id @default(cuid())
+  generatedDIId    String
+  generatedDI      GeneratedDI @relation(fields: [generatedDIId], references: [id], onDelete: Cascade)
+  auditType        String   // Тип аудита: "full", "legal", "consistency"
+  overallScore     Int      @default(0) // Общая оценка 0-100
+  outdatedItems    String   // JSON: массив устаревших пунктов
+  contradictoryItems String // JSON: массив противоречивых пунктов
+  riskyItems       String   // JSON: массив юридически рискованных пунктов
+  recommendations  String   // JSON: массив рекомендаций по улучшению
+  summary          String?  // Общее резюме аудита
+  auditedBy        String?  // Кто запустил аудит
+  createdAt        DateTime @default(now())
 }
