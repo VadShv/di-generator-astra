@@ -23,19 +23,19 @@ import { MassGenerationModule } from '@/components/modules/mass-generation'
 import { AiAuditModule } from '@/components/modules/ai-audit'
 import { VersionHistoryModule } from '@/components/modules/version-history'
 
-const navItems: { id: ActiveSection; label: string; icon: React.ReactNode; group: string }[] = [
-  { id: 'dashboard', label: 'Дашборд', icon: <LayoutDashboard className="h-4 w-4" />, group: 'Обзор' },
-  { id: 'staff-schedule', label: 'Штатное расписание', icon: <Users className="h-4 w-4" />, group: 'Данные' },
-  { id: 'dictionaries', label: 'Справочники', icon: <BookOpen className="h-4 w-4" />, group: 'Данные' },
-  { id: 'archive', label: 'Архив ДИ', icon: <Archive className="h-4 w-4" />, group: 'Данные' },
-  { id: 'templates', label: 'Шаблоны ДИ', icon: <FileText className="h-4 w-4" />, group: 'Настройка' },
-  { id: 'master-prompts', label: 'Мастер-промпты', icon: <Brain className="h-4 w-4" />, group: 'Настройка' },
-  { id: 'generation', label: 'Генерация ДИ', icon: <Sparkles className="h-4 w-4" />, group: 'Генерация' },
-  { id: 'mass-generation', label: 'Массовая генерация', icon: <Zap className="h-4 w-4" />, group: 'Генерация' },
-  { id: 'tracking', label: 'Отслеживание', icon: <GitBranch className="h-4 w-4" />, group: 'Жизненный цикл' },
-  { id: 'version-history', label: 'Версионирование', icon: <History className="h-4 w-4" />, group: 'Жизненный цикл' },
-  { id: 'comparison', label: 'Сравнение версий', icon: <GitCompareArrows className="h-4 w-4" />, group: 'Жизненный цикл' },
-  { id: 'ai-audit', label: 'AI-аудит', icon: <Shield className="h-4 w-4" />, group: 'Анализ' },
+const navItems: { id: ActiveSection; label: string; icon: React.ElementType; iconBg: string; iconColor: string; group: string }[] = [
+  { id: 'dashboard', label: 'Дашборд', icon: LayoutDashboard, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', group: 'Обзор' },
+  { id: 'staff-schedule', label: 'Штатное расписание', icon: Users, iconBg: 'bg-teal-100', iconColor: 'text-teal-600', group: 'Данные' },
+  { id: 'dictionaries', label: 'Справочники', icon: BookOpen, iconBg: 'bg-sky-100', iconColor: 'text-sky-600', group: 'Данные' },
+  { id: 'archive', label: 'Архив ДИ', icon: Archive, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', group: 'Данные' },
+  { id: 'templates', label: 'Шаблоны ДИ', icon: FileText, iconBg: 'bg-rose-100', iconColor: 'text-rose-600', group: 'Настройка' },
+  { id: 'master-prompts', label: 'Мастер-промпты', icon: Brain, iconBg: 'bg-purple-100', iconColor: 'text-purple-600', group: 'Настройка' },
+  { id: 'generation', label: 'Генерация ДИ', icon: Sparkles, iconBg: 'bg-cyan-100', iconColor: 'text-cyan-600', group: 'Генерация' },
+  { id: 'mass-generation', label: 'Массовая генерация', icon: Zap, iconBg: 'bg-orange-100', iconColor: 'text-orange-600', group: 'Генерация' },
+  { id: 'tracking', label: 'Отслеживание', icon: GitBranch, iconBg: 'bg-orange-100', iconColor: 'text-orange-700', group: 'Жизненный цикл' },
+  { id: 'version-history', label: 'Версионирование', icon: History, iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600', group: 'Жизненный цикл' },
+  { id: 'comparison', label: 'Сравнение версий', icon: GitCompareArrows, iconBg: 'bg-pink-100', iconColor: 'text-pink-600', group: 'Жизненный цикл' },
+  { id: 'ai-audit', label: 'AI-аудит', icon: Shield, iconBg: 'bg-red-100', iconColor: 'text-red-600', group: 'Анализ' },
 ]
 
 const modules: Record<ActiveSection, React.ReactNode> = {
@@ -125,7 +125,10 @@ export default function HomePage() {
                   <Button key={item.id} variant={activeSection === item.id ? 'secondary' : 'ghost'}
                     className={cn('w-full justify-start gap-3 h-9 px-3 mx-1', !sidebarOpen && 'justify-center px-0 w-12', activeSection === item.id && 'font-medium')}
                     onClick={() => setActiveSection(item.id)} title={!sidebarOpen ? item.label : undefined}>
-                    {item.icon}
+                    {/* Icon with colored background */}
+                    <div className={cn('flex items-center justify-center rounded-lg', sidebarOpen ? 'p-1.5' : 'p-2', item.iconBg)}>
+                      <item.icon className={cn('h-4 w-4', item.iconColor)} />
+                    </div>
                     {sidebarOpen && <span className="truncate">{item.label}</span>}
                   </Button>
                 ))}
