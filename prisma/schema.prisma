@@ -230,10 +230,17 @@ model DIAuditResult {
   generatedDI      GeneratedDI @relation(fields: [generatedDIId], references: [id], onDelete: Cascade)
   auditType        String   // Тип аудита: "full", "legal", "consistency"
   overallScore     Int      @default(0) // Общая оценка 0-100
-  outdatedItems    String   // JSON: массив устаревших пунктов
-  contradictoryItems String // JSON: массив противоречивых пунктов
-  riskyItems       String   // JSON: массив юридически рискованных пунктов
-  recommendations  String   // JSON: массив рекомендаций по улучшению
+  // 5 категорий правового ядра аудита
+  duplicatedTkItems        String   @default("[]") // JSON: дублирование норм ТК РФ
+  vagueFormulationItems    String   @default("[]") // JSON: расплывчатые формулировки
+  legislativeConflictItems String  @default("[]") // JSON: противоречия законодательству
+  unrealisticRequirementItems String @default("[]") // JSON: завышенные/нереалистичные требования
+  incompleteSectionItems   String   @default("[]") // JSON: неполнота обязательных разделов
+  // Legacy fields (kept for backward compatibility)
+  outdatedItems    String   @default("[]") // JSON: массив устаревших пунктов
+  contradictoryItems String @default("[]") // JSON: массив противоречивых пунктов
+  riskyItems       String   @default("[]") // JSON: массив юридически рискованных пунктов
+  recommendations  String   @default("[]") // JSON: массив рекомендаций по улучшению
   summary          String?  // Общее резюме аудита
   auditedBy        String?  // Кто запустил аудит
   createdAt        DateTime @default(now())
