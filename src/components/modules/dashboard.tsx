@@ -32,14 +32,14 @@ const quickActions = [
 ]
 
 const statCardsConfig = [
-  { label: 'Подразделения', key: 'departments' as const, icon: Users, iconBg: 'bg-emerald-100 text-emerald-600' },
-  { label: 'Должности в ШР', key: 'positions' as const, icon: Users, iconBg: 'bg-teal-100 text-teal-600' },
-  { label: 'Архивных ДИ', key: 'archiveDIs' as const, icon: Archive, iconBg: 'bg-amber-100 text-amber-600' },
-  { label: 'Шаблонов ДИ', key: 'templates' as const, icon: FileText, iconBg: 'bg-rose-100 text-rose-600' },
-  { label: 'Мастер-промптов', key: 'masterPrompts' as const, icon: Brain, iconBg: 'bg-purple-100 text-purple-600' },
-  { label: 'Сгенерированных ДИ', key: 'generatedDIs' as const, icon: Sparkles, iconBg: 'bg-cyan-100 text-cyan-600' },
-  { label: 'На согласовании', key: 'pendingTracking' as const, icon: GitBranch, iconBg: 'bg-orange-100 text-orange-600' },
-  { label: 'Ожидают сравнения', key: 'pendingComparison' as const, icon: GitCompareArrows, iconBg: 'bg-pink-100 text-pink-600' },
+  { label: 'Подразделения', key: 'departments' as const, icon: Users, cardBg: 'bg-emerald-50', iconColor: 'text-emerald-500', iconBg: 'bg-emerald-100', borderAccent: 'border-emerald-200' },
+  { label: 'Должности в ШР', key: 'positions' as const, icon: Users, cardBg: 'bg-teal-50', iconColor: 'text-teal-500', iconBg: 'bg-teal-100', borderAccent: 'border-teal-200' },
+  { label: 'Архивных ДИ', key: 'archiveDIs' as const, icon: Archive, cardBg: 'bg-amber-50', iconColor: 'text-amber-500', iconBg: 'bg-amber-100', borderAccent: 'border-amber-200' },
+  { label: 'Шаблонов ДИ', key: 'templates' as const, icon: FileText, cardBg: 'bg-rose-50', iconColor: 'text-rose-500', iconBg: 'bg-rose-100', borderAccent: 'border-rose-200' },
+  { label: 'Мастер-промптов', key: 'masterPrompts' as const, icon: Brain, cardBg: 'bg-purple-50', iconColor: 'text-purple-500', iconBg: 'bg-purple-100', borderAccent: 'border-purple-200' },
+  { label: 'Сгенерированных ДИ', key: 'generatedDIs' as const, icon: Sparkles, cardBg: 'bg-cyan-50', iconColor: 'text-cyan-500', iconBg: 'bg-cyan-100', borderAccent: 'border-cyan-200' },
+  { label: 'На согласовании', key: 'pendingTracking' as const, icon: GitBranch, cardBg: 'bg-orange-50', iconColor: 'text-orange-500', iconBg: 'bg-orange-100', borderAccent: 'border-orange-200' },
+  { label: 'Ожидают сравнения', key: 'pendingComparison' as const, icon: GitCompareArrows, cardBg: 'bg-pink-50', iconColor: 'text-pink-500', iconBg: 'bg-pink-100', borderAccent: 'border-pink-200' },
 ]
 
 export function DashboardModule() {
@@ -77,16 +77,18 @@ export function DashboardModule() {
           ))
         ) : (
           statCardsConfig.map((card) => (
-            <Card key={card.label} className="hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
+            <Card key={card.label} className={`hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 ${card.cardBg} ${card.borderAccent}`}>
+              <CardContent className="p-4 relative overflow-hidden">
+                {/* Large background icon */}
+                <card.icon className={`absolute -right-2 -bottom-2 h-16 w-16 opacity-15 ${card.iconColor}`} />
+                <div className="relative z-10">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`flex items-center justify-center rounded-lg p-1.5 ${card.iconBg}`}>
+                      <card.icon className={`h-4 w-4 ${card.iconColor}`} />
+                    </div>
                     <p className="text-xs text-muted-foreground font-medium">{card.label}</p>
-                    <p className="text-2xl font-bold mt-0.5">{stats ? stats[card.key] : 0}</p>
                   </div>
-                  <div className={`p-2.5 rounded-full ${card.iconBg}`}>
-                    <card.icon className="h-5 w-5" />
-                  </div>
+                  <p className="text-2xl font-bold">{stats ? stats[card.key] : 0}</p>
                 </div>
               </CardContent>
             </Card>
