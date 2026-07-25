@@ -111,6 +111,9 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
   // Состояния операций
   const [generating, setGenerating] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
+  // Фаза 23: архивная ДИ как база генерации (ТЗ §4).
+  const [selArchiveBaseId, setSelArchiveBaseId] = useState<string>('')
+  const [useArchiveAsReference, setUseArchiveAsReference] = useState(true)
   const [uploadingArchive, setUploadingArchive] = useState(false)
   const [uploadingApproved, setUploadingApproved] = useState(false)
 
@@ -171,7 +174,7 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
       const res = await fetch('/api/generate-di/ai-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ positionId: position.id, templateId: selectedTemplate }),
+        body: JSON.stringify({ positionId: position.id, templateId: selectedTemplate, archiveDIId: selArchiveBaseId || undefined, useArchiveAsReference }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Ошибка генерации')
@@ -449,6 +452,26 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
               ))}
             </SelectContent>
           </Select>
+         {/* Фаза 23: выбор архивной ДИ как базы генерации (ТЗ §4) */}
+         {archiveDIs.length > 0 && (
+           <div className="flex items-center gap-2 p-2 rounded-lg border bg-slate-50/60">
+             <Archive className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />
+             <Select value={selArchiveBaseId} onValueChange={setSelArchiveBaseId}>
+               <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue placeholder="Архивная ДИ как база" /></SelectTrigger>
+               <SelectContent>
+                 {archiveDIs.map(a => (
+                   <SelectItem key={a.id} value={a.id} className="text-xs">{a.title}</SelectItem>
+                 ))}
+               </SelectContent>
+             </Select>
+             {selArchiveBaseId && (
+               <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+                 <input type="checkbox" checked={useArchiveAsReference} onChange={(e) => setUseArchiveAsReference(e.target.checked)} className="rounded h-3 w-3" />
+                 <span>референс</span>
+               </label>
+             )}
+           </div>
+         )}
           <Button size="sm" className="h-8 bg-violet-600 hover:bg-violet-700" onClick={handleGenerate} disabled={generating || !selectedTemplate}>
             {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Sparkles className="h-3.5 w-3.5 mr-1.5" />}
             {generating ? 'Генерация…' : 'Сгенерировать'}

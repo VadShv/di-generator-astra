@@ -154,6 +154,8 @@ model ArchiveDI {
   // и привязать позже (см. ТЗ раздел 18).
   positionId  String?
   position    Position?  @relation(fields: [positionId], references: [id])
+  // Фаза 23: сгенерированные ДИ, созданные на базе этой архивной ДИ.
+  derivedGeneratedDIs GeneratedDI[] @relation("DISourceArchive")
   fileName    String?    // Имя загруженного файла
   uploadedAt  DateTime @default(now())
   createdAt   DateTime @default(now())
@@ -230,6 +232,9 @@ model GeneratedDI {
   position         Position   @relation(fields: [positionId], references: [id])
   templateId       String?
   template         DITemplate? @relation(fields: [templateId], references: [id])
+  // Фаза 23: архивная ДИ, на базе которой сгенерирована эта (референс при генерации).
+  sourceArchiveId String?
+  sourceArchive   ArchiveDI?  @relation("DISourceArchive", fields: [sourceArchiveId], references: [id], onDelete: SetNull)
   title            String
   status           String   @default("draft") // draft, review, approved, exported, imported
   currentVersion   Int      @default(1)        // Текущая версия ДИ
@@ -245,6 +250,7 @@ model GeneratedDI {
   @@index([positionId])
   @@index([status])
   @@index([templateId])
+  @@index([sourceArchiveId])
 }
 
 model GeneratedDISection {

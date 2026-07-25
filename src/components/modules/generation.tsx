@@ -77,7 +77,11 @@ export function GenerationModule() {
  const [selPositionId, setSelPositionId] = useState('')
  const [selTemplateId, setSelTemplateId] = useState('')
  const [selMasterPromptId, setSelMasterPromptId] = useState('')
-  const [generating, setGenerating] = useState(false)
+ // Фаза 23: архивная ДИ как база генерации (ТЗ §4).
+ const [archiveDIs, setArchiveDIs] = useState<{ id: string; title: string; uploadedAt: string }[]>([])
+ const [selArchiveDIId, setSelArchiveDIId] = useState('')
+ const [useArchiveAsReference, setUseArchiveAsReference] = useState(true)
+ const [generating, setGenerating] = useState(false)
 
   // Manual creation form
   const [manualTitle, setManualTitle] = useState('')
@@ -131,7 +135,22 @@ export function GenerationModule() {
 
   useEffect(() => { (async () => { setLoading(true); await Promise.all([fetchDIs(), fetchPositions(), fetchTemplates(), fetchPrompts(), fetchCompanies(), fetchDepartments()]); setLoading(false) })() }, [fetchDIs, fetchPositions, fetchTemplates, fetchPrompts, fetchCompanies, fetchDepartments])
 
-  const startGenerate = () => { setSelPositionId(''); setSelTemplateId(''); setSelMasterPromptId(''); setGenerating(false); setViewMode('generate') }
+  // Фаза 23: при смене должности подгружаем её архивные ДИ для выбора как базы.
+  useEffect(() => {
+    if (!selPositionId) { setArchiveDIs([]); setSelArchiveDIId(''); return }
+    (async () => {
+      try {
+        const res = await fetch(`/api/archive-di?positionId=${selPositionId}`)
+        if (res.ok) {
+          const data = await res.json()
+          setArchiveDIs(Array.isArray(data) ? data.map((a: { id: string; title: string; uploadedAt: string }) => ({ id: a.id, title: a.title, uploadedAt: a.uploadedAt })) : [])
+        }
+      } catch { /* silent */ }
+      setSelArchiveDIId('')
+    })()
+  }, [selPositionId])
+
+  const startGenerate = () => { setSelPositionId(''); setSelTemplateId(''); setSelMasterPromptId(''); setSelArchiveDIId(''); setUseArchiveAsReference(true); setArchiveDIs([]); setGenerating(false); setViewMode('generate') }
 
   const startManual = () => {
     setManualTitle(''); setManualPositionId(''); setManualDepartment(''); setManualCategory('Руководители'); setManualSignedByEmployee(false)
@@ -227,7 +246,7 @@ export function GenerationModule() {
     if (!selPositionId || !selTemplateId) { toast({ title: 'Ошибка', description: 'Выберите должность и шаблон', variant: 'destructive' }); return }
     setGenerating(true)
     try {
-      const res = await fetch('/api/generate-di/ai-generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ positionId: selPositionId, templateId: selTemplateId, masterPromptId: selMasterPromptId || undefined }) })
+      const res = await fetch('/api/generate-di/ai-generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ positionId: selPositionId, templateId: selTemplateId, masterPromptId: selMasterPromptId || undefined, archiveDIId: selArchiveDIId || undefined, useArchiveAsReference }) })
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Ошибка') }
       const data = await res.json()
       setEditingDI(data); setEditSections(data.sections || []); setEditTitle(data.title); setEditSignedByEmployee(data.signedByEmployee ?? false)
@@ -664,8 +683,26 @@ export function GenerationModule() {
                 ))}
               </SelectContent>
             </Select>
-            {masterPrompts.length === 0 && (
-              <p className="text-xs text-muted-foreground mt-1">Нет активных промптов — будет использован авто-подбор или системный промпт по умолчанию.</p>
+           {masterPrompts.length === 0 && (
+             <p className="text-xs text-muted-foreground mt-1">Нет активных промптов — будет использован авто-подбор или системный промпт по умолчанию.</p>
+           )}
+         </div>
+          {/* Фаза 23: базовая архивная ДИ (ТЗ §4) — референс для генерации */}
+          <div>
+            <Label>Базовая архивная ДИ <span className="text-muted-foreground text-xs">(необязательно)</span></Label>
+            <Select value={selArchiveDIId} onValueChange={setSelArchiveDIId} disabled={archiveDIs.length === 0}>
+              <SelectTrigger><SelectValue placeholder={archiveDIs.length === 0 ? 'Нет архивных ДИ для этой должности' : 'Выберите архивную ДИ как референс'} /></SelectTrigger>
+              <SelectContent>
+                {archiveDIs.map(a => (
+                  <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selArchiveDIId && (
+              <label className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input type="checkbox" checked={useArchiveAsReference} onChange={(e) => setUseArchiveAsReference(e.target.checked)} className="rounded" />
+                <span>Использовать текст архивной ДИ как референс в промпте</span>
+              </label>
             )}
           </div>
            <Button onClick={handleGenerateAll} disabled={generating} className="bg-purple-600 hover:bg-purple-700">

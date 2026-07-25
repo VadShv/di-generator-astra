@@ -43,6 +43,8 @@ interface ArchiveDI {
   positionId: string | null
   position: Position | null
   fileName: string | null; uploadedAt: string; createdAt: string; updatedAt: string
+  // Фаза 23: кол-во сгенерированных ДИ, созданных на базе этой архивной ДИ.
+  derivedCount?: number
 }
 
 const gradeLabel = (grade: string | null): string | null => {
@@ -392,12 +394,17 @@ export function ArchiveModule() {
               <TableBody>
                 {archiveDIs.map(di => (
                   <TableRow key={di.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {!di.positionId && <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">непривязана</Badge>}
-                        {di.title}
-                      </div>
-                    </TableCell>
+                   <TableCell className="font-medium">
+                     <div className="flex items-center gap-2">
+                       {!di.positionId && <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">непривязана</Badge>}
+                       {di.title}
+                       {di.derivedCount && di.derivedCount > 0 && (
+                         <Badge variant="outline" className="text-xs text-violet-700 border-violet-300 bg-violet-50">
+                           база для {di.derivedCount} ДИ
+                         </Badge>
+                       )}
+                     </div>
+                   </TableCell>
                     <TableCell>
                       {di.position ? (
                         <div className="text-sm space-y-0.5">

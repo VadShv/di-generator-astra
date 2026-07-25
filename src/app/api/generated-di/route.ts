@@ -17,7 +17,7 @@ export async function GET(request: Request) {
       include: {
         position: {
           include: {
-            department: true,
+            department: { include: { company: true } },
           },
         },
         sections: {
@@ -26,11 +26,18 @@ export async function GET(request: Request) {
         versions: {
           orderBy: { version: 'desc' },
         },
+        // Фаза 23: архивная ДИ как база генерации.
+        sourceArchive: true,
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json(generatedDIs)
+    // Фаза 23: вычисляем тип ДИ (draft|review|approved) на основе статуса.
+    const withType = generatedDIs.map((di) => ({
+      ...di,
+      type: di.status === 'review' ? 'review' : di.status === 'approved' ? 'approved' : 'draft',
+    }))
+    return NextResponse.json(withType)
   } catch (error) {
     console.error('GeneratedDI GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки сгенерированных ДИ' }, { status: 500 })

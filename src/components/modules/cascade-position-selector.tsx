@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { Select as MultiSelect } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Loader2, CheckCircle2, Building2, Users, Landmark } from 'lucide-react'
 
 // Минимальные типы данных, получаемых из API
@@ -24,6 +27,11 @@ interface CascadePositionSelectorProps {
   // Выбранная должность (контролируемый компонент)
   positionId: string
   onPositionChange: (positionId: string) => void
+  // Фаза 23: режим выбора. 'single' (по умолчанию) или 'multi' (массовая генерация).
+  mode?: 'single' | 'multi'
+  // Для режима multi: выбранные должности и колбэк.
+  selectedPositionIds?: string[]
+  onPositionsChange?: (positionIds: string[]) => void
   // Опционально: предзагруженные данные, иначе компонент грузит сам
   companies?: Company[]
   departments?: DepartmentItem[]
@@ -47,6 +55,9 @@ interface CascadePositionSelectorProps {
 export function CascadePositionSelector({
   positionId,
   onPositionChange,
+  mode = 'single',
+  selectedPositionIds = [],
+  onPositionsChange,
   companies: companiesProp,
   departments: departmentsProp,
   positions: positionsProp,
@@ -132,6 +143,134 @@ export function CascadePositionSelector({
   }
   const handlePositionChange = (id: string) => {
     onPositionChange(id)
+  }
+
+  // ===================== РЕЖИМ MULTI (массовая генерация) =====================
+  // ТЗ §5.3: выбор всех/нескольких подразделений и должностей.
+  if (mode === 'multi') {
+    const filteredDepartmentsMulti = selCompanyId
+      ? departments.filter(d => d.companyId === selCompanyId)
+      : []
+    const filteredPositionsMulti = selDepartmentId
+      ? positions.filter(p => p.departmentId === selDepartmentId)
+      : []
+
+    // Переключение должности в мульти-выборе.
+    const togglePosition = (id: string) => {
+      if (!onPositionsChange) return
+      const next = selectedPositionIds.includes(id)
+        ? selectedPositionIds.filter(x => x !== id)
+        : [...selectedPositionIds, id]
+      onPositionsChange(next)
+    }
+    // Выбрать все должности текущего подразделения.
+    const selectAllInDept = () => {
+      if (!onPositionsChange) return
+      const deptIds = filteredPositionsMulti.map(p => p.id)
+      const others = selectedPositionIds.filter(id => !deptIds.includes(id))
+      onPositionsChange([...others, ...deptIds])
+    }
+    // Снять выбор со всех должностей текущего подразделения.
+    const clearDept = () => {
+      if (!onPositionsChange) return
+      const deptIds = filteredPositionsMulti.map(p => p.id)
+      onPositionsChange(selectedPositionIds.filter(id => !deptIds.includes(id)))
+    }
+    const allDeptSelected = filteredPositionsMulti.length > 0 && filteredPositionsMulti.every(p => selectedPositionIds.includes(p.id))
+
+    return (
+      <div className="space-y-3">
+        {loading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Блок 1: Организация (одна) */}
+            <Card className={selCompanyId ? '' : 'ring-2 ring-primary/30'}>
+              <CardHeader className={compact ? 'p-3 pb-1' : 'pb-3'}>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <span className={`flex items-center justify-center h-5 w-5 rounded-full text-xs font-bold ${selCompanyId ? 'bg-emerald-500 text-white' : 'bg-primary text-primary-foreground'}`}>1</span>
+                  <Landmark className="h-4 w-4" /> Организация
+                </CardTitle>
+              </CardHeader>
+              <CardContent className={compact ? 'p-3 pt-0' : ''}>
+                <Select value={selCompanyId} onValueChange={handleCompanyChange}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Выберите организацию" /></SelectTrigger>
+                  <SelectContent>
+                    {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </CardContent>
+            </Card>
+
+            {/* Блок 2: Подразделение (мультивыбор) */}
+            <Card className={selCompanyId ? '' : 'opacity-50'}>
+              <CardHeader className={compact ? 'p-3 pb-1' : 'pb-3'}>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <span className={`flex items-center justify-center h-5 w-5 rounded-full text-xs font-bold ${selDepartmentId ? 'bg-emerald-500 text-white' : selCompanyId ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>2</span>
+                  <Building2 className="h-4 w-4" /> Подразделение
+                </CardTitle>
+              </CardHeader>
+              <CardContent className={compact ? 'p-3 pt-0' : ''}>
+                {selCompanyId ? (
+                  <Select value={selDepartmentId} onValueChange={handleDepartmentChange}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Выберите подразделение" /></SelectTrigger>
+                    <SelectContent>
+                      {filteredDepartmentsMulti.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="text-xs text-muted-foreground py-3 text-center">Выберите организацию</div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Блок 3: Должности (мультивыбор с «выбрать все») */}
+            <Card className={selDepartmentId ? '' : 'opacity-50'}>
+              <CardHeader className={compact ? 'p-3 pb-1' : 'pb-3'}>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <span className={`flex items-center justify-center h-5 w-5 rounded-full text-xs font-bold ${selectedPositionIds.length > 0 ? 'bg-emerald-500 text-white' : selDepartmentId ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>3</span>
+                  <Users className="h-4 w-4" /> Должности
+                  {selectedPositionIds.length > 0 && (
+                    <Badge variant="secondary" className="text-xs ml-auto">{selectedPositionIds.length}</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className={compact ? 'p-3 pt-0' : ''}>
+                {selDepartmentId ? (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between pb-1 border-b">
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <Checkbox checked={allDeptSelected} onCheckedChange={allDeptSelected ? clearDept : selectAllInDept} />
+                        <span className="font-medium">Все должности</span>
+                      </label>
+                      <button onClick={clearDept} className="text-xs text-muted-foreground hover:text-destructive">Очистить</button>
+                    </div>
+                    <ScrollArea className="h-40">
+                      <div className="space-y-1 pr-2">
+                        {filteredPositionsMulti.map(p => (
+                          <label key={p.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-muted cursor-pointer">
+                            <Checkbox
+                              checked={selectedPositionIds.includes(p.id)}
+                              onCheckedChange={() => togglePosition(p.id)}
+                            />
+                            <span className="text-xs">{p.title}</span>
+                            {p.code && <span className="text-xs text-muted-foreground">({p.code})</span>}
+                          </label>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground py-3 text-center">Выберите подразделение</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+    )
   }
 
   if (loading) {

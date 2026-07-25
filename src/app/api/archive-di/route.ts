@@ -45,11 +45,21 @@ export async function GET(request: Request) {
 
     const archiveDIs = await db.archiveDI.findMany({
       where,
-      include: ARCHIVE_INCLUDE,
+      include: {
+        ...ARCHIVE_INCLUDE,
+        // Фаза 23: производные сгенерированные ДИ (для бейджа «на базе»).
+        _count: { select: { derivedGeneratedDIs: true } },
+      },
       orderBy: { uploadedAt: 'desc' },
     })
 
-    return NextResponse.json(archiveDIs)
+    // Фаза 23: добавляем type = 'archive' и кол-во производных ДИ.
+    const withType = archiveDIs.map((di) => ({
+      ...di,
+      type: 'archive' as const,
+      derivedCount: di._count?.derivedGeneratedDIs ?? 0,
+    }))
+    return NextResponse.json(withType)
   } catch (error) {
     console.error('ArchiveDI GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки архива ДИ' }, { status: 500 })

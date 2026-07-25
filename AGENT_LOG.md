@@ -1398,4 +1398,58 @@ masterPromptId НЕ передаётся. Сервер сам вызывает r
   -> интеграция во вкладки -> проверки.
 
 ТЗ ждет реализации. Следующий шаг — начать с этапа 1 (схема sourceArchiveId).
+СТАТУС РЕАЛИЗАЦИИ: ВЫПОЛНЕНО (этапы 1-7 из 8). Этап 8 — фиксация (этот лог + commit).
+
+Этап 1 — Схема БД: в prisma/schema.prisma в модель GeneratedDI добавлены
+sourceArchiveId String? и relation sourceArchive ArchiveDI? @relation("DISourceArchive",
+onDelete: SetNull). В ArchiveDI — обратное поле derivedGeneratedDIs GeneratedDI[]
+@relation("DISourceArchive") и индекс @@index([sourceArchiveId]). bun run db:push
+применена, Prisma Client сгенерирован.
+
+Этап 2 — API: ai-generate принимает archiveDIId + useArchiveAsReference, грузит
+ArchiveDI, подставляет в промпт как «РЕФЕРЕНС — архивная ДИ (база генерации)»,
+сохраняет sourceArchiveId в создаваемой GeneratedDI. generated-di/route.ts —
+include sourceArchive + department.company, вычисление type (draft|review|approved).
+archive-di/route.ts — _count derivedGeneratedDIs, вычисление type: 'archive' и
+derivedCount. search/route.ts — type к результатам ДИ.
+
+Этап 3 — Компонент <DICard />: новый src/components/modules/di-card.tsx. Единая
+карточка с 4 типами (archive/draft/review/approved), цветовой индикацией,
+обязательными полями (ID с копированием, тип-бейдж, название, компания/
+подразделение/должность, дата, текст с expand), опциональными полями (version,
+templateName, fileName, auditScore, sourceArchiveTitle, derivedCount),
+контекстными действиями. Экспортированы утилита diTypeFromStatus(status) и тип DIType.
+
+Этап 4 — CascadePositionSelector режим multi: добавлены пропсы mode?:
+'single' | 'multi', selectedPositionIds, onPositionsChange; отдельная ветка
+рендера для multi с чекбоксами должностей и кнопкой «Выбрать все».
+
+Этап 5 — Компонент <DISelector />: новый src/components/modules/di-selector.tsx.
+Каскадная выборка должности + загрузка её ДИ (generated + archive) + рендер
+карточками <DICard /> с фильтром по allowedTypes.
+
+Этап 6 — Интеграция во вкладки: generation.tsx — state archiveDIs, selArchiveDIId,
+useArchiveAsReference, useEffect загрузки архивных ДИ по должности, UI-блок
+«Базовая архивная ДИ», передача archiveDIId в ai-generate. position-di-workspace.tsx
+— state selArchiveBaseId, useArchiveAsReference, UI-селектор архивной ДИ в блоке
+генерации, передача в handleGenerate. archive.tsx — бейдж «база для N ДИ» в таблице
++ derivedCount в интерфейсе. mass-generation оставлен как есть (уже имеет
+декомпозированный 3-блочный каскадный выбор).
+
+Этап 7 — Проверки: tsc --noEmit -> 0 ошибок. eslint . -> 0 ошибок.
+GET /api/generated-di -> type: "draft", sourceArchiveId: null. GET /api/archive-di
+-> type: "archive", derivedCount: 0. POST /api/generate-di/ai-generate с
+archiveDIId -> HTTP 201, создана ДИ с sourceArchiveId, sourceArchive включён
+в ответ. (Секции с «Ошибка генерации» — нет активного ИИ-провайдера, ожидаемо
+и не связано с задачей.)
+
+Новые файлы: src/components/modules/di-card.tsx, src/components/modules/di-selector.tsx.
+Изменённые: prisma/schema.prisma, src/app/api/generate-di/ai-generate/route.ts,
+src/app/api/generated-di/route.ts, src/app/api/archive-di/route.ts,
+src/app/api/search/route.ts, src/components/modules/generation.tsx,
+src/components/modules/position-di-workspace.tsx, src/components/modules/archive.tsx,
+src/components/modules/cascade-position-selector.tsx.
+
+**Фаза 23 ЗАВЕРШЕНА. Карточки ДИ унифицированы: 4 типа, генерация на базе
+архивной ДИ, единые каскадные селекторы.**
 **ЗАВЕРШЕНО. Граф связности теперь целостен.**

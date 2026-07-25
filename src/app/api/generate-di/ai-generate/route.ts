@@ -7,7 +7,7 @@ import { db } from '@/lib/db'
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { positionId, templateId, masterPromptId } = body
+    const { positionId, templateId, masterPromptId, archiveDIId, useArchiveAsReference = true } = body
 
     if (!positionId || typeof positionId !== 'string') {
       return NextResponse.json({ error: 'ID должности обязателен' }, { status: 400 })
@@ -71,14 +71,26 @@ export async function POST(request: Request) {
     }
 
     // d) Get any archive DIs for this position (as reference)
-    const archiveDIs = await db.archiveDI.findMany({
-      where: { positionId },
+    // Фаза 23: если явно выбрана архивная ДИ как база — используем её приоритетно,
+    // сохраняем sourceArchiveId. Иначе берём до 3 последних архивных ДИ по должности.
+    const selectedArchiveDI = (archiveDIId && typeof archiveDIId === 'string' && useArchiveAsReference)
+      ? await db.archiveDI.findUnique({ where: { id: archiveDIId } })
+      : null
+    // Дополнительные архивные ДИ для контекста (исключая выбранную как базу).
+    const extraArchiveDIs = await db.archiveDI.findMany({
+      where: { positionId, ...(selectedArchiveDI ? { id: { not: selectedArchiveDI.id } } : {}) },
       orderBy: { uploadedAt: 'desc' },
-      take: 3, // Limit to 3 most recent
+      take: 2,
     })
-
-    const archiveContext = archiveDIs.length > 0
-      ? archiveDIs.map((di, i) => `--- Архивная ДИ #${i + 1}: ${di.title} ---\n${di.content}`).join('\n\n')
+    const archiveParts: string[] = []
+    if (selectedArchiveDI) {
+      archiveParts.push(`--- РЕФЕРЕНС — архивная ДИ (база генерации): ${selectedArchiveDI.title} ---\n${selectedArchiveDI.content}`)
+    }
+    extraArchiveDIs.forEach((di, i) => {
+      archiveParts.push(`--- Архивная ДИ #${i + 1}: ${di.title} ---\n${di.content}`)
+    })
+    const archiveContext = archiveParts.length > 0
+      ? archiveParts.join('\n\n')
       : 'Архивные ДИ для данной должности отсутствуют.'
 
     // e) Получаем клиент ИИ-провайдера (из БД или fallback z-ai-sdk).
@@ -186,6 +198,8 @@ ${section.content ? `Примерное содержание/шаблон: ${sec
       data: {
         positionId,
         templateId,
+        // Фаза 23: связь с архивной ДИ, выбранной как база генерации.
+        ...(selectedArchiveDI ? { sourceArchiveId: selectedArchiveDI.id } : {}),
         title: `ДИ — ${position.title}`,
         status: 'draft',
         currentVersion: 1,
@@ -197,6 +211,7 @@ ${section.content ? `Примерное содержание/шаблон: ${sec
       include: {
         position: { include: { department: true, businessFunction: true, project: true } },
         template: true,
+        sourceArchive: true,
         sections: { orderBy: { order: 'asc' } },
       },
     })

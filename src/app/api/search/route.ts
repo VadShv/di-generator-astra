@@ -76,6 +76,7 @@ export async function GET(request: NextRequest) {
         id: i.id,
         title: i.title,
         status: i.status,
+        type: i.status === 'review' ? 'review' : i.status === 'approved' ? 'approved' : 'draft',
         updatedAt: i.updatedAt,
         positionTitle: i.position?.title ?? null,
       })),
