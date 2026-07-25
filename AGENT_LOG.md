@@ -1139,3 +1139,76 @@ ChevronUp/ChevronDown). Кнопка «Сбросить фильтр» в заг
 - API каскада (companies/departments/positions) → 200.
  
 **ЗАВЕРШЕНО.**
+
+## 21. ДОРАБОТКА ВКЛАДКИ «МАСТЕР-ПРОМПТЫ»
+
+### 21.1 Постановка
+
+Вкладка «Мастер-промпты» — центральная библиотека шаблонов запросов к ИИ.
+Задача: сделать её гибкой и эффективной (категории, версионирование, переменные,
+условия применимости, ресолвер, тестирование, цепочки промптов, метрики).
+ТЗ зафиксировано в `TZ_MASTER_PROMPTS.md`.
+
+### 21.2 Фаза 1 — Схема данных
+
+`prisma/schema.prisma`:
+- `MasterPrompt` расширен полями: `companyId`, `positionId`, `tags`,
+  `estimatedTokens`, `useCount`, `lastUsedAt`, связь `testResults`.
+- Новая модель `PromptChain` (steps JSON, isActive).
+- Новая модель `PromptTestResult` (masterPromptId, positionId, providerId,
+  response, durationMs, rating).
+- `MasterPromptVersion` расширен полем `diff`.
+- Обратные связи в `Company.masterPrompts` и `Position.masterPrompts`.
+- `db:push` + `db:generate` выполнены.
+
+### 21.3 Фаза 2 — Резолв + конфликты
+
+`src/lib/master-prompt.ts` (переписан):
+- `resolveMasterPrompt` поддерживает `companyId`, `functionType`, `positionId`
+  (обратно совместим).
+- Новые функции: `estimateTokens()`, `detectPromptConflicts()`,
+  `incrementPromptUsage()`.
+- `savePromptVersion()` принимает `diff`.
+- `src/app/api/master-prompts/route.ts` — починен (был дублированный GET):
+  - GET с поддержкой `?tag`, `?search`, `?companyId`, include company/position.
+  - POST/PUT принимают `tags`, `companyId`, `positionId`, `estimatedTokens`,
+    `changeDescription`; автодетект переменных из контента.
+  - Сохранение snapshot версии через `savePromptVersion`.
+
+### 21.4 Фаза 3 — Новые API-роуты
+
+- `POST /api/master-prompts/test` — тестовый запуск промпта на ИИ-модели,
+  сохранение в `PromptTestResult`.
+- `POST /api/master-prompts/preview` — рендер промпта с переменными без ИИ
+  (возвращает detectedVariables, unfilledVariables, estimatedTokens).
+- `CRUD /api/prompt-chains` — создание/обновление/удаление цепочек.
+- `POST /api/prompt-chains/run` — запуск цепочки
+  (generation→improvement→audit) с прогрессом по шагам.
+- `GET/PUT /api/master-prompts/test-results` — история тестов + оценки 1-5.
+
+### 21.5 Фазы 4-9 — UI и метрики
+
+`src/components/modules/master-prompts.tsx` (переписан, типы вынесены в
+`master-prompts-types.ts`):
+- **Умный редактор** (Фаза 4): вкладки «Редактирование»/«Предпросмотр»,
+  панель переменных (клик вставляет `{{...}}`), live-предпросмотр рендера
+  с подстановкой, индикатор токенов, список найденных/незаполненных переменных.
+- **Тестирование** (Фаза 5): запуск на реальной ИИ-модели, выбор провайдера,
+  история тестов, оценки 1-5 (звёзды).
+- **Версионирование** (Фаза 6): история версий, описание изменений
+  (`changeDescription`), диффы в `MasterPromptVersion`.
+- **Цепочки промптов** (Фаза 7): визуальный конструктор шагов,
+  CRUD, запуск с прогрессом по шагам, итоговый результат.
+- **Навигация** (Фаза 8): фильтры по тегу/юр.лицу, поиск по содержимому,
+  импорт/экспорт JSON.
+- **Метрики** (Фаза 9): `incrementPromptUsage` интегрирован в
+  `ai-generate`, `ai-improve`, `batch-audit` (`useCount` + `lastUsedAt`);
+  отображение «Использован N раз» в списке.
+
+### 21.6 Проверки (2026-07-25)
+
+- `tsc --noEmit` → 0 ошибок.
+- `eslint .` → 0 ошибок.
+- Коммиты: «Фаза 2-3», «Фаза 4-9».
+
+**ЗАВЕРШЕНО.**
