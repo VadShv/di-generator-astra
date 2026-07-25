@@ -25,6 +25,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { Plus, Pencil, Trash2, Eye, Loader2, Sparkles, FileText, PenLine, Wand2, Download, ChevronDown, ChevronRight, CheckCircle2, RotateCcw, BookOpen, Zap, Crown, Star, LayoutTemplate, ArrowUp, ArrowDown, Settings2 } from 'lucide-react'
+import { CascadePositionSelector } from '@/components/modules/cascade-position-selector'
 
 interface Department { id: string; name: string; code: string }
 interface BusinessFunction { id: string; name: string }
@@ -64,11 +65,13 @@ const gradeLabel = (grade?: string | null) => grade ? GRADE_LABELS[grade] || gra
 export function GenerationModule() {
   const { toast } = useToast()
   const [viewMode, setViewMode] = useState<'list' | 'generate' | 'manual' | 'editor'>('list')
-  const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
-  const [positions, setPositions] = useState<Position[]>([])
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [masterPrompts, setMasterPrompts] = useState<MasterPrompt[]>([])
-  const [loading, setLoading] = useState(true)
+ const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
+ const [positions, setPositions] = useState<Position[]>([])
+ const [templates, setTemplates] = useState<Template[]>([])
+ const [masterPrompts, setMasterPrompts] = useState<MasterPrompt[]>([])
+ const [loading, setLoading] = useState(true)
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([])
+  const [departments, setDepartments] = useState<{ id: string; name: string; companyId: string | null }[]>([])
 
   // Generate form (AI)
   const [selPositionId, setSelPositionId] = useState('')
@@ -109,17 +112,23 @@ export function GenerationModule() {
   const fetchDIs = useCallback(async () => {
     try { const res = await fetch('/api/generate-di'); if (res.ok) setGeneratedDIs(await res.json()) } catch { toast({ title: 'Ошибка', description: 'Не удалось загрузить ДИ', variant: 'destructive' }) }
   }, [toast])
-  const fetchPositions = useCallback(async () => {
-    try { const res = await fetch('/api/positions'); if (res.ok) setPositions(await res.json()) } catch { /* silent */ }
+ const fetchPositions = useCallback(async () => {
+   try { const res = await fetch('/api/positions'); if (res.ok) setPositions(await res.json()) } catch { /* silent */ }
+ }, [])
+  const fetchCompanies = useCallback(async () => {
+    try { const res = await fetch('/api/companies'); if (res.ok) setCompanies(await res.json()) } catch { /* silent */ }
   }, [])
-  const fetchTemplates = useCallback(async () => {
-    try { const res = await fetch('/api/templates'); if (res.ok) setTemplates((await res.json()).filter((t: Template) => t.isActive)) } catch { /* silent */ }
+  const fetchDepartments = useCallback(async () => {
+    try { const res = await fetch('/api/departments'); if (res.ok) setDepartments(await res.json()) } catch { /* silent */ }
   }, [])
-  const fetchPrompts = useCallback(async () => {
-    try { const res = await fetch('/api/master-prompts?active=true'); if (res.ok) setMasterPrompts(Array.isArray(await res.json()) ? await res.json() : []) } catch { setMasterPrompts([]) }
-  }, [])
+ const fetchTemplates = useCallback(async () => {
+   try { const res = await fetch('/api/templates'); if (res.ok) setTemplates((await res.json()).filter((t: Template) => t.isActive)) } catch { /* silent */ }
+ }, [])
+ const fetchPrompts = useCallback(async () => {
+   try { const res = await fetch('/api/master-prompts?active=true'); if (res.ok) setMasterPrompts(Array.isArray(await res.json()) ? await res.json() : []) } catch { setMasterPrompts([]) }
+ }, [])
 
-  useEffect(() => { (async () => { setLoading(true); await Promise.all([fetchDIs(), fetchPositions(), fetchTemplates(), fetchPrompts()]); setLoading(false) })() }, [fetchDIs, fetchPositions, fetchTemplates, fetchPrompts])
+  useEffect(() => { (async () => { setLoading(true); await Promise.all([fetchDIs(), fetchPositions(), fetchTemplates(), fetchPrompts(), fetchCompanies(), fetchDepartments()]); setLoading(false) })() }, [fetchDIs, fetchPositions, fetchTemplates, fetchPrompts, fetchCompanies, fetchDepartments])
 
   const startGenerate = () => { setSelPositionId(''); setSelTemplateId(''); setGenerating(false); setViewMode('generate') }
 
@@ -613,21 +622,22 @@ export function GenerationModule() {
           <Button variant="outline" onClick={() => setViewMode('list')}>← Назад</Button>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Wand2 className="h-6 w-6 text-purple-600" /> ИИ-генерация ДИ</h1>
         </div>
-        <Card>
-          <CardContent className="p-6 space-y-4">
-            <div>
-              <Label>Должность *</Label>
-              <Select value={selPositionId} onValueChange={setSelPositionId}>
-                <SelectTrigger><SelectValue placeholder="Выберите должность" /></SelectTrigger>
-                <SelectContent>{positions.map(p => {
-                  const gLabel = gradeLabel(p.grade)
-                  return <SelectItem key={p.id} value={p.id}>{p.title} ({p.department?.name}){gLabel ? ` — ${gLabel}` : ''}</SelectItem>
-                })}</SelectContent>
-              </Select>
-            </div>
-            {/* Position context info when selected */}
-            {selectedPosition && (
-              <Card className="bg-muted/30 border-muted">
+       <Card>
+       <CardContent className="p-6 space-y-4">
+          <div>
+            <Label>Должность *</Label>
+            <CascadePositionSelector
+              positionId={selPositionId}
+              onPositionChange={setSelPositionId}
+              companies={companies}
+              departments={departments}
+              positions={positions}
+              compact
+            />
+          </div>
+          {/* Position context info when selected */}
+           {selectedPosition && (
+             <Card className="bg-muted/30 border-muted">
                 <CardContent className="p-3">
                   {renderPositionContextInfo(selectedPosition)}
                 </CardContent>
@@ -805,22 +815,21 @@ export function GenerationModule() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2"><BookOpen className="h-4 w-4" /> Основные данные</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label>Название ДИ *</Label>
-                <Input value={manualTitle} onChange={e => setManualTitle(e.target.value)} placeholder="ДИ — Руководитель отдела продаж" />
-              </div>
-              <div>
-                <Label>Должность *</Label>
-                <Select value={manualPositionId} onValueChange={setManualPositionId}>
-                  <SelectTrigger><SelectValue placeholder="Выберите должность" /></SelectTrigger>
-                  <SelectContent>{positions.map(p => {
-                    const gLabel = gradeLabel(p.grade)
-                    return <SelectItem key={p.id} value={p.id}>{p.title} ({p.department?.name}){gLabel ? ` — ${gLabel}` : ''}</SelectItem>
-                  })}</SelectContent>
-                </Select>
-              </div>
+         <CardContent className="space-y-3">
+            <div>
+              <Label>Название ДИ *</Label>
+              <Input value={manualTitle} onChange={e => setManualTitle(e.target.value)} placeholder="ДИ — Руководитель отдела продаж" />
+            </div>
+            <div>
+              <Label>Должность * (выбор: организация → подразделение → должность)</Label>
+              <CascadePositionSelector
+                positionId={manualPositionId}
+                onPositionChange={setManualPositionId}
+                companies={companies}
+                departments={departments}
+                positions={positions}
+                compact
+              />
             </div>
             {/* Position context info when selected */}
             {selectedManualPosition && (
