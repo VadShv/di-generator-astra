@@ -12,22 +12,24 @@ export async function GET(request: NextRequest) {
     if (positionId) where.positionId = positionId
     if (status) where.status = status
 
-    const generatedDIs = await db.generatedDI.findMany({
-      where,
-      include: {
-        position: {
-          include: { department: true },
-        },
-        template: true,
-        sections: {
-          orderBy: { order: 'asc' },
-        },
-        _count: {
-          select: { sections: true, versions: true },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+   const generatedDIs = await db.generatedDI.findMany({
+     where,
+     include: {
+       position: {
+          include: { department: { include: { company: true } }, businessFunction: true },
+       },
+       template: true,
+       sections: {
+         orderBy: { order: 'asc' },
+       },
+       _count: {
+         select: { sections: true, versions: true },
+       },
+        // Фаза 23: архивная ДИ как база генерации.
+        sourceArchive: true,
+     },
+     orderBy: { createdAt: 'desc' },
+   })
 
     return NextResponse.json(generatedDIs)
   } catch (error) {
@@ -50,11 +52,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Название ДИ обязательно' }, { status: 400 })
     }
 
-    // Validate position exists
-    const position = await db.position.findUnique({
-      where: { id: positionId },
-      include: { department: true },
-    })
+   // Validate position exists
+   const position = await db.position.findUnique({
+     where: { id: positionId },
+      include: { department: { include: { company: true } } },
+   })
     if (!position) {
       return NextResponse.json({ error: 'Должность не найдена' }, { status: 404 })
     }
@@ -84,13 +86,13 @@ export async function POST(request: Request) {
                 editedBy: 'manual',
               })),
             }
-          : undefined,
-      },
-      include: {
-        position: { include: { department: true } },
-        template: true,
-        sections: { orderBy: { order: 'asc' } },
-      },
+         : undefined,
+     },
+     include: {
+        position: { include: { department: { include: { company: true } } } },
+       template: true,
+       sections: { orderBy: { order: 'asc' } },
+     },
     })
 
     // Create initial version record v1
@@ -199,13 +201,13 @@ export async function PUT(request: Request) {
               editedBy: s.editedBy || null,
             })),
           },
-        },
-        include: {
-          position: { include: { department: true } },
-          template: true,
-          sections: { orderBy: { order: 'asc' } },
-        },
-      })
+       },
+       include: {
+          position: { include: { department: { include: { company: true } } } },
+         template: true,
+         sections: { orderBy: { order: 'asc' } },
+       },
+     })
 
       // Create new version record
       const updated = await db.generatedDI.findUnique({
@@ -234,24 +236,24 @@ export async function PUT(request: Request) {
         data: {
           title: title !== undefined ? title.trim() : undefined,
           status: status !== undefined ? status : undefined,
-          ...signedData,
-        },
-        include: {
-          position: { include: { department: true } },
-          template: true,
-          sections: { orderBy: { order: 'asc' } },
-        },
-      })
-    }
+         ...signedData,
+       },
+       include: {
+          position: { include: { department: { include: { company: true } } } },
+         template: true,
+         sections: { orderBy: { order: 'asc' } },
+       },
+     })
+   }
 
-    // Fetch the updated DI with version info
-    const finalDI = await db.generatedDI.findUnique({
-      where: { id },
-      include: {
-        position: { include: { department: true } },
-        template: true,
-        sections: { orderBy: { order: 'asc' } },
-        versions: { orderBy: { version: 'desc' } },
+   // Fetch the updated DI with version info
+   const finalDI = await db.generatedDI.findUnique({
+     where: { id },
+     include: {
+        position: { include: { department: { include: { company: true } } } },
+       template: true,
+       sections: { orderBy: { order: 'asc' } },
+       versions: { orderBy: { version: 'desc' } },
       },
     })
 

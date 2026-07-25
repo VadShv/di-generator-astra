@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { GitCompareArrows, Plus, Sparkles, Loader2, History } from 'lucide-react'
+import { CascadePositionSelector } from './cascade-position-selector'
 
 interface Department { id: string; name: string; code: string }
 interface Position { id: string; title: string; code: string; departmentId: string; department: Department }
@@ -43,6 +44,8 @@ export function ComparisonModule() {
   const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedDI, setSelectedDI] = useState<GeneratedDI | null>(null)
+  // Единый каскадный фильтр «компания → подразделение → должность» для выбора ДИ.
+  const [filterPositionId, setFilterPositionId] = useState('')
 
   // Upload
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
@@ -72,6 +75,11 @@ export function ComparisonModule() {
   useEffect(() => { fetchDIs() }, [fetchDIs])
 
   const handleSelectDI = (di: GeneratedDI) => { setSelectedDI(di); setShowDiff(false); setAiSummary(null); setCompareV1(null); setCompareV2(null) }
+
+  // Отфильтрованный список ДИ: если выбрана должность — показываем только её ДИ.
+  const filteredDIs = filterPositionId
+    ? generatedDIs.filter(d => d.positionId === filterPositionId)
+    : generatedDIs
 
   const handleUpload = async () => {
     if (!uploadForm.generatedDIId || !uploadForm.content.trim()) { toast({ title: 'Ошибка', description: 'Заполните обязательные поля', variant: 'destructive' }); return }
@@ -126,15 +134,23 @@ export function ComparisonModule() {
       {loading ? <p className="text-center py-8 text-muted-foreground">Загрузка...</p> : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* DI List */}
-          <Card className="lg:col-span-1"><CardHeader className="pb-2"><CardTitle className="text-base">Должностные инструкции</CardTitle></CardHeader>
-            <CardContent className="max-h-[600px] overflow-y-auto space-y-1">
-              {generatedDIs.map(di => (
-                <div key={di.id} className={`p-2 rounded cursor-pointer text-sm ${selectedDI?.id === di.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`} onClick={() => handleSelectDI(di)}>
-                  <p className="font-medium">{di.title}</p>
-                  <p className="text-xs text-muted-foreground">{di.position?.title} · {di.versions.length} версий</p>
-                </div>
-              ))}
-            </CardContent>
+         <Card className="lg:col-span-1"><CardHeader className="pb-2"><CardTitle className="text-base">Должностные инструкции</CardTitle></CardHeader>
+           <CardContent className="max-h-[600px] overflow-y-auto space-y-1">
+              <div className="mb-2 pb-2 border-b">
+                <CascadePositionSelector positionId={filterPositionId} onPositionChange={setFilterPositionId} />
+              </div>
+              {filteredDIs.map(di => (
+               <div key={di.id} className={`p-2 rounded cursor-pointer text-sm ${selectedDI?.id === di.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`} onClick={() => handleSelectDI(di)}>
+                 <p className="font-medium">{di.title}</p>
+                 <p className="text-xs text-muted-foreground">{di.position?.title} · {di.versions.length} версий</p>
+               </div>
+             ))}
+              {filteredDIs.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  {filterPositionId ? 'Нет ДИ для выбранной должности' : 'Нет ДИ'}
+                </p>
+              )}
+           </CardContent>
           </Card>
 
           {/* Version Details */}

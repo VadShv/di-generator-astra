@@ -22,9 +22,9 @@ export async function POST(request: Request) {
     // Get the DI with full content
     const di = await db.generatedDI.findUnique({
       where: { id: generatedDIId },
-      include: {
-        position: { include: { department: true, businessFunction: true, project: true } },
-        sections: { orderBy: { order: 'asc' } },
+    include: {
+      position: { include: { department: { include: { company: true } }, businessFunction: true, project: true } },
+     sections: { orderBy: { order: 'asc' } },
       },
     })
 

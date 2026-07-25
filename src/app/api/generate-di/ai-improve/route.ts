@@ -22,9 +22,9 @@ export async function POST(request: Request) {
       where: { id: sectionId },
       include: {
         generatedDI: {
-          include: {
-            position: { include: { department: true, businessFunction: true, project: true } },
-          },
+         include: {
+           position: { include: { department: { include: { company: true } }, businessFunction: true, project: true } },
+         },
         },
       },
     })

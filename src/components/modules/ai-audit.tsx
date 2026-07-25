@@ -17,6 +17,7 @@ import {
   Alert, AlertDescription, AlertTitle,
 } from '@/components/ui/alert'
 import { useToast } from '@/hooks/use-toast'
+import { CascadePositionSelector } from './cascade-position-selector'
 import {
   Shield, Loader2, AlertTriangle, Clock, FileWarning, Scale, CheckCircle2, History,
   Copy, MessageSquareWarning, Gavel, Target, ListChecks,
@@ -205,11 +206,17 @@ function ScoreCircle({ score }: { score: number }) {
 export function AiAuditModule() {
   const { toast } = useToast()
   const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
+  // Единый каскадный фильтр «компания → подразделение → должность» для выбора ДИ.
+  const [filterPositionId, setFilterPositionId] = useState('')
   const [loading, setLoading] = useState(true)
   const [selectedDIId, setSelectedDIId] = useState<string>('')
 
   // Audit state
   const [auditType, setAuditType] = useState<string>('full')
+  // Отфильтрованный список ДИ: если выбрана должность — показываем только её ДИ.
+  const filteredDIs = filterPositionId
+    ? generatedDIs.filter(d => d.positionId === filterPositionId)
+    : generatedDIs
   const [auditing, setAuditing] = useState(false)
   const [auditProgress, setAuditProgress] = useState(0)
   const [currentAudit, setCurrentAudit] = useState<AuditResult | null>(null)
@@ -346,23 +353,26 @@ export function AiAuditModule() {
           <CardTitle className="text-base">Выбор ДИ и тип аудита</CardTitle>
           <CardDescription>Выберите должностную инструкцию для анализа</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1.5">Должностная инструкция</p>
-              <Select value={selectedDIId} onValueChange={setSelectedDIId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите ДИ" />
-                </SelectTrigger>
-                <SelectContent>
-                  {generatedDIs.map(di => (
-                    <SelectItem key={di.id} value={di.id}>
-                      {di.title} — {di.position?.title || '—'}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+       <CardContent className="space-y-4">
+          <div className="pb-3 border-b">
+            <CascadePositionSelector positionId={filterPositionId} onPositionChange={(id) => { setFilterPositionId(id); setSelectedDIId('') }} />
+          </div>
+         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+           <div>
+             <p className="text-xs font-medium text-muted-foreground mb-1.5">Должностная инструкция</p>
+             <Select value={selectedDIId} onValueChange={setSelectedDIId}>
+               <SelectTrigger>
+                 <SelectValue placeholder="Выберите ДИ" />
+               </SelectTrigger>
+               <SelectContent>
+                  {filteredDIs.map(di => (
+                   <SelectItem key={di.id} value={di.id}>
+                     {di.title} — {di.position?.title || '—'}
+                   </SelectItem>
+                 ))}
+               </SelectContent>
+             </Select>
+           </div>
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-1.5">Тип аудита</p>
               <Select value={auditType} onValueChange={setAuditType}>

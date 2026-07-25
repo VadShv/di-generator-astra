@@ -11,16 +11,16 @@ export async function GET(
 
     const version = await db.dIVersion.findUnique({
       where: { id },
-      include: {
-        generatedDI: {
-          include: {
-            position: {
-              include: {
-                department: true,
-              },
-            },
-          },
-        },
+     include: {
+       generatedDI: {
+         include: {
+           position: {
+             include: {
+                department: { include: { company: true } },
+             },
+           },
+         },
+       },
       },
     })
 

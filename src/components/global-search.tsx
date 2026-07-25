@@ -5,7 +5,7 @@ import {
   CommandDialog, CommandInput, CommandList, CommandEmpty,
   CommandGroup, CommandItem,
 } from '@/components/ui/command'
-import { Users, Building2, FileText, Search } from 'lucide-react'
+import { Users, Building2, FileText, Search, Archive } from 'lucide-react'
 import { useAppStore, type ActiveSection } from '@/lib/store'
 
 type PositionResult = {
@@ -28,10 +28,21 @@ type InstructionResult = {
   updatedAt: string
   positionTitle: string | null
 }
+type ArchiveDIResult = {
+  id: string
+  title: string
+  uploadedAt: string
+  fileName: string | null
+  positionTitle: string | null
+  departmentName: string | null
+  companyName: string | null
+  linked: boolean
+}
 type SearchResponse = {
   positions: PositionResult[]
   departments: DepartmentResult[]
   instructions: InstructionResult[]
+  archiveDIs?: ArchiveDIResult[]
 }
 
 // Глобальный поиск с дебаунсом: должности / подразделения / должностные инструкции.
@@ -39,7 +50,7 @@ type SearchResponse = {
 export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const setActiveSection = useAppStore(s => s.setActiveSection)
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<SearchResponse>({ positions: [], departments: [], instructions: [] })
+  const [results, setResults] = useState<SearchResponse>({ positions: [], departments: [], instructions: [], archiveDIs: [] })
   const [loading, setLoading] = useState(false)
 
   const runSearch = useCallback(async (q: string) => {
@@ -69,6 +80,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
     results.positions.length > 0 ||
     results.departments.length > 0 ||
     results.instructions.length > 0
+    || (results.archiveDIs?.length ?? 0) > 0
 
   const goTo = (section: ActiveSection) => {
     setActiveSection(section)
@@ -128,15 +140,36 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
                 <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm">{i.title}</div>
+                 <div className="truncate text-xs text-muted-foreground">
+                   {i.positionTitle ?? 'Без должности'} • {i.status}
+                 </div>
+                  {(i as InstructionResult & { departmentName?: string | null; companyName?: string | null }).companyName && (
+                    <div className="truncate text-xs text-muted-foreground/70">
+                      {(i as InstructionResult & { departmentName?: string | null; companyName?: string | null }).companyName}
+                      {(i as InstructionResult & { departmentName?: string | null; companyName?: string | null }).departmentName ? ` · ${(i as InstructionResult & { departmentName?: string | null }).departmentName}` : ''}
+                    </div>
+                  )}
+               </div>
+             </CommandItem>
+           ))}
+         </CommandGroup>
+       )}
+        {(results.archiveDIs?.length ?? 0) > 0 && (
+          <CommandGroup heading="Архивные ДИ">
+            {(results.archiveDIs ?? []).map(a => (
+              <CommandItem key={a.id} onSelect={() => goTo('archive')} className="gap-2">
+                <Archive className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm">{a.title}</div>
                   <div className="truncate text-xs text-muted-foreground">
-                    {i.positionTitle ?? 'Без должности'} • {i.status}
+                    {a.linked ? `${a.companyName ?? ''}${a.departmentName ? ` · ${a.departmentName}` : ''}${a.positionTitle ? ` · ${a.positionTitle}` : ''}` : 'Не привязана к должности'}
                   </div>
                 </div>
               </CommandItem>
             ))}
           </CommandGroup>
         )}
-      </CommandList>
+     </CommandList>
     </CommandDialog>
   )
 }

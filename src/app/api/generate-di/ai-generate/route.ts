@@ -19,9 +19,9 @@ export async function POST(request: Request) {
 
     // a) Get the position info (with department, business function, project)
     const position = await db.position.findUnique({
-      where: { id: positionId },
-      include: { department: true, businessFunction: true, project: true },
-    })
+     where: { id: positionId },
+     include: { department: { include: { company: true } }, businessFunction: true, project: true },
+   })
     if (!position) {
       return NextResponse.json({ error: 'Должность не найдена' }, { status: 404 })
     }
@@ -208,12 +208,12 @@ ${section.content ? `Примерное содержание/шаблон: ${sec
           create: generatedSections,
         },
       },
-      include: {
-        position: { include: { department: true, businessFunction: true, project: true } },
-        template: true,
-        sourceArchive: true,
-        sections: { orderBy: { order: 'asc' } },
-      },
+     include: {
+        position: { include: { department: { include: { company: true } }, businessFunction: true, project: true } },
+       template: true,
+       sourceArchive: true,
+       sections: { orderBy: { order: 'asc' } },
+     },
     })
 
     // Create initial version record v1

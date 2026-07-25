@@ -29,6 +29,7 @@ import {
   Archive, Plus, Eye, Pencil, Trash2, Upload, FileText, Loader2, CheckCircle2,
   XCircle, Link2, Unlink, Search, Building2, FolderTree, FileUp, Briefcase,
 } from 'lucide-react'
+import { CascadePositionSelector } from './cascade-position-selector'
 
 interface Company { id: string; name: string; shortName: string | null }
 interface Department { id: string; name: string; code: string; company?: Company | null }
@@ -457,19 +458,10 @@ export function ArchiveModule() {
           <DialogHeader><DialogTitle>Добавить архивную ДИ</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Название *</Label><Input value={uploadTitle} onChange={e => setUploadTitle(e.target.value)} placeholder="ДИ — Разработчик ИИ" /></div>
-            <div>
-              <Label>Должность <span className="text-muted-foreground font-normal">(необязательно — можно привязать позже)</span></Label>
-              <Select value={uploadPositionId} onValueChange={setUploadPositionId}>
-                <SelectTrigger><SelectValue placeholder="Без привязки к должности" /></SelectTrigger>
-                <SelectContent>
-                  {positions.map(p => (
-                    <SelectItem key={p.id} value={p.id} className="text-xs">
-                      {positionLabel(p)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+           <div>
+             <Label>Должность <span className="text-muted-foreground font-normal">(необязательно — можно привязать позже)</span></Label>
+              <CascadePositionSelector positionId={uploadPositionId} onPositionChange={setUploadPositionId} />
+           </div>
             <div><Label>Имя файла <span className="text-muted-foreground font-normal">(необязательно)</span></Label><Input value={uploadFileName} onChange={e => setUploadFileName(e.target.value)} placeholder="di-razrabotchik.pdf" /></div>
             <div><Label>Содержимое *</Label><Textarea value={uploadContent} onChange={e => setUploadContent(e.target.value)} className="min-h-[200px] font-mono text-sm" placeholder="Полный текст должностной инструкции…" /></div>
           </div>
@@ -493,20 +485,11 @@ export function ArchiveModule() {
               <p className="text-xs text-muted-foreground">Должностная инструкция</p>
               <p className="text-sm font-medium truncate">{linkDI?.title}</p>
             </div>
-            <div>
-              <Label>Выберите должность *</Label>
+           <div>
+             <Label>Выберите должность *</Label>
               <p className="text-xs text-muted-foreground mb-2">Видно: должность · подразделение · компания</p>
-              <Select value={linkPositionId} onValueChange={setLinkPositionId}>
-                <SelectTrigger><SelectValue placeholder="Начните вводить или выберите…" /></SelectTrigger>
-                <SelectContent>
-                  {positions.map(p => (
-                    <SelectItem key={p.id} value={p.id} className="text-xs">
-                      {positionLabel(p)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <CascadePositionSelector positionId={linkPositionId} onPositionChange={setLinkPositionId} />
+           </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setLinkDialogOpen(false)}>Отмена</Button>
@@ -523,16 +506,9 @@ export function ArchiveModule() {
           <DialogHeader><DialogTitle>Загрузка ДИ из файлов</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label>Должность <span className="text-muted-foreground font-normal">(необязательно — можно привязать позже)</span></Label>
-              <Select value={filePositionId} onValueChange={setFilePositionId}>
-                <SelectTrigger><SelectValue placeholder="Без привязки к должности" /></SelectTrigger>
-                <SelectContent>
-                  {positions.map(p => (
-                    <SelectItem key={p.id} value={p.id} className="text-xs">{positionLabel(p)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+             <Label>Должность <span className="text-muted-foreground font-normal">(необязательно — можно привязать позже)</span></Label>
+              <CascadePositionSelector positionId={filePositionId} onPositionChange={setFilePositionId} />
+           </div>
             <div
               className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${dragActive ? 'border-amber-500 bg-amber-50' : 'border-muted-foreground/30'}`}
               onDragEnter={handleDrag}
@@ -598,16 +574,9 @@ export function ArchiveModule() {
           <div className="space-y-3">
             <div><Label>Название *</Label><Input value={editTitle} onChange={e => setEditTitle(e.target.value)} /></div>
             <div>
-              <Label>Должность <span className="text-muted-foreground font-normal">(необязательно)</span></Label>
-              <Select value={editPositionId} onValueChange={setEditPositionId}>
-                <SelectTrigger><SelectValue placeholder="Без привязки к должности" /></SelectTrigger>
-                <SelectContent>
-                  {positions.map(p => (
-                    <SelectItem key={p.id} value={p.id} className="text-xs">{positionLabel(p)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {editPositionId && (
+             <Label>Должность <span className="text-muted-foreground font-normal">(необязательно)</span></Label>
+              <CascadePositionSelector positionId={editPositionId} onPositionChange={setEditPositionId} />
+             {editPositionId && (
                 <Button variant="ghost" size="sm" className="mt-1 h-7 text-xs text-amber-600" onClick={() => setEditPositionId('')}>
                   <Unlink className="h-3 w-3 mr-1" /> Отвязать от должности
                 </Button>

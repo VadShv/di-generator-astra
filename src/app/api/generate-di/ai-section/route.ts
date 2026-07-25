@@ -14,10 +14,10 @@ export async function POST(request: Request) {
 
     // ===== MANUAL MODE: Generate section for a new/manual DI without a DB record =====
     if (manualMode && positionId) {
-      const position = await db.position.findUnique({
-        where: { id: positionId },
-        include: { department: true, businessFunction: true, project: true },
-      })
+     const position = await db.position.findUnique({
+       where: { id: positionId },
+        include: { department: { include: { company: true } }, businessFunction: true, project: true },
+     })
 
       if (!position) {
         return NextResponse.json({ error: 'Должность не найдена' }, { status: 404 })
@@ -114,9 +114,9 @@ ${archiveContext}
     // Get the generated DI with all data
     const generatedDI = await db.generatedDI.findUnique({
       where: { id: generatedDIId },
-      include: {
-        position: { include: { department: true, businessFunction: true, project: true } },
-        template: { include: { sections: { orderBy: { order: 'asc' } } } },
+     include: {
+        position: { include: { department: { include: { company: true } }, businessFunction: true, project: true } },
+       template: { include: { sections: { orderBy: { order: 'asc' } } } },
         sections: { orderBy: { order: 'asc' } },
       },
     })

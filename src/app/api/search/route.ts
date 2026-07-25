@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// Глобальный поиск по должностям, подразделениям и должностным инструкциям.
-// GET /api/search?q=<текст>&limit=<число>
-// Возвращает сгруппированные результаты с подсветкой контекста для перехода.
+// Глобальный поиск по должностям, подразделениям и должностным инструкциям
+// (сгенерированным и архивным). GET /api/search?q=<текст>&limit=<число>
+// Возвращает сгруппированные результаты с контекстом для перехода.
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -15,10 +15,11 @@ export async function GET(request: NextRequest) {
         positions: [],
         departments: [],
         instructions: [],
+        archiveDIs: [],
       })
     }
 
-    const [positions, departments, instructions] = await Promise.all([
+    const [positions, departments, instructions, archiveDIs] = await Promise.all([
       db.position.findMany({
         where: { title: { contains: q, mode: 'insensitive' } },
         take: limit,
@@ -52,9 +53,27 @@ export async function GET(request: NextRequest) {
           title: true,
           status: true,
           updatedAt: true,
-          position: { select: { id: true, title: true } },
+          position: { select: { id: true, title: true, department: { select: { id: true, name: true, company: { select: { name: true } } } } } },
         },
         orderBy: { updatedAt: 'desc' },
+      }),
+      db.archiveDI.findMany({
+        where: {
+          OR: [
+            { title: { contains: q, mode: 'insensitive' } },
+            { fileName: { contains: q, mode: 'insensitive' } },
+            { content: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        take: limit,
+        select: {
+          id: true,
+          title: true,
+          uploadedAt: true,
+          fileName: true,
+          position: { select: { id: true, title: true, department: { select: { id: true, name: true, company: { select: { name: true } } } } } },
+        },
+        orderBy: { uploadedAt: 'desc' },
       }),
     ])
 
@@ -79,6 +98,19 @@ export async function GET(request: NextRequest) {
         type: i.status === 'review' ? 'review' : i.status === 'approved' ? 'approved' : 'draft',
         updatedAt: i.updatedAt,
         positionTitle: i.position?.title ?? null,
+        departmentName: i.position?.department?.name ?? null,
+        companyName: i.position?.department?.company?.name ?? null,
+      })),
+      archiveDIs: archiveDIs.map(a => ({
+        id: a.id,
+        title: a.title,
+        type: 'archive' as const,
+        uploadedAt: a.uploadedAt,
+        fileName: a.fileName ?? null,
+        positionTitle: a.position?.title ?? null,
+        departmentName: a.position?.department?.name ?? null,
+        companyName: a.position?.department?.company?.name ?? null,
+        linked: Boolean(a.position),
       })),
     })
   } catch (error) {

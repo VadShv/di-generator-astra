@@ -14,16 +14,16 @@ export async function GET(request: Request) {
 
     const versions = await db.dIVersion.findMany({
       where,
-      include: {
-        generatedDI: {
-          include: {
-            position: {
-              include: {
-                department: true,
-              },
-            },
-          },
-        },
+     include: {
+       generatedDI: {
+         include: {
+           position: {
+             include: {
+                department: { include: { company: true } },
+             },
+           },
+         },
+       },
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -78,16 +78,16 @@ export async function POST(request: Request) {
         uploadedBy: uploadedBy || null,
         fileName: fileName || null,
       },
-      include: {
-        generatedDI: {
-          include: {
-            position: {
-              include: {
-                department: true,
-              },
-            },
-          },
-        },
+     include: {
+       generatedDI: {
+         include: {
+           position: {
+             include: {
+                department: { include: { company: true } },
+             },
+           },
+         },
+       },
       },
     })
 

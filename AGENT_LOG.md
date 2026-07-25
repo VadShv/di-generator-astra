@@ -1452,4 +1452,60 @@ src/components/modules/cascade-position-selector.tsx.
 
 **Фаза 23 ЗАВЕРШЕНА. Карточки ДИ унифицированы: 4 типа, генерация на базе
 архивной ДИ, единые каскадные селекторы.**
+
+---
+
+## 24. АУДИТ СВЯЗНОСТИ ВСЕХ ВКЛАДОК И СУЩНОСТЕЙ (2026-07-25)
+
+Проведён аудит графа связности: 14 вкладок, 21 Prisma-модель, 40 API-роутов.
+Цель — убедиться, что все вкладки, сущности и API связаны между собой.
+
+Найденные разрывы связности и исправления:
+
+- Глобальный поиск (/api/search) искал ДИ только в GeneratedDI, архивные ДИ
+  не находились. ТЗ требует: «все архивные ДИ можно найти через поисковую
+  строку». ИСПРАВЛЕНО: добавлен поиск по ArchiveDI (title, fileName, content),
+  результаты возвращаются с companyName/departmentName/positionTitle/linked.
+  Также для GeneratedDI в search добавлены departmentName и companyName.
+  UI global-search.tsx: добавлена секция «Архивные ДИ» и отображение компании.
+
+- /api/generate-di GET возвращал position.department, но без company —
+  несогласованность с /api/generated-di (который тянул company). ИСПРАВЛЕНО:
+  во всех include позиции добавлен department: { include: { company: true } }
+  и sourceArchive. Приведено к единому формату ответа.
+
+- /api/generate-di/ai-generate, ai-audit, ai-improve, ai-section возвращали
+  position.department без company. ИСПРАВЛЕНО: все include позиции обновлены
+  до department: { include: { company: true } }.
+
+- /api/compare и /api/compare/[id] возвращали position.department без company.
+  ИСПРАВЛЕНО: include обновлён до company.
+
+- Вкладки comparison, version-history, ai-audit предлагали выбор ДИ из плоского
+  списка всех ДИ без фильтрации по компании/подразделению/должности — нарушало
+  единый паттерн «компания → подразделение → должность». ИСПРАВЛЕНО: во все
+  три вкладки добавлен CascadePositionSelector перед списком ДИ, список
+  фильтруется по выбранной должности.
+
+- Вкладка archive: 4 формы выбора должности (загрузка, массовая загрузка,
+  привязка, редактирование) использовали плоский Select по /api/positions.
+  ИСПРАВЛЕНО: заменены на CascadePositionSelector. Удалены неиспользуемые
+  positionLabel, positions state и fetchPositions.
+
+Проверки: tsc --noEmit -> 0 ошибок. eslint . -> 0 ошибок.
+curl /api/search -> возвращает archiveDIs с company/dept/position/linked.
+curl /api/generate-di -> position.department.company присутствует.
+
+Изменённые файлы: src/app/api/search/route.ts, src/app/api/generate-di/route.ts,
+src/app/api/generate-di/ai-generate/route.ts, src/app/api/generate-di/ai-audit/route.ts,
+src/app/api/generate-di/ai-improve/route.ts, src/app/api/generate-di/ai-section/route.ts,
+src/app/api/compare/route.ts, src/app/api/compare/[id]/route.ts,
+src/components/global-search.tsx, src/components/modules/comparison.tsx,
+src/components/modules/version-history.tsx, src/components/modules/ai-audit.tsx,
+src/components/modules/archive.tsx.
+
+**Фаза 24 ЗАВЕРШЕНА. Граф связности вкладок, сущностей и API целостен:
+единый каскадный выбор «компания → подразделение → должность» во всех вкладках,
+все API возвращают полные связи (company/department/position), глобальный
+поиск покрывает архивные ДИ.**
 **ЗАВЕРШЕНО. Граф связности теперь целостен.**
