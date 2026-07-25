@@ -21,9 +21,10 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, shortName, code, type, director, description } = body
+   const { name, shortName, code, type, director, description } = body
+    const { inn, ogrn, kpp, legalAddress, actualAddress } = body
 
-    if (!name || !code) {
+   if (!name || !code) {
       return NextResponse.json({ error: 'Название и код обязательны' }, { status: 400 })
     }
 
@@ -34,21 +35,26 @@ export async function POST(request: NextRequest) {
 
     const company = await db.company.create({
       data: {
-        name,
-        shortName: shortName || null,
-        code,
-        type: type || null,
-        director: director || null,
-        description: description || null,
-      },
-      include: {
-        _count: {
-          select: { departments: true }
-        }
-      }
-    })
+       name,
+       shortName: shortName || null,
+       code,
+       type: type || null,
+       director: director || null,
+       description: description || null,
+        inn: inn || null,
+        ogrn: ogrn || null,
+        kpp: kpp || null,
+        legalAddress: legalAddress || null,
+        actualAddress: actualAddress || null,
+     },
+     include: {
+       _count: {
+         select: { departments: true }
+       }
+     }
+   })
 
-    return NextResponse.json(company, { status: 201 })
+   return NextResponse.json(company, { status: 201 })
   } catch (error) {
     console.error('Error creating company:', error)
     return NextResponse.json({ error: 'Ошибка при создании компании' }, { status: 500 })
@@ -58,9 +64,10 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, shortName, code, type, director, description } = body
+   const { id, name, shortName, code, type, director, description } = body
+    const { inn, ogrn, kpp, legalAddress, actualAddress } = body
 
-    if (!id) {
+   if (!id) {
       return NextResponse.json({ error: 'ID обязателен' }, { status: 400 })
     }
 
@@ -83,18 +90,23 @@ export async function PUT(request: NextRequest) {
         ...(name !== undefined && { name }),
         ...(shortName !== undefined && { shortName: shortName || null }),
         ...(code !== undefined && { code }),
-        ...(type !== undefined && { type: type || null }),
-        ...(director !== undefined && { director: director || null }),
-        ...(description !== undefined && { description: description || null }),
-      },
-      include: {
-        _count: {
-          select: { departments: true }
-        }
-      }
-    })
+       ...(type !== undefined && { type: type || null }),
+       ...(director !== undefined && { director: director || null }),
+       ...(description !== undefined && { description: description || null }),
+        ...(inn !== undefined && { inn: inn || null }),
+        ...(ogrn !== undefined && { ogrn: ogrn || null }),
+        ...(kpp !== undefined && { kpp: kpp || null }),
+        ...(legalAddress !== undefined && { legalAddress: legalAddress || null }),
+        ...(actualAddress !== undefined && { actualAddress: actualAddress || null }),
+     },
+     include: {
+       _count: {
+         select: { departments: true }
+       }
+     }
+   })
 
-    return NextResponse.json(company)
+   return NextResponse.json(company)
   } catch (error) {
     console.error('Error updating company:', error)
     return NextResponse.json({ error: 'Ошибка при обновлении компании' }, { status: 500 })

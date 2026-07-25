@@ -28,48 +28,16 @@ import {
   Plus, Pencil, Trash2, ChevronRight, ChevronDown, Building2, Users, Search,
   Upload, FileSpreadsheet, FileText, Loader2, CheckCircle2, XCircle, AlertCircle,
   FileCheck, FileClock, FileX2, Landmark, FolderTree, Percent, Eye,
-  ChevronUp, ChevronDown as ChevronDownIcon, MapPin, GraduationCap, Briefcase, Shield,
-  Clock, UserCheck, Scale, TrendingUp, CheckSquare2
+ ChevronUp, ChevronDown as ChevronDownIcon, MapPin, GraduationCap, Briefcase, Shield,
+  Clock, UserCheck, Scale, TrendingUp, CheckSquare2,
+  Hash, Calendar, Layers, Network, FileSignature, Building, User, BadgeCheck, AlertTriangle
 } from 'lucide-react'
+import {
+  CompanyDetailCard, DepartmentDetailCard, PositionDetailCard,
+} from './staff-schedule-detail-cards'
 
 // ============ Interfaces ============
-interface Company {
-  id: string; name: string; shortName: string | null; code: string; type: string | null;
-  director: string | null; description: string | null;
-  _count?: { departments: number };
-  createdAt: string; updatedAt: string;
-}
-
-interface Department {
-  id: string; name: string; code: string; parentId: string | null;
-  parent?: Department | null; children?: Department[];
-  companyId: string | null; company?: Company | null;
-  _count?: { positions: number };
-  createdAt: string; updatedAt: string;
-}
-
-interface BusinessFunction {
-  id: string; name: string; code: string; description: string | null;
-  isActive: boolean; _count?: Record<string, number>;
-  createdAt: string; updatedAt: string;
-}
-
-interface Project {
-  id: string; name: string; code: string; description: string | null;
-  isActive: boolean; _count?: Record<string, number>;
-  createdAt: string; updatedAt: string;
-}
-
-interface GDI { id: string; status: string; signedByEmployee: boolean | null }
-interface Position {
-  id: string; title: string; code: string; departmentId: string;
-  department: Department; grade: string | null;
-  businessFunctionId: string | null; businessFunction: { id: string; name: string } | null;
-  projectId: string | null; project: { id: string; name: string } | null;
-  headcount: number; functions: string | null;
-  generatedDIs: GDI[]; archiveDIs: { id: string }[];
-  createdAt: string; updatedAt: string;
-}
+import type { Company, Department, Position, BusinessFunction, Project, GDI } from './staff-schedule-types'
 
 // ============ Helper: DI Status for a position ============
 function getDIStatus(pos: Position) {
@@ -129,13 +97,20 @@ export function StaffScheduleModule() {
 
   // Company dialog
   const [companyDialogOpen, setCompanyDialogOpen] = useState(false)
-  const [companyDialogMode, setCompanyDialogMode] = useState<'create' | 'edit'>('create')
-  const [companyForm, setCompanyForm] = useState({ id: '', name: '', shortName: '', code: '', type: '', director: '', description: '' })
-  const [companySubmitting, setCompanySubmitting] = useState(false)
+ const [companyDialogMode, setCompanyDialogMode] = useState<'create' | 'edit'>('create')
+ const [companyForm, setCompanyForm] = useState({
+   id: '', name: '', shortName: '', code: '', type: '', director: '', description: '',
+   inn: '', ogrn: '', kpp: '', legalAddress: '', actualAddress: ''
+ })
+ const [companySubmitting, setCompanySubmitting] = useState(false)
   const [companyDeleteOpen, setCompanyDeleteOpen] = useState(false)
-  const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null)
+ const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null)
+  // Детальные карточки (просмотр)
+  const [detailCompany, setDetailCompany] = useState<Company | null>(null)
+  const [detailDept, setDetailDept] = useState<Department | null>(null)
+  const [detailPos, setDetailPos] = useState<Position | null>(null)
 
-  // Dept dialog
+ // Dept dialog
   const [deptDialogOpen, setDeptDialogOpen] = useState(false)
   const [deptDialogMode, setDeptDialogMode] = useState<'create' | 'edit'>('create')
   const [deptForm, setDeptForm] = useState({ id: '', name: '', code: '', parentId: '', companyId: '' })
@@ -249,16 +224,24 @@ export function StaffScheduleModule() {
   const coveragePercent = positions.length > 0 ? Math.round((totalApproved / positions.length) * 100) : 0
 
   // ============ Company handlers ============
-  const openCreateCompany = () => {
-    setCompanyDialogMode('create')
-    setCompanyForm({ id: '', name: '', shortName: '', code: '', type: '', director: '', description: '' })
-    setCompanyDialogOpen(true)
-  }
-  const openEditCompany = (c: Company) => {
-    setCompanyDialogMode('edit')
-    setCompanyForm({ id: c.id, name: c.name, shortName: c.shortName || '', code: c.code, type: c.type || '', director: c.director || '', description: c.description || '' })
-    setCompanyDialogOpen(true)
-  }
+ const openCreateCompany = () => {
+   setCompanyDialogMode('create')
+    setCompanyForm({
+      id: '', name: '', shortName: '', code: '', type: '', director: '', description: '',
+      inn: '', ogrn: '', kpp: '', legalAddress: '', actualAddress: ''
+    })
+   setCompanyDialogOpen(true)
+ }
+ const openEditCompany = (c: Company) => {
+   setCompanyDialogMode('edit')
+    setCompanyForm({
+      id: c.id, name: c.name, shortName: c.shortName || '', code: c.code, type: c.type || '',
+      director: c.director || '', description: c.description || '',
+      inn: c.inn || '', ogrn: c.ogrn || '', kpp: c.kpp || '',
+      legalAddress: c.legalAddress || '', actualAddress: c.actualAddress || ''
+    })
+   setCompanyDialogOpen(true)
+ }
 
   const handleCompanySubmit = async () => {
     if (!companyForm.name.trim() || !companyForm.code.trim()) {
@@ -267,13 +250,18 @@ export function StaffScheduleModule() {
     setCompanySubmitting(true)
     try {
       const body: Record<string, unknown> = {
-        name: companyForm.name.trim(), code: companyForm.code.trim(),
-        shortName: companyForm.shortName.trim() || null,
-        type: companyForm.type.trim() || null,
-        director: companyForm.director.trim() || null,
-        description: companyForm.description.trim() || null,
-      }
-      if (companyDialogMode === 'edit') body.id = companyForm.id
+       name: companyForm.name.trim(), code: companyForm.code.trim(),
+       shortName: companyForm.shortName.trim() || null,
+       type: companyForm.type.trim() || null,
+       director: companyForm.director.trim() || null,
+       description: companyForm.description.trim() || null,
+        inn: companyForm.inn.trim() || null,
+        ogrn: companyForm.ogrn.trim() || null,
+        kpp: companyForm.kpp.trim() || null,
+        legalAddress: companyForm.legalAddress.trim() || null,
+        actualAddress: companyForm.actualAddress.trim() || null,
+     }
+     if (companyDialogMode === 'edit') body.id = companyForm.id
       const res = await fetch('/api/companies', {
         method: companyDialogMode === 'create' ? 'POST' : 'PUT',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -583,10 +571,13 @@ export function StaffScheduleModule() {
           )}
 
           {/* Action buttons */}
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-            <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); openCreateDept(dept.id, dept.companyId || selectedCompanyId || undefined) }} title="Добавить дочернее">
-              <Plus className="h-3 w-3" />
+         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+            <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); setDetailDept(dept) }} title="Подробная карточка">
+              <Eye className="h-3 w-3" />
             </button>
+           <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); openCreateDept(dept.id, dept.companyId || selectedCompanyId || undefined) }} title="Добавить дочернее">
+             <Plus className="h-3 w-3" />
+           </button>
             <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); openEditDept(dept) }}>
               <Pencil className="h-3 w-3" />
             </button>
@@ -668,13 +659,16 @@ export function StaffScheduleModule() {
           )}
 
           {/* Action buttons */}
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-            <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); openCreateDept(undefined, company.id) }} title="Добавить подразделение">
-              <Plus className="h-3 w-3" />
+         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+            <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); setDetailCompany(company) }} title="Подробная карточка">
+              <Eye className="h-3 w-3" />
             </button>
-            <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); openEditCompany(company) }}>
-              <Pencil className="h-3 w-3" />
-            </button>
+           <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); openCreateDept(undefined, company.id) }} title="Добавить подразделение">
+             <Plus className="h-3 w-3" />
+           </button>
+           <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); openEditCompany(company) }}>
+             <Pencil className="h-3 w-3" />
+           </button>
             <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 hover:text-destructive" onClick={e => { e.stopPropagation(); setCompanyToDelete(company); setCompanyDeleteOpen(true) }}>
               <Trash2 className="h-3 w-3" />
             </button>
@@ -947,9 +941,9 @@ export function StaffScheduleModule() {
 
                         {/* Position info */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-sm truncate">{p.title}</span>
-                            <Badge variant="secondary" className="text-xs h-5 font-mono">{p.code}</Badge>
+                         <div className="flex items-center gap-2 mb-1">
+                            <button className="font-semibold text-sm truncate hover:text-emerald-700 hover:underline text-left" onClick={() => setDetailPos(p)} title="Открыть карточку">{p.title}</button>
+                           <Badge variant="secondary" className="text-xs h-5 font-mono">{p.code}</Badge>
                             <Badge className={`text-xs h-5 ${diStatus.textColor} border-current/20`} variant="outline">
                               {diStatus.label}
                               {signedByEmployee && (
@@ -1022,10 +1016,13 @@ export function StaffScheduleModule() {
                         </div>
 
                         {/* Actions */}
-                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditPos(p)}>
-                            <Pencil className="h-3.5 w-3.5" />
+                       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDetailPos(p)} title="Подробная карточка">
+                            <Eye className="h-3.5 w-3.5" />
                           </Button>
+                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditPos(p)}>
+                           <Pencil className="h-3.5 w-3.5" />
+                         </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { setPosToDelete(p); setPosDeleteOpen(true) }}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -1043,9 +1040,9 @@ export function StaffScheduleModule() {
       {/* ====== Dialogs ====== */}
 
       {/* Company Dialog */}
-      <Dialog open={companyDialogOpen} onOpenChange={setCompanyDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+     <Dialog open={companyDialogOpen} onOpenChange={setCompanyDialogOpen}>
+        <DialogContent className="max-w-2xl">
+         <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Landmark className="h-5 w-5 text-emerald-600" />
               {companyDialogMode === 'create' ? 'Новое юридическое лицо' : 'Редактировать юр. лицо'}
@@ -1074,8 +1071,17 @@ export function StaffScheduleModule() {
                 </Select>
               </div>
             </div>
-            <div><Label>Руководитель</Label><Input value={companyForm.director} onChange={e => setCompanyForm(p => ({ ...p, director: e.target.value }))} placeholder="Иванов И.И." /></div>
-            <div><Label>Описание</Label><Textarea value={companyForm.description} onChange={e => setCompanyForm(p => ({ ...p, description: e.target.value }))} className="min-h-[60px]" placeholder="Краткое описание деятельности компании" /></div>
+           <div><Label>Руководитель</Label><Input value={companyForm.director} onChange={e => setCompanyForm(p => ({ ...p, director: e.target.value }))} placeholder="Иванов И.И." /></div>
+            <Separator className="my-1" />
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Реквизиты</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div><Label>ИНН</Label><Input value={companyForm.inn} onChange={e => setCompanyForm(p => ({ ...p, inn: e.target.value }))} placeholder="7707083893" /></div>
+              <div><Label>ОГРН</Label><Input value={companyForm.ogrn} onChange={e => setCompanyForm(p => ({ ...p, ogrn: e.target.value }))} placeholder="1027700132195" /></div>
+              <div><Label>КПП</Label><Input value={companyForm.kpp} onChange={e => setCompanyForm(p => ({ ...p, kpp: e.target.value }))} placeholder="770701001" /></div>
+            </div>
+            <div><Label>Юридический адрес</Label><Input value={companyForm.legalAddress} onChange={e => setCompanyForm(p => ({ ...p, legalAddress: e.target.value }))} placeholder="г. Москва, ул. Примерная, д. 1" /></div>
+            <div><Label>Фактический адрес</Label><Input value={companyForm.actualAddress} onChange={e => setCompanyForm(p => ({ ...p, actualAddress: e.target.value }))} placeholder="г. Москва, ул. Примерная, д. 1" /></div>
+           <div><Label>Описание</Label><Textarea value={companyForm.description} onChange={e => setCompanyForm(p => ({ ...p, description: e.target.value }))} className="min-h-[60px]" placeholder="Краткое описание деятельности компании" /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCompanyDialogOpen(false)}>Отмена</Button>
@@ -1380,9 +1386,32 @@ export function StaffScheduleModule() {
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>Удалить должность?</AlertDialogTitle></AlertDialogHeader>
           <p className="text-sm text-muted-foreground">{posToDelete?.title}</p>
-          <AlertDialogFooter><AlertDialogCancel>Отмена</AlertDialogCancel><AlertDialogAction onClick={handlePosDelete}>Удалить</AlertDialogAction></AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+         <AlertDialogFooter><AlertDialogCancel>Отмена</AlertDialogCancel><AlertDialogAction onClick={handlePosDelete}>Удалить</AlertDialogAction></AlertDialogFooter>
+       </AlertDialogContent>
+     </AlertDialog>
+      <CompanyDetailCard
+        company={detailCompany} departments={departments} positions={positions}
+        onCloseCompany={() => setDetailCompany(null)}
+        onSelectDept={d => { setDetailCompany(null); setDetailDept(d) }}
+        onEditCompany={c => { setDetailCompany(null); openEditCompany(c) }}
+        getAllDescendantDeptIds={getAllDescendantDeptIds}
+        getChildren={getChildren}
+      />
+      <DepartmentDetailCard
+        dept={detailDept} departments={departments} positions={positions}
+        onCloseDept={() => setDetailDept(null)}
+        onSelectDept={d => setDetailDept(d)}
+        onSelectPos={p => { setDetailDept(null); setDetailPos(p) }}
+        onEditDept={d => { setDetailDept(null); openEditDept(d) }}
+        getAllDescendantDeptIds={getAllDescendantDeptIds}
+        getChildren={getChildren}
+      />
+      <PositionDetailCard
+        pos={detailPos}
+        onClosePos={() => setDetailPos(null)}
+        onSelectDept={d => { setDetailPos(null); setDetailDept(d) }}
+        onEditPos={p => { setDetailPos(null); openEditPos(p) }}
+      />
     </div>
   )
 }
