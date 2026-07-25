@@ -155,17 +155,28 @@ export function StaffScheduleModule() {
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
   const [bulkText, setBulkText] = useState('')
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [uploadResult, setUploadResult] = useState<{
-    success: boolean
-    summary?: { departmentsFound: number; departmentsCreated: number; departmentsExisting: number; positionsFound: number; positionsCreated: number; positionsSkipped: number }
-    errors?: string[]
+ const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+ const [uploading, setUploading] = useState(false)
+ const [uploadProgress, setUploadProgress] = useState(0)
+  // Предпросмотр распознанных строк после парсинга Excel (Фаза 3)
+  const [previewRows, setPreviewRows] = useState<Array<{
+    departmentName: string; positionTitle: string; headcount: number
+    category: string | null; positionCode: string | null; rowNumber: number
+  }> | null>(null)
+  const [previewErrors, setPreviewErrors] = useState<Array<{ rowNumber: number; message: string }>>([])
+  const [previewSummary, setPreviewSummary] = useState<{
+    totalRows: number; errorCount: number; uniqueDepartments: number; uniquePositions: number
   } | null>(null)
-  const [dragActive, setDragActive] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [importCompanyId, setImportCompanyId] = useState<string>('')
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{
+    success: boolean
+    summary?: { departmentsCreated: number; positionsCreated: number; staffingCreated: number; errorCount: number }
+    errors?: Array<{ rowNumber: number; message: string }>
+  } | null>(null)
+ const [dragActive, setDragActive] = useState(false)
+ const [selectedFile, setSelectedFile] = useState<File | null>(null)
+ const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -415,26 +426,56 @@ export function StaffScheduleModule() {
     finally { setBulkSubmitting(false) }
   }
 
-  // File upload handler
-  const handleFileUpload = async () => {
+  // Парсинг Excel-файла для предпросмотра (Фаза 3, режим parse)
+  const handleFileParse = async () => {
     if (!selectedFile) { toast({ title: 'Ошибка', description: 'Выберите файл', variant: 'destructive' }); return }
-    setUploading(true); setUploadProgress(10); setUploadResult(null)
+    setUploading(true); setUploadProgress(20); setPreviewRows(null); setPreviewErrors([]); setPreviewSummary(null); setImportResult(null)
     try {
       const formData = new FormData()
       formData.append('file', selectedFile)
-      setUploadProgress(30)
-      const res = await fetch('/api/upload/staff-schedule', { method: 'POST', body: formData })
-      setUploadProgress(80)
-      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Ошибка загрузки') }
+      setUploadProgress(50)
+      const res = await fetch('/api/staffing-upload?mode=parse', { method: 'POST', body: formData })
+      setUploadProgress(90)
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Ошибка парсинга') }
       const data = await res.json()
-      setUploadProgress(100); setUploadResult(data)
+      setUploadProgress(100)
+      setPreviewRows(data.rows || [])
+      setPreviewErrors(data.errors || [])
+      setPreviewSummary(data.summary || null)
+      toast({
+        title: 'Файл распознан',
+        description: `Строк: ${data.summary?.totalRows ?? 0}, подразделений: ${data.summary?.uniqueDepartments ?? 0}`,
+      })
+    } catch (e) {
+      toast({ title: 'Ошибка парсинга файла', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' })
+    } finally { setUploading(false); setUploadProgress(0) }
+  }
+
+  // Импорт подтверждённых строк в БД (Фаза 3, режим import)
+  const handleFileImport = async () => {
+    if (!previewRows || previewRows.length === 0) {
+      toast({ title: 'Ошибка', description: 'Нет данных для импорта', variant: 'destructive' }); return
+    }
+    setImporting(true)
+    try {
+      const res = await fetch('/api/staffing-upload?mode=import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId: importCompanyId || undefined, rows: previewRows }),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Ошибка импорта') }
+      const data = await res.json()
+      setImportResult(data)
       if (data.success) {
-        toast({ title: 'Файл обработан', description: `Подразделений: ${data.summary.departmentsCreated} создано, Должностей: ${data.summary.positionsCreated} создано` })
+        toast({
+          title: 'Импорт завершён',
+          description: `Подразделений: ${data.summary.departmentsCreated}, должностей: ${data.summary.positionsCreated}, строк ШР: ${data.summary.staffingCreated}`,
+        })
         await fetchPositions(); await fetchDepartments(); await fetchCompanies()
       }
     } catch (e) {
-      toast({ title: 'Ошибка загрузки файла', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' })
-    } finally { setUploading(false) }
+      toast({ title: 'Ошибка импорта', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' })
+    } finally { setImporting(false) }
   }
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -453,7 +494,8 @@ export function StaffScheduleModule() {
   }
 
   const openUploadDialog = () => {
-    setSelectedFile(null); setUploadResult(null); setUploadProgress(0); setUploadDialogOpen(true)
+    setSelectedFile(null); setPreviewRows(null); setPreviewErrors([]); setPreviewSummary(null)
+    setImportResult(null); setImportCompanyId(''); setUploadProgress(0); setUploadDialogOpen(true)
   }
 
   // ============ Render: Department tree item ============
@@ -1167,7 +1209,7 @@ export function StaffScheduleModule() {
 
       {/* File Upload Dialog */}
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
@@ -1175,11 +1217,13 @@ export function StaffScheduleModule() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-1.5">
-              {['DOCX', 'XLSX', 'CSV', 'PDF', 'TXT'].map(fmt => (
-                <Badge key={fmt} variant="secondary" className="text-xs">{fmt}</Badge>
-              ))}
-            </div>
+            {/* Шаг 1: выбор и парсинг файла (Фаза 3) */}
+            {!previewRows && (
+              <>
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge variant="secondary" className="text-xs">XLSX</Badge>
+                  <Badge variant="secondary" className="text-xs">XLS</Badge>
+                </div>
             <div
               className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${
                 dragActive ? 'border-emerald-500 bg-emerald-50/50' : 'border-muted-foreground/25 hover:border-emerald-400 hover:bg-muted/30'
@@ -1187,7 +1231,7 @@ export function StaffScheduleModule() {
               onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
             >
-              <input ref={fileInputRef} type="file" className="hidden" accept=".docx,.doc,.xlsx,.xls,.csv,.pdf,.txt,.md" onChange={handleFileSelect} />
+              <input ref={fileInputRef} type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileSelect} />
               {selectedFile ? (
                 <div className="space-y-2">
                   <FileText className="h-10 w-10 mx-auto text-emerald-600" />
@@ -1197,39 +1241,102 @@ export function StaffScheduleModule() {
               ) : (
                 <div className="space-y-2">
                   <Upload className="h-10 w-10 mx-auto text-muted-foreground/60" />
-                  <p className="text-sm font-medium">Перетащите файл сюда</p>
+                  <p className="text-sm font-medium">Перетащите .xlsx файл сюда</p>
                   <p className="text-xs text-muted-foreground">или нажмите для выбора</p>
                 </div>
               )}
             </div>
             {uploading && <Progress value={uploadProgress} className="h-2" />}
-            {uploadResult && (
-              <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
-                {uploadResult.success && uploadResult.summary && (
-                  <>
-                    <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
-                      <CheckCircle2 className="h-4 w-4" /> Файл обработан успешно
+              </>
+            )}
+            {/* Шаг 2: предпросмотр распознанных данных перед импортом (Фаза 3) */}
+            {/* Шаг 2: предпросмотр распознанных данных перед импортом (Фаза 3) */}
+            {previewRows && previewSummary && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4" /> Распознано {previewSummary.totalRows} строк
+                  <span className="text-muted-foreground font-normal">
+                    ({previewSummary.uniqueDepartments} подразделений, {previewSummary.uniquePositions} должностей
+                    {previewSummary.errorCount > 0 ? `, ${previewSummary.errorCount} ошибок` : ''})
+                  </span>
+                </div>
+                {/* Выбор юр. лица для привязки импортируемых данных */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Юридическое лицо (опционально)</label>
+                  <select value={importCompanyId} onChange={(e) => setImportCompanyId(e.target.value)} className="w-full border rounded-md px-3 py-2 text-sm bg-background">
+                    <option value="">Без привязки к юр. лицу</option>
+                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                {/* Таблица предпросмотра распознанных строк */}
+                <div className="border rounded-lg overflow-hidden max-h-72 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 sticky top-0">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium">Подразделение</th>
+                        <th className="text-left px-3 py-2 font-medium">Должность</th>
+                        <th className="text-center px-3 py-2 font-medium">Ставки</th>
+                        <th className="text-left px-3 py-2 font-medium">Категория</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewRows.slice(0, 100).map((row, i) => (
+                        <tr key={i} className="border-t">
+                          <td className="px-3 py-1.5">{row.departmentName}</td>
+                          <td className="px-3 py-1.5">{row.positionTitle}</td>
+                          <td className="px-3 py-1.5 text-center">{row.headcount}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{row.category || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {previewRows.length > 100 && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground bg-muted/30">
+                      Показаны первые 100 из {previewRows.length} строк
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
+                  )}
+                </div>
+                {/* Ошибки парсинга (дубликаты, неизвестные подразделения) */}
+                {previewErrors.length > 0 && (
+                  <div className="space-y-1 border rounded-lg p-2 bg-amber-50">
+                    {previewErrors.slice(0, 5).map((err, i) => (
+                      <div key={i} className="flex items-start gap-1.5 text-xs text-amber-700">
+                        <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                        <span>Строка {err.rowNumber}: {err.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Результат импорта */}
+                {importResult && importResult.success && importResult.summary && (
+                  <div className="space-y-2 border rounded-lg p-3 bg-emerald-50">
+                    <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
+                      <CheckCircle2 className="h-4 w-4" /> Импорт завершён
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-sm">
                       <div className="flex items-center gap-1.5">
                         <Building2 className="h-3.5 w-3.5 text-emerald-600" />
-                        <span>Подразделений: {uploadResult.summary.departmentsCreated} создано / {uploadResult.summary.departmentsExisting} найдено</span>
+                        <span>Подразделений: {importResult.summary.departmentsCreated}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Users className="h-3.5 w-3.5 text-teal-600" />
-                        <span>Должностей: {uploadResult.summary.positionsCreated} создано / {uploadResult.summary.positionsSkipped} пропущено</span>
+                        <span>Должностей: {importResult.summary.positionsCreated}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Строк ШР: {importResult.summary.staffingCreated}</span>
                       </div>
                     </div>
-                  </>
-                )}
-                {uploadResult.errors && uploadResult.errors.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {uploadResult.errors.slice(0, 5).map((err, i) => (
-                      <div key={i} className="flex items-start gap-1.5 text-xs text-amber-700">
-                        <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                        <span>{err}</span>
+                    {importResult.errors && importResult.errors.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {importResult.errors.slice(0, 5).map((err, i) => (
+                          <div key={i} className="flex items-start gap-1.5 text-xs text-amber-700">
+                            <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                            <span>Строка {err.rowNumber}: {err.message}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
               </div>
@@ -1237,9 +1344,15 @@ export function StaffScheduleModule() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>Закрыть</Button>
-            <Button onClick={handleFileUpload} disabled={uploading || !selectedFile} className="bg-emerald-600 hover:bg-emerald-700">
-              {uploading ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Обработка...</> : <><Upload className="h-4 w-4 mr-1.5" /> Загрузить</>}
-            </Button>
+            {!previewRows ? (
+              <Button onClick={handleFileParse} disabled={uploading || !selectedFile} className="bg-emerald-600 hover:bg-emerald-700">
+                {uploading ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Парсинг...</> : <><FileSpreadsheet className="h-4 w-4 mr-1.5" /> Распознать</>}
+              </Button>
+            ) : (
+              <Button onClick={handleFileImport} disabled={importing || !previewRows.length} className="bg-emerald-600 hover:bg-emerald-700">
+                {importing ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Импорт...</> : <><Upload className="h-4 w-4 mr-1.5" /> Импортировать {previewRows.length} строк</>}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
