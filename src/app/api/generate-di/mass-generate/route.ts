@@ -3,19 +3,22 @@ import { db } from '@/lib/db'
  import { getProviderClient } from '@/lib/ai-connector'
  import { resolveMasterPrompt, resolveAiCulturePrompt, renderPrompt, buildContextFromPosition } from '@/lib/master-prompt'
 
-// POST /api/generate-di/mass-generate - Mass generation of DIs for selected departments/companies
+// POST /api/generate-di/mass-generate - Mass generation of DIs for selected departments/companies/positions
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { departmentIds, companyIds, templateId } = body
+    const { departmentIds, companyIds, positionIds, templateId } = body
 
     if (!templateId || typeof templateId !== 'string') {
       return NextResponse.json({ error: 'ID шаблона обязателен' }, { status: 400 })
     }
 
-    if ((!departmentIds || !Array.isArray(departmentIds) || departmentIds.length === 0) &&
+    // Приоритет выборки: явно выбранные должности → компании/подразделения.
+    const hasPositionIds = Array.isArray(positionIds) && positionIds.length > 0
+    if (!hasPositionIds &&
+        (!departmentIds || !Array.isArray(departmentIds) || departmentIds.length === 0) &&
         (!companyIds || !Array.isArray(companyIds) || companyIds.length === 0)) {
-      return NextResponse.json({ error: 'Выберите хотя бы одно подразделение или компанию' }, { status: 400 })
+      return NextResponse.json({ error: 'Выберите хотя бы одну организацию, подразделение или должность' }, { status: 400 })
     }
 
     // Get the template
@@ -30,32 +33,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Шаблон не содержит секций' }, { status: 400 })
     }
 
-    // Build where clause for positions
-    const departmentWhere: Record<string, unknown> = {}
-    if (departmentIds && departmentIds.length > 0) {
-      departmentWhere.id = { in: departmentIds }
-    }
-    if (companyIds && companyIds.length > 0) {
-      departmentWhere.companyId = { in: companyIds }
-    }
-    if (departmentIds && companyIds) {
-      // Combine: departments directly OR departments in companies
-      departmentWhere.OR = [
-        { id: { in: departmentIds } },
-        { companyId: { in: companyIds } },
-      ]
-      delete departmentWhere.id
-      delete departmentWhere.companyId
+    // Формируем условие выборки должностей со строгим каскадным приоритетом:
+    // 1) явно выбранные должности → фильтр по positionIds;
+    // 2) выбранные подразделения → фильтр только по этим подразделениям;
+    // 3) выбранные компании → все должности подразделений этих компаний.
+    // Это соответствует каскадному UI: выбор на более глубоком уровне сужает выборку.
+    const positionWhere: Record<string, unknown> = {}
+    if (hasPositionIds) {
+      positionWhere.id = { in: positionIds }
+    } else if (departmentIds && departmentIds.length > 0) {
+      positionWhere.department = { id: { in: departmentIds } }
+    } else if (companyIds && companyIds.length > 0) {
+      positionWhere.department = { companyId: { in: companyIds } }
     }
 
-    // Get all positions in selected departments/companies
+    // Get all positions in selected departments/companies/positions
     const positions = await db.position.findMany({
-      where: { department: departmentWhere },
+      where: positionWhere,
       include: { department: true, businessFunction: true, project: true },
     })
 
     if (positions.length === 0) {
-      return NextResponse.json({ error: 'Не найдено должностей в выбранных подразделениях/компаниях' }, { status: 400 })
+      return NextResponse.json({ error: 'Не найдено должностей по выбранным критериям' }, { status: 400 })
     }
 
     // Получаем клиент ИИ-провайдера один раз для всей массовой генерации.
