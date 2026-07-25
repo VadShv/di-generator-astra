@@ -44,11 +44,11 @@ function InfoRow({ icon: Icon, label, value, onClick }: {
       <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
-        {value ? (
-          <p className={`text-sm font-medium truncate ${onClick ? 'cursor-pointer hover:text-emerald-700 underline-offset-2 hover:underline' : ''}`} onClick={onClick}>{value}</p>
-        ) : (
-          <p className="text-sm text-muted-foreground/60">—</p>
-        )}
+     {value ? (
+        <p className={`text-sm font-medium break-words ${onClick ? 'cursor-pointer hover:text-emerald-700 underline-offset-2 hover:underline' : ''}`} onClick={onClick}>{value}</p>
+     ) : (
+         <p className="text-sm text-muted-foreground/60">—</p>
+       )}
       </div>
     </div>
   )
@@ -97,12 +97,12 @@ export function CompanyDetailCard(props: CompanyDetailProps) {
 
   return (
     <Dialog open={!!c} onOpenChange={v => !v && onCloseCompany()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Landmark className="h-5 w-5 text-emerald-600" />
-            {c.name}
-            {c.type && <Badge variant="outline" className="border-emerald-300 text-emerald-700">{c.type}</Badge>}
+           {c.name}
+           {c.type && <Badge variant="outline" className="border-emerald-300 text-emerald-700">{c.type}</Badge>}
           </DialogTitle>
           <DialogDescription>
             {c.shortName && <span>Краткое: {c.shortName} · </span>}
@@ -196,7 +196,7 @@ export function DepartmentDetailCard(props: DepartmentDetailProps) {
 
   return (
     <Dialog open={!!d} onOpenChange={v => !v && onCloseDept()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5 text-emerald-600" />
@@ -298,7 +298,7 @@ export function PositionDetailCard(props: PositionDetailProps) {
 
   return (
     <Dialog open={!!p} onOpenChange={v => !v && onClosePos()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className={`flex items-center justify-center h-8 w-8 rounded-lg ${st.color} text-white`}><FileText className="h-4 w-4" /></span>
