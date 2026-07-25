@@ -21,7 +21,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 import { Archive, Plus, Eye, Pencil, Trash2, Upload, FileText, Loader2, CheckCircle2, XCircle, AlertCircle, FileUp } from 'lucide-react'
 
@@ -80,10 +79,9 @@ export function ArchiveModule() {
   const [editing, setEditing] = useState(false)
 
   // File upload state
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [filePositionId, setFilePositionId] = useState('')
-  const [useAiParsing, setUseAiParsing] = useState(true)
-  const [fileUploading, setFileUploading] = useState(false)
+ const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+ const [filePositionId, setFilePositionId] = useState('')
+ const [fileUploading, setFileUploading] = useState(false)
   const [fileUploadProgress, setFileUploadProgress] = useState(0)
   const [fileUploadResult, setFileUploadResult] = useState<{
     summary: { total: number; success: number; failed: number }
@@ -173,11 +171,12 @@ export function ArchiveModule() {
     }
   }, [])
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setSelectedFiles(prev => [...prev, ...Array.from(e.target.files)])
-    }
-  }
+ const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files) {
+      setSelectedFiles(prev => [...prev, ...Array.from(files)])
+   }
+ }
 
   const removeFile = (index: number) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index))
@@ -185,29 +184,73 @@ export function ArchiveModule() {
 
   const handleFileUpload = async () => {
     if (selectedFiles.length === 0) { toast({ title: 'Ошибка', description: 'Выберите файлы', variant: 'destructive' }); return }
+    if (!filePositionId) {
+      toast({ title: 'Ошибка', description: 'Выберите должность для привязки ДИ', variant: 'destructive' }); return
+    }
     setFileUploading(true); setFileUploadProgress(10); setFileUploadResult(null)
     try {
-      const formData = new FormData()
-      selectedFiles.forEach(file => formData.append('files', file))
-      if (filePositionId) formData.append('positionId', filePositionId)
-      formData.append('useAiParsing', String(useAiParsing))
-      
-      setFileUploadProgress(30)
-      const res = await fetch('/api/upload/archive-di', { method: 'POST', body: formData })
-      setFileUploadProgress(80)
-      
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Ошибка загрузки')
+      // Обрабатываем каждый файл: parse (извлечение текста) → save (в БД).
+      // Фаза 4: массовая загрузка PDF/DOCX с извлечением текста и разбивкой на секции.
+      const results: Array<{ fileName: string; success: boolean; title?: string; positionTitle?: string; error?: string }> = []
+      let success = 0
+      let failed = 0
+      const total = selectedFiles.length
+
+      for (let i = 0; i < total; i++) {
+        const file = selectedFiles[i]
+        const progressStep = Math.round(((i + 1) / total) * 100)
+        setFileUploadProgress(Math.max(10, progressStep - 5))
+        try {
+          // Шаг 1: извлечение текста и секций (без сохранения).
+          const formData = new FormData()
+          formData.append('file', file)
+          const parseRes = await fetch('/api/di-upload?mode=parse', { method: 'POST', body: formData })
+          if (!parseRes.ok) {
+            const err = await parseRes.json().catch(() => ({}))
+            throw new Error(err.error || 'Ошибка извлечения текста')
+          }
+          const parsed = await parseRes.json()
+
+          // Шаг 2: сохранение в БД с привязкой к должности.
+          const saveRes = await fetch('/api/di-upload?mode=save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: parsed.fileName,
+              fileType: parsed.fileType,
+              rawText: parsed.rawText, // предпросмотр обрезан — берём из parse
+              sections: parsed.sections,
+              positionId: filePositionId,
+            }),
+          })
+          if (!saveRes.ok) {
+            const err = await saveRes.json().catch(() => ({}))
+            throw new Error(err.error || 'Ошибка сохранения')
+          }
+          const saved = await saveRes.json()
+          success++
+          results.push({
+            fileName: file.name,
+            success: true,
+            positionTitle: saved.positionTitle,
+            title: `Секций: ${saved.sectionCount}`,
+          })
+        } catch (e) {
+          failed++
+          results.push({
+            fileName: file.name,
+            success: false,
+            error: e instanceof Error ? e.message : 'Ошибка',
+          })
+        }
+        setFileUploadProgress(progressStep)
       }
-      
-      const data = await res.json()
-      setFileUploadProgress(100)
-      setFileUploadResult(data)
-      
+
+      setFileUploadResult({ summary: { total, success, failed }, results })
       toast({
         title: 'Загрузка завершена',
-        description: `Успешно: ${data.summary.success}, Ошибки: ${data.summary.failed}`,
+        description: `Успешно: ${success}, Ошибки: ${failed}`,
+        variant: failed > 0 ? 'destructive' : 'default',
       })
       fetchArchive()
     } catch (e) {
@@ -350,29 +393,25 @@ export function ArchiveModule() {
             </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-4">
-            {/* Supported formats */}
-            <div className="flex flex-wrap gap-1.5">
-              {['DOCX', 'PDF', 'XLSX', 'CSV', 'TXT', 'MD'].map(fmt => (
-                <Badge key={fmt} variant="secondary" className="text-xs">{fmt}</Badge>
-              ))}
-            </div>
+         <div className="space-y-4">
+           {/* Supported formats */}
+           <div className="flex flex-wrap gap-1.5">
+              {['PDF', 'DOCX'].map(fmt => (
+               <Badge key={fmt} variant="secondary" className="text-xs">{fmt}</Badge>
+             ))}
+           </div>
 
-            {/* Position selector (optional) */}
-            <div className="space-y-2">
-              <Label>Привязать к должности (необязательно)</Label>
-              <Select value={filePositionId} onValueChange={setFilePositionId}>
-                <SelectTrigger><SelectValue placeholder="Авто-определение ИИ" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_auto">Авто-определение ИИ</SelectItem>
-                  {positions.map(p => <SelectItem key={p.id} value={p.id}>{p.title} ({p.department?.name})</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <div className="flex items-center gap-2">
-                <Switch checked={useAiParsing} onCheckedChange={setUseAiParsing} id="ai-parsing" />
-                <Label htmlFor="ai-parsing" className="text-sm text-muted-foreground">ИИ-определение должности из содержимого</Label>
-              </div>
-            </div>
+            {/* Position selector (обязательно) */}
+           <div className="space-y-2">
+              <Label>Привязать к должности *</Label>
+             <Select value={filePositionId} onValueChange={setFilePositionId}>
+                <SelectTrigger><SelectValue placeholder="Выберите должность" /></SelectTrigger>
+               <SelectContent>
+                 {positions.map(p => <SelectItem key={p.id} value={p.id}>{p.title} ({p.department?.name})</SelectItem>)}
+               </SelectContent>
+             </Select>
+              <p className="text-xs text-muted-foreground">Текст извлекается автоматически: PDF — через pdf-parse, DOCX — через mammoth. ДИ сохранится со статусом «импорт» и будет доступна как образец при генерации.</p>
+           </div>
 
             {/* Drop zone */}
             <div
@@ -383,10 +422,10 @@ export function ArchiveModule() {
               onDragLeave={handleDrag}
               onDragOver={handleDrag}
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input ref={fileInputRef} type="file" className="hidden" accept=".docx,.doc,.xlsx,.xls,.csv,.pdf,.txt,.md" multiple onChange={handleFileSelect} />
-              <div className="space-y-2">
+             onClick={() => fileInputRef.current?.click()}
+           >
+              <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.docx" multiple onChange={handleFileSelect} />
+             <div className="space-y-2">
                 <Upload className="h-10 w-10 mx-auto text-muted-foreground/60" />
                 <p className="text-sm font-medium">Перетащите файлы сюда</p>
                 <p className="text-xs text-muted-foreground">или нажмите для выбора (можно несколько файлов)</p>
