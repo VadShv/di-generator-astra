@@ -138,13 +138,83 @@ bun run dev   # http://0.0.0.0:3000
 | Фаза | Содержание | Статус |
 |------|-----------|--------|
 | 0 | Аудит и развёртывание | ✅ Завершена |
-| 1 | Миграция на PostgreSQL + новая схема данных | ⏳ Ожидает |
+| 1 | Миграция на PostgreSQL + новая схема данных | ✅ Завершена |
 | 2 | Универсальный коннектор ИИ-моделей | ⏳ Ожидает |
 | 3 | Загрузка штатного расписания из Excel | ⏳ Ожидает |
 | 4 | Загрузка старых ДИ (PDF/DOCX) | ⏳ Ожидает |
 | 5 | Мастер-промпты и «Культура ИИ» | ⏳ Ожидает |
 | 6 | Отслеживание и массовая генерация | ⏳ Ожидает |
 | 7 | Полиш и UX | ⏳ Ожидает |
+
+---
+
+## 8. ФАЗА 1: Миграция на PostgreSQL + новая схема — РЕЗУЛЬТАТЫ
+
+### 1.1 Развёртывание PostgreSQL (без root!)
+**Проблема среды:** sudo заблокирован (no new privileges flag в контейнере), gcc/make/dev-headers отсутствуют → apt-установка и компиляция невозможны.
+
+**Решение — portable PostgreSQL из .deb-пакетов (распаковка через `ar`+`tar` в `/tmp`):**
+- Скачаны с apt.postgresql.org: `postgresql-16_16.12-1.pgdg22.04+1_amd64.deb` (18 MB), `postgresql-client-16` (1.9 MB)
+- Скачан с archive.ubuntu.com: `libicu70_70.1-2_amd64.deb` (10.5 MB) — недостающая ICU-зависимость
+- Распаковка: `ar x *.deb` → `tar -xf data.tar.xz` в `/tmp/pgroot` (⚠️ нужен `env -i` — иначе конфликт liblzma/libicu из `LD_LIBRARY_PATH` окружения AstraCode)
+- Бинари: `/tmp/pgroot/usr/lib/postgresql/16/bin/` (postgres, initdb, pg_ctl, psql, createdb)
+- Кластер: `initdb -D /tmp/pgdata -U astra --auth-local=trust --auth-host=trust --encoding=UTF8 --locale=C`
+- Запуск: `pg_ctl -D /tmp/pgdata -o "-p 5432 -h 127.0.0.1 -k /tmp" start` (socket в `/tmp`, т.к. нет прав на `/var/run/postgresql`)
+- БД: `di_generator`, пользователь `astra` / пароль `astra`
+
+**Скрипт лёгкого запуска:** `scripts/start-postgres.sh` (start/stop/status/restart, авто-initdb, авто-createdb)
+
+### 1.2 Новая Prisma-схема (19 таблиц)
+`provider = "postgresql"`. Расширены и добавлены модели:
+
+| Модель | Статус | Что добавлено/изменено |
+|--------|--------|------------------------|
+| Company | расширена | поля `inn`, `ogrn`, `kpp`, `legalAddress`, `actualAddress`; индексы `[inn]`, `[name]` |
+| Department | расширена | связи `staffingTables`, `trackings`; индексы `[companyId]`, `[parentId]` |
+| Position | расширена | связь `staffingTable` (one-to-one, `@unique`); индексы `[departmentId]`, `[businessFunctionId]`, `[grade]` |
+| **StaffingTable** | НОВАЯ | строки ШР: department, positionTitle, headcount, category, source(manual/excel) |
+| **UploadedDocument** | НОВАЯ | загруженные ДИ: fileName, fileType(pdf/docx), rawText, parsedSections(JSON), status(pending/parsed/linked/error) |
+| **AIProvider** | НОВАЯ | коннектор ИИ: type, baseUrl, apiKeyEncrypted, modelName, folderId, isActive, isDefault, config(JSON) |
+| **GenerationJob** | НОВАЯ | очередь массовой генерации: scope, status, total/completed/failed, results(JSON) |
+| **MasterPromptVersion** | НОВАЯ | история версий мастер-промпта |
+| MasterPrompt | расширена | поля `category`, `isAiCulture`, `variables`; связь `versions`; индексы |
+| DITracking | расширена | опциональный `generatedDIId`, поля `departmentId`, `positionId`, расширенный `status` |
+| GeneratedDI | расширена | индексы `[positionId]`, `[status]`, `[templateId]` |
+| DIAuditResult, DIVersion, ArchiveDI, DITemplate*, BusinessFunction, Project | индексы | добавлены `@@index` на часто запрашиваемые поля |
+
+**Обратная совместимость:** имя `DITracking` сохранено (7 обращений в коде `prisma.dITracking`); все существующие поля оставлены, только добавлены новые.
+
+### 1.3 .env
+```
+DATABASE_URL="postgresql://astra:astra@127.0.0.1:5432/di_generator?schema=public"
+AI_PROVIDER_ENCRYPTION_KEY="di-generator-dev-encryption-key-change-me"
+```
+
+### 1.4 Проверка
+- `bun run db:push` — ✅ БД в синхронизации (2.65s), 19 таблиц созданы (проверено через `\dt`)
+- `bun run db:generate` — ✅ Prisma Client v6.19.2
+- Dev-сервер на PostgreSQL: главная страница 200, **все 13 API-эндпоинтов отвечают 200** (companies, departments, positions, business-functions, projects, templates, master-prompts, generated-di, archive-di, dashboard/stats, tracking, compare, generate-di)
+- `bun run lint` — ✅ без ошибок
+
+### 1.5 Важные команды (для перезапуска)
+```bash
+# 1. Поднять PostgreSQL (portable, без root)
+./scripts/start-postgres.sh start
+# или вручную:
+env -i PATH=/usr/bin:/bin HOME=/tmp LD_LIBRARY_PATH=/tmp/pgroot/usr/lib/x86_64-linux-gnu \
+  /tmp/pgroot/usr/lib/postgresql/16/bin/pg_ctl -D /tmp/pgdata \
+  -o "-p 5432 -h 127.0.0.1 -k /tmp" -l /tmp/pg.log start
+
+# 2. Схема (после правки prisma/schema.prisma)
+bun run db:push && bun run db:generate
+
+# 3. Dev-сервер
+bun next dev -p 3000 -H 0.0.0.0
+```
+
+⚠️ **Важно:** PostgreSQL живёт, пока активна его PTY-сессия. При перезагрузке ВМ — перезапустить через `./scripts/start-postgres.sh start`. Бинари postgres в `/tmp/pgroot` переживают перезагрузку только если `/tmp` персистентен.
+
+**ФАЗА 1 ЗАВЕРШЕНА.** Перехожу к Фазе 2 (универсальный ИИ-коннектор).
 
 ---
 

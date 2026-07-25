@@ -3,57 +3,73 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 // ==========================================
 // Юридические лица (Компании)
+// Расширено в Фазе 1: ИНН, ОГРН, КПП, юридический/фактический адрес
 // ==========================================
 model Company {
-  id          String       @id @default(cuid())
-  name        String       // Название юр. лица
-  shortName   String?      // Краткое название
-  code        String       @unique // Код/ИНН/КПП
-  type        String?      // Тип (ООО, АО, ИП и т.д.)
-  director    String?      // Руководитель
-  description String?      // Описание
-  departments Department[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id              String       @id @default(cuid())
+  name            String       // Название юр. лица
+  shortName       String?      // Краткое название
+  code            String       @unique // Код/ИНН/КПП
+  type            String?      // Тип (ООО, АО, ИП и т.д.)
+  inn             String?      // ИНН
+  ogrn            String?      // ОГРН
+  kpp             String?      // КПП
+  legalAddress    String?      // Юридический адрес
+  actualAddress   String?      // Фактический адрес
+  director        String?      // Руководитель
+  description     String?      // Описание
+  departments     Department[]
+  staffingTables  StaffingTable[]
+  uploadedDocuments UploadedDocument[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([inn])
+  @@index([name])
 }
 
 // ==========================================
-// Подразделения (отделы)
+// Подразделения (отделы) с иерархией
 // ==========================================
 model Department {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @unique
-  parentId  String?
-  parent    Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
-  children  Department[] @relation("DepartmentHierarchy")
-  companyId String?
-  company   Company?     @relation(fields: [companyId], references: [id])
-  positions     Position[]
-  masterPrompts MasterPrompt[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  name           String
+  code           String   @unique
+  parentId       String?
+  parent         Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children       Department[] @relation("DepartmentHierarchy")
+  companyId      String?
+  company        Company?     @relation(fields: [companyId], references: [id])
+  positions      Position[]
+  staffingTables StaffingTable[]
+  masterPrompts  MasterPrompt[]
+  trackings      DITracking[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([parentId])
 }
 
 // ==========================================
 // Справочник — Бизнес-функции
 // ==========================================
 model BusinessFunction {
-  id          String   @id @default(cuid())
-  name        String   @unique // Название бизнес-функции
-  code        String?  // Код
-  description String?  // Описание
-  isActive    Boolean  @default(true)
-  positions   Position[]
+  id           String   @id @default(cuid())
+  name         String   @unique // Название бизнес-функции
+  code         String?  // Код
+  description  String?  // Описание
+  isActive     Boolean  @default(true)
+  positions    Position[]
   masterPrompts MasterPrompt[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // ==========================================
@@ -71,7 +87,32 @@ model Project {
 }
 
 // ==========================================
-// Штатное расписание - Должности
+// Штатное расписание (строки ШР)
+// Новая модель Фазы 1: связывает должность, подразделение и кол-во ставок
+// ==========================================
+model StaffingTable {
+  id           String   @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  positionTitle String   // Название должности из ШР
+  positionCode String?   // Код должности (если есть)
+  positionId   String?   // Привязка к созданной Position (после импорта) — обратная связь
+  position     Position? @relation("StaffingTablePosition")
+  headcount    Int      @default(1) // Кол-во ставок
+  category     String?  // Категория (руководители/специалисты/служащие/рабочие)
+  source       String   @default("manual") // manual | excel
+  companyId    String?
+  company      Company? @relation(fields: [companyId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([departmentId])
+  @@index([positionId])
+  @@index([companyId])
+}
+
+// ==========================================
+// Должности (привязка к ШР)
 // ==========================================
 model Position {
   id                  String   @id @default(cuid())
@@ -86,14 +127,21 @@ model Position {
   project             Project? @relation(fields: [projectId], references: [id])
   headcount           Int      @default(1)
   functions           String?     // Выполняемые функции (JSON строка с массивом)
+  staffingTableId     String?  @unique  // Связь со строкой ШР (одна должность ← одна строка ШР)
+  staffingTable       StaffingTable? @relation("StaffingTablePosition", fields: [staffingTableId], references: [id])
   archiveDIs          ArchiveDI[]
   generatedDIs        GeneratedDI[]
+  uploadedDocuments   UploadedDocument[]
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+
+  @@index([departmentId])
+  @@index([businessFunctionId])
+  @@index([grade])
 }
 
 // ==========================================
-// Архив должностных инструкций
+// Архив должностных инструкций (старые ДИ)
 // ==========================================
 model ArchiveDI {
   id          String   @id @default(cuid())
@@ -105,6 +153,34 @@ model ArchiveDI {
   uploadedAt  DateTime @default(now())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([positionId])
+}
+
+// ==========================================
+// Загруженные документы (старые ДИ PDF/DOCX)
+// Новая модель Фазы 1: распознанный текст, секции, привязка к позиции
+// ==========================================
+model UploadedDocument {
+  id              String   @id @default(cuid())
+  fileName        String   // Имя файла
+  fileType        String   // pdf | docx
+  filePath        String?  // Путь к сохранённому файлу (опц.)
+  rawText         String   // Извлечённый текст
+  parsedSections  String   @default("[]") // JSON: распознанные секции [{title, content}]
+  positionId      String?  // Привязка к должности
+  position        Position? @relation(fields: [positionId], references: [id])
+  companyId       String?  // Привязка к юр. лицу
+  company         Company? @relation(fields: [companyId], references: [id])
+  status          String   @default("pending") // pending | parsed | linked | error
+  errorMessage    String?  // Ошибка обработки
+  uploadedBy      String?  // Кто загрузил
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([positionId])
+  @@index([companyId])
+  @@index([status])
 }
 
 // ==========================================
@@ -120,6 +196,8 @@ model DITemplate {
   isPrimary    Boolean  @default(false) // Основной шаблон — предвыбран при ручной генерации
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([isPrimary])
 }
 
 model DITemplateSection {
@@ -133,27 +211,8 @@ model DITemplateSection {
   content        String?  // Дефолтное содержимое секции
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-}
 
-// ==========================================
-// Мастер-промпты с версионированием
-// ==========================================
-model MasterPrompt {
-  id                  String   @id @default(cuid())
-  name                String
-  content             String   // Содержимое промпта
-  version             Int      @default(1)
-  isActive            Boolean  @default(true)
-  // Логика применимости
-  departmentId        String?  // Применимо к подразделению (null = все)
-  department          Department? @relation(fields: [departmentId], references: [id])
-  businessFunctionId  String?  // Применимо к бизнес-функции (null = все)
-  businessFunction    BusinessFunction? @relation(fields: [businessFunctionId], references: [id])
-  grade               String?  // Применимо к грейду (null = все): "линейная" / "руководитель"
-  functionType        String?  // Применимо к функции (null = все)
-  description         String?  // Описание версии
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  @@index([templateId])
 }
 
 // ==========================================
@@ -166,7 +225,7 @@ model GeneratedDI {
   templateId       String?
   template         DITemplate? @relation(fields: [templateId], references: [id])
   title            String
-  status           String   @default("draft") // draft, review, approved, exported
+  status           String   @default("draft") // draft, review, approved, exported, imported
   currentVersion   Int      @default(1)        // Текущая версия ДИ
   signedByEmployee Boolean  @default(false)   // Подписана сотрудником
   signedAt         DateTime?                   // Дата подписания сотрудником
@@ -176,6 +235,10 @@ model GeneratedDI {
   auditResults     DIAuditResult[]
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  @@index([positionId])
+  @@index([status])
+  @@index([templateId])
 }
 
 model GeneratedDISection {
@@ -189,19 +252,30 @@ model GeneratedDISection {
   editedBy       String?  // Кто редактировал (user/manual)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@index([generatedDIId])
 }
 
 // ==========================================
 // Отслеживание ДИ (жизненный цикл)
+// Переименовано из DITracking → Tracking (Фаза 1): привязка к подразделению
 // ==========================================
 model DITracking {
   id             String   @id @default(cuid())
-  generatedDIId  String
-  generatedDI    GeneratedDI @relation(fields: [generatedDIId], references: [id], onDelete: Cascade)
-  status         String   // sent_for_review, returned_with_comments, approved, rejected, signed, etc.
+  generatedDIId  String?  // Сделано опциональным в Фазе 1 (для отчётов по должностям без ДИ)
+  generatedDI    GeneratedDI? @relation(fields: [generatedDIId], references: [id], onDelete: Cascade)
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id])
+  positionId     String?
+  status         String   // sent_for_review | returned_with_comments | approved | rejected | signed | missing | draft | review | outdated
   assignee       String?  // Ответственный
   notes          String?  // Заметки
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([departmentId])
+  @@index([status])
+  @@index([generatedDIId])
 }
 
 // ==========================================
@@ -219,6 +293,8 @@ model DIVersion {
   diffSummary       String?  // Краткое резюме различий (ИИ-сгенерированное)
   changeDescription String?  // Описание изменений в данной версии
   createdAt         DateTime @default(now())
+
+  @@index([generatedDIId])
 }
 
 // ==========================================
@@ -244,4 +320,101 @@ model DIAuditResult {
   summary          String?  // Общее резюме аудита
   auditedBy        String?  // Кто запустил аудит
   createdAt        DateTime @default(now())
+
+  @@index([generatedDIId])
+}
+
+// ==========================================
+// Мастер-промпты
+// Расширено в Фазе 1: категории, переменные, явное версионирование
+// ==========================================
+model MasterPrompt {
+  id                  String   @id @default(cuid())
+  name                String
+  content             String   // Содержимое промпта (с переменными {{должность}} и т.д.)
+  category            String   @default("generation") // generation | audit | improvement | ai_culture
+  version             Int      @default(1)
+  isActive            Boolean  @default(true)
+  isAiCulture         Boolean  @default(false) // Промпт «Культура ИИ» — добавляет раздел про ИИ
+  variables           String   @default("[]") // JSON: список переменных промпта
+  // Логика применимости
+  departmentId        String?  // Применимо к подразделению (null = все)
+  department          Department? @relation(fields: [departmentId], references: [id])
+  businessFunctionId  String?  // Применимо к бизнес-функции (null = все)
+  businessFunction    BusinessFunction? @relation(fields: [businessFunctionId], references: [id])
+  grade               String?  // Применимо к грейду (null = все): "линейная" / "руководитель"
+  functionType        String?  // Применимо к функции (null = все)
+  description         String?  // Описание версии
+  // История версий промпта
+  versions            MasterPromptVersion[]
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+  @@index([name])
+}
+
+// Новая модель Фазы 1: история версий мастер-промпта
+model MasterPromptVersion {
+  id              String   @id @default(cuid())
+  masterPromptId  String
+  masterPrompt    MasterPrompt @relation(fields: [masterPromptId], references: [id], onDelete: Cascade)
+  version         Int      // Номер версии
+  content         String   // Содержимое промпта на момент версии
+  description     String?  // Описание изменений
+  createdBy       String?  // Кто изменил
+  createdAt       DateTime @default(now())
+
+  @@index([masterPromptId])
+}
+
+// ==========================================
+// Коннектор ИИ-моделей (провайдеры)
+// Новая модель Фазы 1: универсальный коннектор ИИ (Фаза 2)
+// ==========================================
+model AIProvider {
+  id              String   @id @default(cuid())
+  name            String   // Название провайдера
+  type            String   // openai_compatible | yandex_cloud | klad | ollama | zai
+  baseUrl         String?  // Базовый URL API
+  apiKeyEncrypted String?  // Зашифрованный API-ключ
+  modelName       String   // Имя модели (gpt-4o, yandexgpt, qwen и т.д.)
+  folderId        String?  // folder_id для Yandex Cloud
+  isActive        Boolean  @default(false) // Активный провайдер для генерации
+  isDefault       Boolean  @default(false) // Провайдер по умолчанию
+  config          String   @default("{}") // JSON: доп. настройки (temperature, maxTokens и т.д.)
+  lastTestedAt    DateTime? // Последняя проверка соединения
+  lastTestStatus  String?  // ok | error
+  lastTestMessage String?  // Сообщение теста
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+}
+
+// ==========================================
+// Очередь массовой генерации
+// Новая модель Фазы 1: задачи массовой генерации с прогрессом (Фаза 6)
+// ==========================================
+model GenerationJob {
+  id              String   @id @default(cuid())
+  scope           String   // all | company | department | positions
+  scopeData       String   @default("{}") // JSON: {companyId, departmentId, positionIds: []}
+  status          String   @default("queued") // queued | running | completed | failed | cancelled
+  total           Int      @default(0) // Всего задач
+  completed       Int      @default(0) // Выполнено успешно
+  failed          Int      @default(0) // Завершилось ошибкой
+  results         String   @default("[]") // JSON: [{positionId, status, message, diId}]
+  providerId      String?  // Используемый ИИ-провайдер
+  templateId      String?  // Используемый шаблон
+  masterPromptId  String?  // Используемый мастер-промпт
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
 }
