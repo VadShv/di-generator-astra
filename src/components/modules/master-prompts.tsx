@@ -115,13 +115,14 @@ export function MasterPromptsModule() {
       if (filterCategory !== 'all') params.set('category', filterCategory)
       if (filterTag) params.set('tag', filterTag)
       if (filterCompanyId && filterCompanyId !== 'all') params.set('companyId', filterCompanyId)
-      const res = await fetch(`/api/master-prompts?${params.toString()}`)
-      if (!res.ok) throw new Error()
-      setPrompts(await res.json())
-    } catch {
-      toast({ title: 'Ошибка', description: 'Не удалось загрузить мастер-промпты', variant: 'destructive' })
-    } finally {
-      setLoading(false)
+     const res = await fetch(`/api/master-prompts?${params.toString()}`)
+     if (!res.ok) throw new Error()
+      const data = await res.json()
+      setPrompts(Array.isArray(data) ? data : [])
+   } catch {
+     toast({ title: 'Ошибка', description: 'Не удалось загрузить мастер-промпты', variant: 'destructive' })
+   } finally {
+     setLoading(false)
     }
   }, [filterName, filterDepartmentId, filterIsActive, filterCategory, filterTag, filterCompanyId, toast])
 

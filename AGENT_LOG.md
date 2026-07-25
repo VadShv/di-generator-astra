@@ -1212,3 +1212,30 @@ ChevronUp/ChevronDown). Кнопка «Сбросить фильтр» в заг
 - Коммиты: «Фаза 2-3», «Фаза 4-9».
 
 **ЗАВЕРШЕНО.**
+
+### 21.7 Хотфикс: ошибка вкладки при выборе подразделения (2026-07-25)
+
+**Симптом:** при выборе подразделения в фильтрах вкладки «Мастер-промпты»
+браузер показывал «Application error: a client-side exception has occurred».
+
+**Корневая причина:** GET `/api/master-prompts` содержал ветку резолва — при
+передаче `departmentId`/`businessFunctionId`/`grade`/`positionId` роут
+возвращал один объект (через `resolveMasterPromptHandler`) вместо массива.
+Клиент `master-prompts.tsx` вызывал `.map()` на результате и падал.
+
+**Исправлено:**
+- `src/app/api/master-prompts/route.ts`: ветка резолва удалена из GET.
+  `departmentId`/`grade`/`positionId`/`functionType`/`businessFunctionId`/`companyId`
+  теперь — обычные фильтры списка, GET всегда возвращает массив через `findMany`.
+- Резолв промпта доступен только через отдельный `POST /api/master-prompts/resolve`
+  (возвращает один промпт + score), клиент вызывает его явно.
+- Удалены неиспользуемые импорты и функция `resolveMasterPromptHandler`.
+- `src/components/modules/master-prompts.tsx`: защитная проверка
+  `setPrompts(Array.isArray(data) ? data : [])`.
+
+**Проверки (2026-07-25):**
+- `curl http://localhost:3000/api/master-prompts` -> `[]`, HTTP 200.
+- `curl http://localhost:3000/api/master-prompts?departmentId=cms0ali4x0008oxeh84rxlqec`
+  -> `[]`, HTTP 200 (раньше возвращал объект, клиент падал).
+- `tsc --noEmit` -> 0 ошибок.
+- `eslint .` -> 0 ошибок.

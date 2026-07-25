@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import {
-  resolveMasterPrompt as resolvePromptByCategory,
   savePromptVersion,
   estimateTokens,
   extractVariables,
   PROMPT_CATEGORIES,
-  type PromptCategory,
-  type PromptCriteria,
 } from '@/lib/master-prompt'
 
 // Допустимые категории промптов (соответствуют PROMPT_CATEGORIES в src/lib/master-prompt.ts).
@@ -58,15 +55,19 @@ function normalizeVariables(value: unknown): string {
   return '[]'
 }
 
-// GET /api/master-prompts — список промптов с фильтрами или резолв по критериям.
+// GET /api/master-prompts — список промптов с фильтрами.
 // Поддерживаемые query-параметры:
 //   ?active=true            — только активные
 //   ?category=generation    — фильтр по категории
 //   ?tag=...                — фильтр по тегу (поиск в JSON-массиве)
 //   ?search=...             — поиск по содержимому (content)
 //   ?companyId=...          — фильтр по юр. лицу
-//   Резолв (если переданы departmentId/businessFunctionId/grade/positionId):
-//   ?category=...&departmentId=...&businessFunctionId=...&grade=...&positionId=...&companyId=...&functionType=...
+//   ?departmentId=...       — фильтр по подразделению
+//   ?businessFunctionId=... — фильтр по бизнес-функции
+//   ?grade=...              — фильтр по грейду
+//   ?positionId=...         — фильтр по должности
+//   ?functionType=...       — фильтр по типу функции
+// Резолв промпта по критериям выполняется отдельным POST /api/master-prompts/resolve.
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -78,23 +79,6 @@ export async function GET(request: NextRequest) {
     const companyId = searchParams.get('companyId')
     const positionId = searchParams.get('positionId')
     const functionType = searchParams.get('functionType')
-
-    // Если переданы критерии резолва — вернуть наиболее специфичный активный промпт.
-    if (departmentId || businessFunctionId || grade || positionId) {
-      return await resolveMasterPromptHandler(
-        normalizeCategory(category) as PromptCategory | null,
-        {
-          departmentId,
-          businessFunctionId,
-          grade,
-          companyId,
-          positionId,
-          functionType,
-        }
-      )
-    }
-
-    // Обычный список с фильтрами.
     const tag = searchParams.get('tag')
     const search = searchParams.get('search')
 
@@ -102,6 +86,11 @@ export async function GET(request: NextRequest) {
     if (activeOnly) where.isActive = true
     if (category) where.category = category
     if (companyId) where.companyId = companyId
+    if (departmentId) where.departmentId = departmentId
+    if (businessFunctionId) where.businessFunctionId = businessFunctionId
+    if (grade) where.grade = grade
+    if (positionId) where.positionId = positionId
+    if (functionType) where.functionType = functionType
     if (search) where.content = { contains: search, mode: 'insensitive' }
     // Фильтр по тегу: ищем JSON-массив, содержащий тег.
     if (tag) where.tags = { contains: `"${tag}"` }
@@ -126,32 +115,6 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('MasterPrompts GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки мастер-промптов' }, { status: 500 })
-  }
-}
-
-// Обёртка резолва: использует утилиту из src/lib/master-prompt.ts,
-// которая фильтрует по категории и поддерживает каскад специфичности.
-async function resolveMasterPromptHandler(
-  category: PromptCategory | null,
-  criteria: PromptCriteria
-) {
-  try {
-    const resolved = await resolvePromptByCategory(category || 'generation', criteria)
-    if (!resolved) return NextResponse.json(null)
-    // Догружаем связи для отображения деталей применимости.
-    const prompt = await db.masterPrompt.findUnique({
-      where: { id: resolved.id },
-      include: {
-        department: true,
-        businessFunction: true,
-        company: true,
-        position: true,
-      },
-    })
-    return NextResponse.json(prompt)
-  } catch (error) {
-    console.error('MasterPrompts resolve error:', error)
-    return NextResponse.json({ error: 'Ошибка резолва мастер-промпта' }, { status: 500 })
   }
 }
 
