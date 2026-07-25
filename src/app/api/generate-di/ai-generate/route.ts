@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
  import { getProviderClient } from '@/lib/ai-connector'
- import { resolveMasterPrompt, resolveAiCulturePrompt, renderPrompt, buildContextFromPosition } from '@/lib/master-prompt'
+ import { resolveMasterPrompt, resolveAiCulturePrompt, renderPrompt, buildContextFromPosition, incrementPromptUsage } from '@/lib/master-prompt'
 
 // POST /api/generate-di/ai-generate - Full AI generation of DI
 export async function POST(request: Request) {
@@ -35,6 +35,8 @@ export async function POST(request: Request) {
     const renderedMasterPrompt = masterPrompt
       ? renderPrompt(masterPrompt.content, buildContextFromPosition(position))
       : null
+    // Фаза 21: учитываем применение промпта в метриках.
+    if (masterPrompt) await incrementPromptUsage(masterPrompt.id)
 
     // c) Get the template with sections
     const template = await db.dITemplate.findUnique({
@@ -139,6 +141,7 @@ ${section.content ? `Примерное содержание/шаблон: ${sec
       businessFunctionId: position.businessFunctionId,
       grade: position.grade,
     })
+    if (aiCulturePrompt) await incrementPromptUsage(aiCulturePrompt.id)
     if (aiCulturePrompt) {
       try {
         const cultureSystem = renderPrompt(aiCulturePrompt.content, buildContextFromPosition(position))

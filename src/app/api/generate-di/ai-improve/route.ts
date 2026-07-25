@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
  import { getProviderClient } from '@/lib/ai-connector'
- import { resolveMasterPrompt, renderPrompt, buildContextFromPosition } from '@/lib/master-prompt'
+ import { resolveMasterPrompt, renderPrompt, buildContextFromPosition, incrementPromptUsage } from '@/lib/master-prompt'
 
 // POST /api/generate-di/ai-improve - Improve existing section content with AI
 export async function POST(request: Request) {
@@ -66,6 +66,8 @@ ${positionContext}
     const renderedImprovePrompt = improvePrompt
       ? renderPrompt(improvePrompt.content, buildContextFromPosition(section.generatedDI.position))
       : null
+    // Фаза 21: учитываем применение промпта в метриках.
+    if (improvePrompt) await incrementPromptUsage(improvePrompt.id)
 
     const userPrompt = `Текущий текст секции "${section.sectionTitle}":
 

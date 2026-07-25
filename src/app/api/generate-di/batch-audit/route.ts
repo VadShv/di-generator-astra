@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getProviderClient } from '@/lib/ai-connector'
-import { resolveMasterPrompt, renderPrompt, buildContextFromPosition } from '@/lib/master-prompt'
+import { resolveMasterPrompt, renderPrompt, buildContextFromPosition, incrementPromptUsage } from '@/lib/master-prompt'
 
 // POST /api/generate-di/batch-audit — пакетный аудит сгенерированных ДИ.
 // Тело: { diIds: string[] } — список ID GeneratedDI для аудита.
@@ -49,6 +49,8 @@ export async function POST(request: Request) {
         const renderedAuditPrompt = auditPrompt
           ? renderPrompt(auditPrompt.content, buildContextFromPosition(di.position))
           : null
+        // Фаза 21: учитываем применение промпта в метриках.
+        if (auditPrompt) await incrementPromptUsage(auditPrompt.id)
 
         const systemPrompt = `Ты — эксперт-юрист и HR-аналитик, специализирующийся на должностных инструкциях в РФ. Проведи краткий аудит ДИ.
 
