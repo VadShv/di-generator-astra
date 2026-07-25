@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { History, Loader2, GitCommit, RotateCcw, Eye, Calendar, User, FileText, ArrowLeft, ArrowRight } from 'lucide-react'
+import { History, Loader2, GitCommit, RotateCcw, Eye, Calendar, User, Archive } from 'lucide-react'
 import { CascadePositionSelector } from './cascade-position-selector'
 
 interface GeneratedDI {
@@ -21,9 +21,20 @@ interface GeneratedDI {
   positionId: string
   status: string
   currentVersion: number
-  position: { id: string; title: string; department: { id: string; name: string } }
+  position: { id: string; title: string; department: { id: string; name: string; companyId?: string | null; company?: { id: string; name: string } | null } }
   sections: { id: string; sectionTitle: string; sectionContent: string; order: number }[]
   _count: { sections: number; versions: number }
+}
+
+// Архивная ДИ (старая/загруженная). У неё нет версий, но есть текст.
+interface ArchiveDI {
+  id: string
+  title: string
+  content: string
+  positionId: string | null
+  position: { id: string; title: string; department: { id: string; name: string; companyId?: string | null } | null } | null
+  uploadedAt: string
+  fileName: string | null
 }
 
 interface DIVersion {
@@ -43,6 +54,21 @@ interface DiffLine {
   type: 'same' | 'added' | 'removed' | 'modified'
   line1?: string
   line2?: string
+}
+
+// Метаданные типа ДИ для единообразного отображения (цвет + подпись).
+const DI_TYPE_META: Record<string, { label: string; className: string }> = {
+  archive: { label: 'Архивная', className: 'bg-slate-100 text-slate-700 border-slate-300' },
+  draft: { label: 'Сгенерированная', className: 'bg-violet-100 text-violet-700 border-violet-300' },
+  review: { label: 'На согласовании', className: 'bg-amber-100 text-amber-700 border-amber-300' },
+  approved: { label: 'Согласованная', className: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
+}
+
+// Определение типа ДИ по статусу (для сгенерированных ДИ).
+function diTypeLabel(status: string): string {
+  if (status === 'review') return 'review'
+  if (status === 'approved') return 'approved'
+  return 'draft'
 }
 
 function computeDiff(text1: string, text2: string): DiffLine[] {
@@ -69,13 +95,18 @@ function parseContent(content: string): string {
 export function VersionHistoryModule() {
   const { toast } = useToast()
   const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
+  const [archiveDIs, setArchiveDIs] = useState<ArchiveDI[]>([])
   const [versions, setVersions] = useState<DIVersion[]>([])
   const [loading, setLoading] = useState(true)
   const [versionsLoading, setVersionsLoading] = useState(false)
 
   const [selectedDI, setSelectedDI] = useState<GeneratedDI | null>(null)
+  // Выбранная архивная ДИ (просмотр текста; у архивных нет версий).
+  const [selectedArchiveDI, setSelectedArchiveDI] = useState<ArchiveDI | null>(null)
   // Единый каскадный фильтр «компания → подразделение → должность» для выбора ДИ.
   const [filterPositionId, setFilterPositionId] = useState('')
+  const [filterCompanyId, setFilterCompanyId] = useState('')
+  const [filterDepartmentId, setFilterDepartmentId] = useState('')
   const [selectedVersion, setSelectedVersion] = useState<DIVersion | null>(null)
 
   // Compare
@@ -92,12 +123,17 @@ export function VersionHistoryModule() {
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false)
   const [restoringVersion, setRestoringVersion] = useState<DIVersion | null>(null)
 
+  // Загрузка сгенерированных и архивных ДИ одним запросом.
   const fetchDIs = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/generate-di')
-      if (!res.ok) throw new Error()
-      setGeneratedDIs(await res.json())
+      const [genRes, archRes] = await Promise.all([
+        fetch('/api/generate-di'),
+        fetch('/api/archive-di?linkStatus=all'),
+      ])
+      if (!genRes.ok || !archRes.ok) throw new Error()
+      setGeneratedDIs(await genRes.json())
+      setArchiveDIs(await archRes.json())
     } catch {
       toast({ title: 'Ошибка', description: 'Не удалось загрузить ДИ', variant: 'destructive' })
     } finally {
@@ -120,66 +156,78 @@ export function VersionHistoryModule() {
 
   useEffect(() => { fetchDIs() }, [fetchDIs])
 
- const handleSelectDI = async (di: GeneratedDI) => {
-   setSelectedDI(di)
-   setShowDiff(false)
-   setCompareV1(null)
-   setCompareV2(null)
-   setSelectedVersion(null)
-   await fetchVersions(di.id)
- }
+  const handleSelectDI = async (di: GeneratedDI) => {
+    setSelectedDI(di)
+    setSelectedArchiveDI(null)
+    setShowDiff(false)
+    setCompareV1(null)
+    setCompareV2(null)
+    setSelectedVersion(null)
+    await fetchVersions(di.id)
+  }
 
-  // Отфильтрованный список ДИ: если выбрана должность — показываем только её ДИ.
-  const filteredDIs = filterPositionId
-    ? generatedDIs.filter(d => d.positionId === filterPositionId)
-    : generatedDIs
+  // Выбор архивной ДИ: версии отсутствуют, показываем только текст.
+  const handleSelectArchiveDI = (di: ArchiveDI) => {
+    setSelectedArchiveDI(di)
+    setSelectedDI(null)
+    setVersions([])
+    setShowDiff(false)
+    setCompareV1(null)
+    setCompareV2(null)
+    setSelectedVersion(null)
+  }
 
- const handleCompare = () => {
+  // Каскадный фильтр сгенерированных ДИ: компания → подразделение → должность.
+  // Каждый уровень сужает выборку; если ничего не выбрано — показываем все ДИ.
+  const filteredDIs = useMemo(() => {
+    return generatedDIs.filter(d => {
+      if (filterPositionId && d.positionId !== filterPositionId) return false
+      if (filterDepartmentId && d.position?.department?.id !== filterDepartmentId) return false
+      if (filterCompanyId && d.position?.department?.companyId !== filterCompanyId && d.position?.department?.company?.id !== filterCompanyId) return false
+      return true
+    })
+  }, [generatedDIs, filterPositionId, filterDepartmentId, filterCompanyId])
+
+  // Каскадный фильтр архивных ДИ по тем же уровням.
+  const filteredArchiveDIs = useMemo(() => {
+    return archiveDIs.filter(d => {
+      if (filterPositionId && d.positionId !== filterPositionId) return false
+      if (filterDepartmentId && d.position?.department?.id !== filterDepartmentId) return false
+      if (filterCompanyId && d.position?.department?.companyId !== filterCompanyId) return false
+      return true
+    })
+  }, [archiveDIs, filterPositionId, filterDepartmentId, filterCompanyId])
+
+  const handleCompare = () => {
     if (!compareV1 || !compareV2) {
       toast({ title: 'Ошибка', description: 'Выберите две версии для сравнения', variant: 'destructive' })
       return
     }
-    setDiffLines(computeDiff(parseContent(compareV1.content), parseContent(compareV2.content)))
+    const text1 = parseContent(compareV1.content)
+    const text2 = parseContent(compareV2.content)
+    setDiffLines(computeDiff(text1, text2))
     setShowDiff(true)
   }
 
   const handleRestore = async () => {
     if (!restoringVersion || !selectedDI) return
-
     try {
-      // Parse the version content to get sections
       const versionData = JSON.parse(restoringVersion.content)
-      const sections = versionData.sections || []
-
       const res = await fetch('/api/generate-di', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: selectedDI.id,
           title: versionData.title || selectedDI.title,
-          sections: sections.map((s: { title: string; content: string }, i: number) => ({
-            sectionTitle: s.title,
-            sectionContent: s.content,
-            order: i,
-            aiGenerated: true,
-            editedBy: `restore-v${restoringVersion.version}`,
-          })),
-          changeDescription: `Восстановление версии v${restoringVersion.version}`,
+          sections: versionData.sections || [],
         }),
       })
-
       if (!res.ok) throw new Error()
-      const updated = await res.json()
-
-      toast({ title: 'Успешно', description: `Восстановлена версия v${restoringVersion.version}` })
+      toast({ title: 'Версия восстановлена', description: `Восстановлена версия v${restoringVersion.version}` })
       setRestoreDialogOpen(false)
       setRestoringVersion(null)
-
-      // Refresh data
       await fetchDIs()
       if (selectedDI) {
-        const refreshedDI = generatedDIs.find(d => d.id === selectedDI.id)
-        if (refreshedDI) setSelectedDI(refreshedDI)
         await fetchVersions(selectedDI.id)
       }
     } catch {
@@ -222,35 +270,81 @@ export function VersionHistoryModule() {
           <Card className="lg:col-span-1">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Должностные инструкции</CardTitle>
-              <CardDescription>Выберите ДИ для просмотра истории</CardDescription>
+              <CardDescription>Выберите организацию, подразделение и должность</CardDescription>
             </CardHeader>
             <CardContent className="max-h-[600px] overflow-y-auto space-y-1">
               <div className="mb-2 pb-2 border-b">
-                <CascadePositionSelector positionId={filterPositionId} onPositionChange={setFilterPositionId} />
+                <CascadePositionSelector
+                  positionId={filterPositionId}
+                  onPositionChange={setFilterPositionId}
+                  companyId={filterCompanyId}
+                  departmentId={filterDepartmentId}
+                  onCompanyChange={setFilterCompanyId}
+                  onDepartmentChange={setFilterDepartmentId}
+                />
               </div>
-              {filteredDIs.map(di => (
-               <div
-                 key={di.id}
-                 className={`p-2.5 rounded-lg cursor-pointer text-sm transition-colors ${
-                   selectedDI?.id === di.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-                 }`}
-                 onClick={() => handleSelectDI(di)}
-               >
-                 <p className="font-medium">{di.title}</p>
-                 <p className="text-xs text-muted-foreground">
-                   {di.position?.title} · v{di.currentVersion} · {di._count?.versions || 0} версий
-                 </p>
-               </div>
-             ))}
-              {filteredDIs.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  {filterPositionId ? 'Нет ДИ для выбранной должности' : 'Нет сгенерированных ДИ'}
+              {/* Сгенерированные ДИ (с версиями) */}
+              {filteredDIs.length > 0 && (
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-1 pb-1">
+                  Сгенерированные ({filteredDIs.length})
                 </p>
               )}
-           </CardContent>
+              {filteredDIs.map(di => {
+                const t = diTypeLabel(di.status)
+                const meta = DI_TYPE_META[t]
+                return (
+                  <div
+                    key={di.id}
+                    className={`p-2.5 rounded-lg cursor-pointer text-sm transition-colors ${
+                      selectedDI?.id === di.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                    }`}
+                    onClick={() => handleSelectDI(di)}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium truncate">{di.title}</p>
+                      <Badge variant="outline" className={`text-xs shrink-0 ${meta.className}`}>{meta.label}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {di.position?.title} · v{di.currentVersion} · {di._count?.versions || 0} версий
+                    </p>
+                  </div>
+                )
+              })}
+              {/* Архивные ДИ (без версий — только текст) */}
+              {filteredArchiveDIs.length > 0 && (
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-3 pb-1 border-t mt-2">
+                  Архивные ({filteredArchiveDIs.length})
+                </p>
+              )}
+              {filteredArchiveDIs.map(di => (
+                <div
+                  key={di.id}
+                  className={`p-2.5 rounded-lg cursor-pointer text-sm transition-colors ${
+                    selectedArchiveDI?.id === di.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                  }`}
+                  onClick={() => handleSelectArchiveDI(di)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium truncate">{di.title}</p>
+                    <Badge variant="outline" className="text-xs shrink-0 bg-slate-100 text-slate-700 border-slate-300">
+                      <Archive className="h-3 w-3 mr-1" />Архивная
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {di.position ? di.position.title : 'Без должности'}
+                    {di.fileName ? ` · ${di.fileName}` : ''}
+                  </p>
+                </div>
+              ))}
+              {filteredDIs.length === 0 && filteredArchiveDIs.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  {filterCompanyId || filterDepartmentId || filterPositionId ? 'Нет ДИ по выбранным критериям' : 'Нет должностных инструкций'}
+                </p>
+              )}
+            </CardContent>
           </Card>
 
-          {/* Version History */}
+          {/* Version History / Details */}
           <Card className="lg:col-span-2">
             {selectedDI ? (
               <>
@@ -262,7 +356,9 @@ export function VersionHistoryModule() {
                         Текущая версия: v{selectedDI.currentVersion} · {selectedDI.position?.title}
                       </CardDescription>
                     </div>
-                    <Badge variant="secondary">v{selectedDI.currentVersion}</Badge>
+                    <Badge variant="outline" className={`text-xs ${DI_TYPE_META[diTypeLabel(selectedDI.status)].className}`}>
+                      {DI_TYPE_META[diTypeLabel(selectedDI.status)].label}
+                    </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -378,6 +474,32 @@ export function VersionHistoryModule() {
                       )}
                     </>
                   )}
+                </CardContent>
+              </>
+            ) : selectedArchiveDI ? (
+              <>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">{selectedArchiveDI.title}</CardTitle>
+                      <CardDescription>
+                        {selectedArchiveDI.position ? selectedArchiveDI.position.title : 'Без должности'}
+                        {selectedArchiveDI.fileName ? ` · ${selectedArchiveDI.fileName}` : ''}
+                      </CardDescription>
+                    </div>
+                    <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">
+                      <Archive className="h-3 w-3 mr-1" />Архивная
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Архивные ДИ не имеют истории версий. Текст инструкции сохранён как есть
+                    при загрузке и может служить базой для генерации новых ДИ.
+                  </p>
+                  <div className="rounded-md border bg-muted/30 p-3 max-h-[500px] overflow-y-auto">
+                    <pre className="text-xs whitespace-pre-wrap font-mono">{selectedArchiveDI.content}</pre>
+                  </div>
                 </CardContent>
               </>
             ) : (

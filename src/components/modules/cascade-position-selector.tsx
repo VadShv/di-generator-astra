@@ -32,6 +32,11 @@ interface CascadePositionSelectorProps {
   // Для режима multi: выбранные должности и колбэк.
   selectedPositionIds?: string[]
   onPositionsChange?: (positionIds: string[]) => void
+  // Опционально: проброс выбора организации/подразделения наружу (для фильтрации).
+  companyId?: string
+  departmentId?: string
+  onCompanyChange?: (companyId: string) => void
+  onDepartmentChange?: (departmentId: string) => void
   // Опционально: предзагруженные данные, иначе компонент грузит сам
   companies?: Company[]
   departments?: DepartmentItem[]
@@ -58,6 +63,10 @@ export function CascadePositionSelector({
   mode = 'single',
   selectedPositionIds = [],
   onPositionsChange,
+  companyId: companyIdProp,
+  departmentId: departmentIdProp,
+  onCompanyChange,
+  onDepartmentChange,
   companies: companiesProp,
   departments: departmentsProp,
   positions: positionsProp,
@@ -69,8 +78,12 @@ export function CascadePositionSelector({
   const [loading, setLoading] = useState(!companiesProp || !departmentsProp || !positionsProp)
 
   // Внутренний выбор организации и подразделения (должность контролируется снаружи)
-  const [selCompanyId, setSelCompanyId] = useState('')
-  const [selDepartmentId, setSelDepartmentId] = useState('')
+  const [selCompanyId, setSelCompanyId] = useState(companyIdProp ?? '')
+  const [selDepartmentId, setSelDepartmentId] = useState(departmentIdProp ?? '')
+
+  // Синхронизация: если родитель меняет companyId/departmentId снаружи — обновляем.
+  useEffect(() => { if (companyIdProp !== undefined && companyIdProp !== selCompanyId) setSelCompanyId(companyIdProp) }, [companyIdProp])
+  useEffect(() => { if (departmentIdProp !== undefined && departmentIdProp !== selDepartmentId) setSelDepartmentId(departmentIdProp) }, [departmentIdProp])
 
   // Подгрузка данных, если они не переданы снаружи
   const fetchData = useCallback(async () => {
@@ -103,23 +116,26 @@ export function CascadePositionSelector({
   // При смене выбранной должности снаружи — восстановим компанию/подразделение
   useEffect(() => {
     if (!positionId) {
-      setSelCompanyId('')
-      setSelDepartmentId('')
+      // Сбрасываем только если не заданы внешние контролируемые значения.
+      if (companyIdProp === undefined) setSelCompanyId('')
+      if (departmentIdProp === undefined) setSelDepartmentId('')
       return
     }
     const pos = positions.find(p => p.id === positionId)
     if (pos) {
       const dept = pos.department
       if (dept) {
-        if (dept.companyId && selCompanyId !== dept.companyId) {
+        if (dept.companyId && selCompanyId !== dept.companyId && companyIdProp === undefined) {
           setSelCompanyId(dept.companyId)
+          onCompanyChange?.(dept.companyId)
         }
-        if (selDepartmentId !== dept.id) {
+        if (selDepartmentId !== dept.id && departmentIdProp === undefined) {
           setSelDepartmentId(dept.id)
+          onDepartmentChange?.(dept.id)
         }
       }
     }
-  }, [positionId, positions, selCompanyId, selDepartmentId])
+  }, [positionId, positions, selCompanyId, selDepartmentId, companyIdProp, departmentIdProp, onCompanyChange, onDepartmentChange])
 
   // Каскадная фильтрация
   const filteredDepartments = useMemo(
@@ -136,10 +152,13 @@ export function CascadePositionSelector({
     setSelCompanyId(id)
     setSelDepartmentId('')
     onPositionChange('')
+    onCompanyChange?.(id)
+    onDepartmentChange?.('')
   }
   const handleDepartmentChange = (id: string) => {
     setSelDepartmentId(id)
     onPositionChange('')
+    onDepartmentChange?.(id)
   }
   const handlePositionChange = (id: string) => {
     onPositionChange(id)

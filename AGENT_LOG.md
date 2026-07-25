@@ -1372,6 +1372,63 @@ masterPromptId НЕ передаётся. Сервер сам вызывает r
 - `GET /api/tracking/dashboard` -> 200, позиции возвращаются с новым relation.
 
 **ЗАВЕРШЕНО. Граф связности теперь целостен.**
+## 25. ФИКС ВКЛАДКИ «ВЕРСИОНИРОВАНИЕ»: КАСКАДНЫЙ ФИЛЬТР ПО ОРГАНИЗАЦИИ (2026-07-25)
+
+### 25.1 Постановка
+Во вкладке «Версионирование» при выборе организации в блоке ничего не
+происходило. Требовалось: при выборе организации/подразделения/должности
+должна появляться информация о всех типах ДИ (архивные, сгенерированные,
+на согласовании, согласованные) и обо всех версиях сгенерированных ДИ.
+
+### 25.2 Диагноз
+`CascadePositionSelector` хранил выбор компании/подразделения внутренне и
+не пробрасывал наружу — вкладка получала только `positionId`, поэтому
+фильтр по организации/подразделению не срабатывал (срабатывал только при
+выборе конкретной должности).
+
+### 25.3 Исправление
+1. `src/components/modules/cascade-position-selector.tsx`:
+   - Добавлены опциональные пропсы `companyId`, `departmentId`,
+     `onCompanyChange`, `onDepartmentChange`.
+   - Внутренний state инициализируется из пропсов.
+   - `useEffect` синхронизирует внутренний state при внешних изменениях.
+   - Обработчики вызывают внешние колбэки. Эффект восстановления при
+     смене должности снаружи тоже вызывает колбэки (с защитой
+     `companyIdProp === undefined`, чтобы не затирать контролируемое
+     снаружи значение).
+
+2. `src/components/modules/version-history.tsx` (полная перезапись):
+   - State: filterCompanyId, filterDepartmentId, filterPositionId,
+     archiveDIs, selectedArchiveDI.
+   - fetchDIs грузит сгенерированные (/api/generate-di) и архивные
+     (/api/archive-di?linkStatus=all) ДИ.
+   - filteredDIs (useMemo): каскадный фильтр company -> department ->
+     position, с проверкой position.department.companyId и
+     position.department.company.id (на случай обоих форматов ответа).
+   - filteredArchiveDIs (useMemo): аналогичный фильтр для архивных ДИ.
+   - handleSelectArchiveDI: выбор архивной ДИ (без версий, показ текста).
+   - UI: CascadePositionSelector с пробросом всех колбэков; список
+     разделён на «Сгенерированные (N)» и «Архивные (N)» с цветовыми
+     бейджами типов (DI_TYPE_META: archive — slate, draft — violet,
+     review — amber, approved — emerald).
+   - Панель деталей архивной ДИ показывает content.
+   - Пустое состояние с подсказкой о фильтрах.
+
+### 25.4 Проверки (2026-07-25)
+- tsc --noEmit -> 0 ошибок.
+- eslint . -> 0 ошибок.
+- curl /api/generate-di -> position.department.company присутствует.
+- curl /api/archive-di?linkStatus=all -> content присутствует,
+  position.department.companyId присутствует у привязанных архивных ДИ.
+- Dev-сервер (Next.js 16, Turbopack) компилирует страницу и API без
+  ошибок, GET / и GET /api/dashboard/stats возвращают 200.
+
+Изменённые файлы: src/components/modules/cascade-position-selector.tsx,
+src/components/modules/version-history.tsx.
+
+**Фаза 25 ЗАВЕРШЕНА. Выбор организации/подразделения во вкладке
+«Версионирование» теперь корректно фильтрует список всех типов ДИ и
+версий сгенерированных ДИ.**
 **ЗАВЕРШЕНО. Граф связности теперь целостен.**
 
 ---
