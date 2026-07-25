@@ -142,7 +142,7 @@ bun run dev   # http://0.0.0.0:3000
 | 2 | Универсальный коннектор ИИ-моделей | ✅ Готово |
 | 3 | Загрузка штатного расписания из Excel | ✅ Готово |
 | 4 | Загрузка старых ДИ (PDF/DOCX) | ✅ Готово |
-| 5 | Мастер-промпты и «Культура ИИ» | ⏳ Ожидает |
+| 5 | Мастер-промпты и «Культура ИИ» | ✅ Завершена |
 | 6 | Отслеживание и массовая генерация | ⏳ Ожидает |
 | 7 | Полиш и UX | ⏳ Ожидает |
 
@@ -257,7 +257,7 @@ bun next dev -p 3000 -H 0.0.0.0
 | dictionaries | ✅ РАБОТАЕТ | 621 | Блокировка удаления только UI-предупреждением |
 | archive | ✅ РАБОТАЕТ | 505 | **Вызывает несуществующий `/api/upload/archive-di`**; silent catch; фейковый прогресс |
 | templates | ✅ РАБОТАЕТ | 328 | Неиспользуемый импорт `StarOff` |
-| master-prompts | ✅ РАБОТАЕТ | 395 | Silent catch справочников; нет категорий промптов |
+| master-prompts | ✅ РАБОТАЕТ | ~470 | Фаза 5 ✅: категории, Культура ИИ, переменные {{...}}, версионирование (MasterPromptVersion) |
 | generation | ✅ РАБОТАЕТ | 1060 | Неиспользуемые импорты; двойной `await res.json()`; нет прогресса генерации |
 | mass-generation | ✅ РАБОТАЕТ | 440 | Фейковый прогресс (30→80→100) |
 | tracking | ✅ РАБОТАЕТ | 228 | Silent catch |
@@ -560,3 +560,84 @@ OpenAI-совместимые API (OpenAI, Klad.ru, Ollama, vLLM, LiteLLM), Yand
   секций может быть добавлена в Фазе 5/7 (полиш).
 
 **ФАЗА 4 ЗАВЕРШЕНА.** Перехожу к Фазе 5 (мастер-промпты и «Культура ИИ»).
+
+---
+
+## 12. ФАЗА 5: Мастер-промпты и «Культура ИИ» — РЕЗУЛЬТАТЫ
+
+**Цель:** развитие модуля мастер-промптов — категории (генерация/аудит/улучшение/Культура ИИ),
+версионирование, переменные `{{должность}}`/`{{подразделение}}`/`{{юр_лицо}}`/`{{квалификация}}`,
+интеграция с генерацией (мастер-промпт как system message), поддержка цепочки промптов и
+автоматическое добавление раздела «Взаимодействие с системами ИИ».
+
+### Что сделано
+
+**1. Утилита `src/lib/master-prompt.ts` (новая):**
+- `resolveMasterPrompt(category, criteria)` — резолв подходящего активного промпта по категории
+  (generation/audit/improvement/ai_culture) и каскаду специфичности. Заменяет дублированную
+  `resolveMasterPromptInternal`, которая раньше копировалась в 3 роутах.
+- `resolveAiCulturePrompt(criteria)` — отдельный доступ к промпту «Культура ИИ».
+- `renderPrompt(text, context)` — подстановка переменных `{{должность}}`, `{{подразделение}}`,
+  `{{юр_лицо}}`, `{{квалификация}}`, `{{код_должности}}`, `{{бизнес_функция}}` и произвольных.
+- `extractVariables(text)` — извлечение списка `{{...}}` из текста (для подсказки в UI).
+- `buildContextFromPosition(position)` — построение контекста из позиции (со связями).
+- `savePromptVersion(params)` — создание snapshot в `MasterPromptVersion`.
+- `PROMPT_CATEGORIES` — карта категорий: `{generation, audit, improvement, ai_culture}`.
+
+**2. API `src/app/api/master-prompts/route.ts` (доработан):**
+- `POST`/`PUT` теперь принимают `category`, `isAiCulture`, `variables`. При `isAiCulture=true`
+  категория принудительно становится `ai_culture`. `variables` хранится как JSON-строка.
+- `POST` создаёт snapshot v1 в `MasterPromptVersion` (`createdBy=api-create`).
+- `PUT` при изменении `content` инкрементирует `version` и создаёт новый snapshot
+  (`createdBy=api-update`).
+- `GET` поддерживает `?category=` для фильтрации списка и резолва по категории; резолв
+  делегирован в утилиту `resolveMasterPrompt`.
+
+**3. API `src/app/api/master-prompts/resolve/route.ts` (доработан):**
+- Добавлена опциональная фильтрация по `category` в теле запроса (существующий scoring-механизм
+  сохранён как более детальный).
+
+**4. UI `src/components/modules/master-prompts.tsx` (доработан):**
+- В интерфейс `MasterPrompt` добавлены поля `category`, `isAiCulture`, `variables`.
+- Селект категории + чекбокс «Культура ИИ» в форме (чекбокс выставляет `category=ai_culture`).
+- Бейджи категорий в аккордеоне, View Dialog и фильтр по категории в верхней панели.
+- Под полем контента — список извлечённых переменных `{{...}}` (живой расчёт через `extractVariables`).
+- `handleSave`/`openEditDialog`/`handleDuplicate` передают `category`/`isAiCulture`/`variables`.
+
+**5. Миграция ИИ-роутов на универсальный коннектор (`getProviderClient`):**
+Все 6 ИИ-роутов переведены с прямого `ZAI.create()` на `getProviderClient()` из `@/lib/ai-connector`:
+- `src/app/api/generate-di/ai-generate/route.ts`
+- `src/app/api/generate-di/ai-section/route.ts`
+- `src/app/api/generate-di/ai-improve/route.ts`
+- `src/app/api/generate-di/ai-audit/route.ts`
+- `src/app/api/generate-di/mass-generate/route.ts`
+- `src/app/api/compare/ai-diff/route.ts`
+Исправлен баг `role: 'assistant'` для system-промптов → `role: 'system'`. Параметр `thinking`
+убран (он инкапсулирован в `ZaiProvider`). Удалены 3 дублированные копии `resolveMasterPromptInternal`.
+
+**6. Цепочка промптов и «Культура ИИ» в генерации:**
+- `ai-generate` и `mass-generate`: после генерации секций проверяют `resolveAiCulturePrompt()` —
+  при наличии активного промпта `ai_culture` добавляют раздел «Взаимодействие с системами ИИ»
+  (отдельный generate с system = отрендеренный промпт Культуры ИИ).
+- `ai-improve` резолвит и применяет промпт категории `improvement` (добавляется к system message).
+- `ai-audit` резолвит и применяет промпт категории `audit`.
+- `ai-generate`/`ai-section`/`mass-generate` резолвят промпт категории `generation` и рендерят
+  переменные через `renderPrompt(content, buildContextFromPosition(position))`.
+
+### Проверка
+- `bun run lint` — ✅ 0 ошибок.
+- `bunx tsc --noEmit` — ✅ 0 новых ошибок в файлах Фазы 5 (3 pre-existing ошибки в
+  `app-shell.tsx`/`examples/websocket` не затронуты).
+- E2E через curl: создан промпт `ai_culture` (проверены `category`, `isAiCulture`, `variables`,
+  snapshot v1 `api-create`), обновлён контент (версия → 2, snapshot `api-update`), проверены
+  фильтр `?category=` и резолв по категории. Тестовые данные удалены.
+
+### Что осталось на следующие фазы
+- Фаза 6: доработка tracking-дашборда (дерево подразделений, цветовая индикация статусов ДИ,
+  экспорт в Excel) и массовой генерации (очередь с прогрессом, пакетный аудит/удаление).
+- Фаза 7: полиш UX (единообразие стилей, адаптивность, toast/skeleton/empty states, глобальный поиск).
+- Цепочку промптов (генерация → улучшение → аудит в одном вызове) можно расширить в Фазе 6/7:
+  сейчас improvement/audit применяются в своих роутах; явный выбор пользователем нескольких
+  промптов для одной операции — потенциальное улучшение.
+
+**ФАЗА 5 ЗАВЕРШЕНА.** Перехожу к Фазе 6 (отслеживание и массовая генерация).

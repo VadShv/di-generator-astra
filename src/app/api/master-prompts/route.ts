@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import {
+  resolveMasterPrompt as resolvePromptByCategory,
+  savePromptVersion,
+  PROMPT_CATEGORIES,
+  type PromptCategory,
+} from '@/lib/master-prompt'
 
-// GET /api/master-prompts - List all master prompts
+// Допустимые категории промптов (соответствуют PROMPT_CATEGORIES в src/lib/master-prompt.ts).
+const VALID_CATEGORIES = new Set<string>(Object.keys(PROMPT_CATEGORIES))
+
+// Проверить и привести категорию к строковому значению или null.
+function normalizeCategory(value: unknown): string | null {
+  if (typeof value !== 'string' || !value) return null
+  return VALID_CATEGORIES.has(value) ? value : null
+}
+
+// GET /api/master-prompts - список всех мастер-промптов или резолв по критериям.
+// Поддерживает ?category=... для фильтрации списка и резолва по категории.
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -9,14 +25,22 @@ export async function GET(request: NextRequest) {
     const departmentId = searchParams.get('departmentId')
     const businessFunctionId = searchParams.get('businessFunctionId')
     const grade = searchParams.get('grade')
+    const category = searchParams.get('category')
 
-    // If resolve params are provided, resolve the most specific master prompt
+    // Если переданы критерии резолва — вернуть наиболее специфичный активный промпт.
+    // Категория опциональна: при её отсутствии резолвим по категории "generation".
     if (departmentId || businessFunctionId || grade) {
-      return await resolveMasterPrompt(departmentId, businessFunctionId, grade)
+      return await resolveMasterPromptHandler(
+        category as PromptCategory | null,
+        departmentId,
+        businessFunctionId,
+        grade
+      )
     }
 
     const where: Record<string, unknown> = {}
     if (activeOnly) where.isActive = true
+    if (category) where.category = category
 
     const prompts = await db.masterPrompt.findMany({
       where,
@@ -25,7 +49,7 @@ export async function GET(request: NextRequest) {
         businessFunction: true,
       },
       orderBy: [
-        { departmentId: 'desc' }, // More specific first
+        { departmentId: 'desc' }, // Более специфичные первыми
         { businessFunctionId: 'desc' },
         { grade: 'desc' },
         { version: 'desc' },
@@ -39,71 +63,39 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Resolve the most specific master prompt for given criteria
-// Priority: department+businessFunction+grade > department+businessFunction > department+grade > department > businessFunction+grade > businessFunction > grade > global
-async function resolveMasterPrompt(
+// Обёртка резолва: использует утилиту из src/lib/master-prompt.ts,
+// которая фильтрует по категории и поддерживает каскад специфичности.
+async function resolveMasterPromptHandler(
+  category: PromptCategory | null,
   departmentId: string | null,
   businessFunctionId: string | null,
   grade: string | null
 ) {
   try {
-    // Build priority list of criteria combinations
-    const combinations: Record<string, string | null>[] = []
-
-    // Most specific to least specific
-    if (departmentId && businessFunctionId && grade) {
-      combinations.push({ departmentId, businessFunctionId, grade })
-    }
-    if (departmentId && businessFunctionId) {
-      combinations.push({ departmentId, businessFunctionId, grade: null })
-    }
-    if (departmentId && grade) {
-      combinations.push({ departmentId, businessFunctionId: null, grade })
-    }
-    if (departmentId) {
-      combinations.push({ departmentId, businessFunctionId: null, grade: null })
-    }
-    if (businessFunctionId && grade) {
-      combinations.push({ departmentId: null, businessFunctionId, grade })
-    }
-    if (businessFunctionId) {
-      combinations.push({ departmentId: null, businessFunctionId, grade: null })
-    }
-    if (grade) {
-      combinations.push({ departmentId: null, businessFunctionId: null, grade })
-    }
-    // Global fallback
-    combinations.push({ departmentId: null, businessFunctionId: null, grade: null })
-
-    for (const combo of combinations) {
-      const prompt = await db.masterPrompt.findFirst({
-        where: {
-          isActive: true,
-          departmentId: combo.departmentId || null,
-          businessFunctionId: combo.businessFunctionId || null,
-          grade: combo.grade || null,
-        },
-        include: { department: true, businessFunction: true },
-        orderBy: { version: 'desc' },
-      })
-      if (prompt) {
-        return NextResponse.json(prompt)
-      }
-    }
-
-    // No prompt found at all
-    return NextResponse.json(null)
+    const resolved = await resolvePromptByCategory(category || 'generation', {
+      departmentId: departmentId || null,
+      businessFunctionId: businessFunctionId || null,
+      grade: grade || null,
+    })
+    if (!resolved) return NextResponse.json(null)
+    // Догружаем связи для единообразия ответа со списком.
+    const full = await db.masterPrompt.findUnique({
+      where: { id: resolved.id },
+      include: { department: true, businessFunction: true },
+    })
+    return NextResponse.json(full ?? resolved)
   } catch (error) {
     console.error('MasterPrompt resolve error:', error)
     return NextResponse.json({ error: 'Ошибка разрешения мастер-промпта' }, { status: 500 })
   }
 }
 
-// POST /api/master-prompts - Create master prompt
+// POST /api/master-prompts - создание мастер-промпта (с категорией, флагом Культуры ИИ,
+// списком переменных и автоматическим snapshot-ом в MasterPromptVersion).
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { name, content, departmentId, businessFunctionId, grade, functionType, description } = body
+    const { name, content, departmentId, businessFunctionId, grade, functionType, description, category, isAiCulture, variables } = body
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return NextResponse.json({ error: 'Название промпта обязательно' }, { status: 400 })
@@ -113,7 +105,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Содержимое промпта обязательно' }, { status: 400 })
     }
 
-    // Find the latest version for this combination
+    // Найти последнюю версию для того же имени и критериев применимости.
     const existing = await db.masterPrompt.findFirst({
       where: {
         name: name.trim(),
@@ -121,17 +113,30 @@ export async function POST(request: Request) {
         businessFunctionId: businessFunctionId || null,
         grade: grade || null,
         functionType: functionType || null,
+        // Учитываем категорию: версии нумеруются в пределах имени+критерии+категория.
+        category: normalizeCategory(category) || 'generation',
       },
       orderBy: { version: 'desc' },
     })
 
     const version = existing ? existing.version + 1 : 1
+    // Если явно задан флаг Культуры ИИ — категория принудительно ai_culture.
+    const resolvedCategory = isAiCulture === true ? 'ai_culture' : (normalizeCategory(category) || 'generation')
+    // variables хранится как JSON-строка; принимаем массив или готовую строку.
+    const variablesJson = Array.isArray(variables)
+      ? JSON.stringify(variables)
+      : typeof variables === 'string' && variables.trim()
+        ? variables
+        : '[]'
 
     const prompt = await db.masterPrompt.create({
       data: {
         name: name.trim(),
         content: content.trim(),
         version,
+        category: resolvedCategory,
+        isAiCulture: isAiCulture === true,
+        variables: variablesJson,
         departmentId: departmentId || null,
         businessFunctionId: businessFunctionId || null,
         grade: grade || null,
@@ -141,6 +146,15 @@ export async function POST(request: Request) {
       include: { department: true, businessFunction: true },
     })
 
+    // Сохраняем snapshot в историю версий.
+    await savePromptVersion({
+      masterPromptId: prompt.id,
+      version: prompt.version,
+      content: prompt.content,
+      description: prompt.description,
+      createdBy: 'api-create',
+    })
+
     return NextResponse.json(prompt, { status: 201 })
   } catch (error) {
     console.error('MasterPrompts POST error:', error)
@@ -148,11 +162,12 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT /api/master-prompts - Update master prompt
+// PUT /api/master-prompts - обновление мастер-промпта. При изменении content
+// инкрементируем version и создаём новый snapshot в MasterPromptVersion.
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
-    const { id, name, content, isActive, departmentId, businessFunctionId, grade, functionType, description } = body
+    const { id, name, content, isActive, departmentId, businessFunctionId, grade, functionType, description, category, isAiCulture, variables } = body
 
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'ID промпта обязателен' }, { status: 400 })
@@ -163,20 +178,45 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Мастер-промпт не найден' }, { status: 404 })
     }
 
+    // Если контент меняется — создадим новую версию и snapshot.
+    const contentChanged = content !== undefined && typeof content === 'string' && content.trim() !== existing.content
+    const resolvedCategory = isAiCulture === true ? 'ai_culture' : (normalizeCategory(category) || undefined)
+    const variablesJson = Array.isArray(variables)
+      ? JSON.stringify(variables)
+      : typeof variables === 'string' && variables.trim()
+        ? variables
+        : undefined
+
     const prompt = await db.masterPrompt.update({
       where: { id },
       data: {
         name: name !== undefined ? name.trim() : undefined,
         content: content !== undefined ? content.trim() : undefined,
+        category: resolvedCategory,
+        isAiCulture: isAiCulture !== undefined ? isAiCulture === true : undefined,
+        variables: variablesJson,
         isActive: isActive !== undefined ? isActive : undefined,
         departmentId: departmentId !== undefined ? (departmentId || null) : undefined,
         businessFunctionId: businessFunctionId !== undefined ? (businessFunctionId || null) : undefined,
         grade: grade !== undefined ? (grade || null) : undefined,
         functionType: functionType !== undefined ? (functionType || null) : undefined,
         description: description !== undefined ? (description?.trim() || null) : undefined,
+        // Инкремент версии только при фактическом изменении контента.
+        version: contentChanged ? existing.version + 1 : undefined,
       },
       include: { department: true, businessFunction: true },
     })
+
+    // При изменении контента сохраняем snapshot новой версии.
+    if (contentChanged) {
+      await savePromptVersion({
+        masterPromptId: prompt.id,
+        version: prompt.version,
+        content: prompt.content,
+        description: prompt.description,
+        createdBy: 'api-update',
+      })
+    }
 
     return NextResponse.json(prompt)
   } catch (error) {

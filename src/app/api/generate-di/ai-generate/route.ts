@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import ZAI from 'z-ai-web-dev-sdk'
+ import { getProviderClient } from '@/lib/ai-connector'
+ import { resolveMasterPrompt, resolveAiCulturePrompt, renderPrompt, buildContextFromPosition } from '@/lib/master-prompt'
 
 // POST /api/generate-di/ai-generate - Full AI generation of DI
 export async function POST(request: Request) {
@@ -25,12 +26,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Должность не найдена' }, { status: 404 })
     }
 
-    // b) Resolve the applicable master prompt
-    const masterPrompt = await resolveMasterPromptInternal(
-      position.departmentId,
-      position.businessFunctionId,
-      position.grade
-    )
+    // b) Резолвим мастер-промпт категории "generation" и рендерим переменные.
+    const masterPrompt = await resolveMasterPrompt('generation', {
+      departmentId: position.departmentId,
+      businessFunctionId: position.businessFunctionId,
+      grade: position.grade,
+    })
+    const renderedMasterPrompt = masterPrompt
+      ? renderPrompt(masterPrompt.content, buildContextFromPosition(position))
+      : null
 
     // c) Get the template with sections
     const template = await db.dITemplate.findUnique({
@@ -56,8 +60,8 @@ export async function POST(request: Request) {
       ? archiveDIs.map((di, i) => `--- Архивная ДИ #${i + 1}: ${di.title} ---\n${di.content}`).join('\n\n')
       : 'Архивные ДИ для данной должности отсутствуют.'
 
-    // e) Initialize AI
-    const zai = await ZAI.create()
+    // e) Получаем клиент ИИ-провайдера (из БД или fallback z-ai-sdk).
+    const client = await getProviderClient()
 
     // Build common context
     const positionContext = `Должность: ${position.title}
@@ -70,11 +74,11 @@ export async function POST(request: Request) {
 Количество штатных единиц: ${position.headcount}
 ${position.functions ? `Выполняемые функции: ${position.functions}` : ''}`
 
-    const systemPrompt = `Ты — эксперт по созданию должностных инструкций для компании Группа Астра. 
+    const systemPrompt = `Ты — эксперт по созданию должностных инструкций для компании Группа Астра.
 Ты создаёшь профессиональные, подробные и формально корректные должностные инструкции на русском языке в соответствии с требованиями трудового законодательства РФ.
 
-${masterPrompt ? `МАСТЕР-ПРОМПТ (основные правила и стиль):
-${masterPrompt.content}` : 'Используй стандартный корпоративный стиль должностных инструкций.'}
+${renderedMasterPrompt ? `МАСТЕР-ПРОМПТ (основные правила и стиль):
+${renderedMasterPrompt}` : 'Используй стандартный корпоративный стиль должностных инструкций.'}
 
 ИНФОРМАЦИЯ О ДОЛЖНОСТИ:
 ${positionContext}
@@ -102,15 +106,14 @@ ${section.content ? `Примерное содержание/шаблон: ${sec
 Сгенерируй подробное, профессиональное содержание для этой секции.`
 
       try {
-        const completion = await zai.chat.completions.create({
+        const result = await client.generate({
           messages: [
-            { role: 'assistant', content: systemPrompt },
+            { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
           ],
-          thinking: { type: 'disabled' },
         })
 
-        const response = completion.choices[0]?.message?.content || ''
+        const response = result.content || ''
 
         generatedSections.push({
           sectionTitle: section.title,
@@ -126,6 +129,33 @@ ${section.content ? `Примерное содержание/шаблон: ${sec
           order: section.order,
           aiGenerated: true,
         })
+      }
+    }
+
+    // h) Культура ИИ: если есть активный промпт категории ai_culture,
+    // добавляем отдельный раздел «Взаимодействие с системами ИИ».
+    const aiCulturePrompt = await resolveAiCulturePrompt({
+      departmentId: position.departmentId,
+      businessFunctionId: position.businessFunctionId,
+      grade: position.grade,
+    })
+    if (aiCulturePrompt) {
+      try {
+        const cultureSystem = renderPrompt(aiCulturePrompt.content, buildContextFromPosition(position))
+        const cultureResult = await client.generate({
+          messages: [
+            { role: 'system', content: cultureSystem },
+            { role: 'user', content: 'Сгенерируй содержание раздела «Взаимодействие с системами ИИ» для данной должности: обязанности, ограничения и ответственность при работе с ИИ.' },
+          ],
+        })
+        generatedSections.push({
+          sectionTitle: 'Взаимодействие с системами ИИ',
+          sectionContent: (cultureResult.content || '').trim() || '[Раздел не сгенерирован]',
+          order: generatedSections.length,
+          aiGenerated: true,
+        })
+      } catch (cultureError) {
+        console.error('AI Culture section error:', cultureError)
       }
     }
 
@@ -170,52 +200,4 @@ ${section.content ? `Примерное содержание/шаблон: ${sec
     console.error('AI Generate error:', error)
     return NextResponse.json({ error: 'Ошибка AI-генерации ДИ' }, { status: 500 })
   }
-}
-
-// Internal function to resolve master prompt without making HTTP request
-async function resolveMasterPromptInternal(
-  departmentId: string,
-  businessFunctionId: string | null,
-  grade: string | null
-) {
-  // Build priority list of criteria combinations
-  const combinations: Record<string, string | null>[] = []
-
-  if (departmentId && businessFunctionId && grade) {
-    combinations.push({ departmentId, businessFunctionId, grade })
-  }
-  if (departmentId && businessFunctionId) {
-    combinations.push({ departmentId, businessFunctionId, grade: null })
-  }
-  if (departmentId && grade) {
-    combinations.push({ departmentId, businessFunctionId: null, grade })
-  }
-  if (departmentId) {
-    combinations.push({ departmentId, businessFunctionId: null, grade: null })
-  }
-  if (businessFunctionId && grade) {
-    combinations.push({ departmentId: null, businessFunctionId, grade })
-  }
-  if (businessFunctionId) {
-    combinations.push({ departmentId: null, businessFunctionId, grade: null })
-  }
-  if (grade) {
-    combinations.push({ departmentId: null, businessFunctionId: null, grade })
-  }
-  combinations.push({ departmentId: null, businessFunctionId: null, grade: null })
-
-  for (const combo of combinations) {
-    const prompt = await db.masterPrompt.findFirst({
-      where: {
-        isActive: true,
-        departmentId: combo.departmentId || null,
-        businessFunctionId: combo.businessFunctionId || null,
-        grade: combo.grade || null,
-      },
-      orderBy: { version: 'desc' },
-    })
-    if (prompt) return prompt
-  }
-
-  return null
 }

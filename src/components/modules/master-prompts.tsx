@@ -24,11 +24,13 @@ import {
 } from '@/components/ui/accordion'
 import { useToast } from '@/hooks/use-toast'
 import { Brain, Plus, Eye, Pencil, Trash2, GitBranch, Copy, CheckCircle2, XCircle, Sparkles } from 'lucide-react'
+ import { extractVariables, PROMPT_CATEGORIES } from '@/lib/master-prompt'
 
 interface Department { id: string; name: string; code: string }
 interface BusinessFunctionItem { id: string; name: string }
 interface MasterPrompt {
   id: string; name: string; content: string; version: number; isActive: boolean
+  category: string; isAiCulture: boolean; variables: string
   departmentId: string | null; department: Department | null
   businessFunctionId: string | null; businessFunction: { id: string; name: string } | null
   grade: string | null; functionType: string | null; description: string | null
@@ -49,6 +51,12 @@ const gradeLabel = (grade: string | null): string | null => {
   if (grade === 'руководитель') return 'Руководитель'
   return grade
 }
+ 
+ // Метка категории промпта по ключу.
+ const categoryLabel = (cat: string | null | undefined): string => {
+   if (!cat) return PROMPT_CATEGORIES.generation
+   return PROMPT_CATEGORIES[cat as keyof typeof PROMPT_CATEGORIES] || cat
+ }
 
 export function MasterPromptsModule() {
   const { toast } = useToast()
@@ -58,8 +66,9 @@ export function MasterPromptsModule() {
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
   const [filterName, setFilterName] = useState('')
-  const [filterDepartmentId, setFilterDepartmentId] = useState('all')
-  const [filterIsActive, setFilterIsActive] = useState<string>('all')
+ const [filterDepartmentId, setFilterDepartmentId] = useState('all')
+ const [filterIsActive, setFilterIsActive] = useState<string>('all')
+ const [filterCategory, setFilterCategory] = useState<string>('all')
 
   // Dialog states
   const [editDialogOpen, setEditDialogOpen] = useState(false)
@@ -78,6 +87,8 @@ export function MasterPromptsModule() {
   const [formName, setFormName] = useState('')
   const [formContent, setFormContent] = useState('')
   const [formDescription, setFormDescription] = useState('')
+  const [formCategory, setFormCategory] = useState<string>('generation')
+  const [formIsAiCulture, setFormIsAiCulture] = useState(false)
   const [formDepartmentId, setFormDepartmentId] = useState('')
   const [formBusinessFunctionId, setFormBusinessFunctionId] = useState('')
   const [formGrade, setFormGrade] = useState('')
@@ -94,16 +105,17 @@ export function MasterPromptsModule() {
       const params = new URLSearchParams()
       if (filterName) params.set('name', filterName)
       if (filterDepartmentId && filterDepartmentId !== 'all') params.set('departmentId', filterDepartmentId)
-      if (filterIsActive !== 'all') params.set('isActive', filterIsActive)
-      const res = await fetch(`/api/master-prompts?${params.toString()}`)
-      if (!res.ok) throw new Error()
-      setPrompts(await res.json())
-    } catch {
-      toast({ title: 'Ошибка', description: 'Не удалось загрузить мастер-промпты', variant: 'destructive' })
-    } finally {
-      setLoading(false)
-    }
-  }, [filterName, filterDepartmentId, filterIsActive, toast])
+     if (filterIsActive !== 'all') params.set('isActive', filterIsActive)
+     if (filterCategory !== 'all') params.set('category', filterCategory)
+     const res = await fetch(`/api/master-prompts?${params.toString()}`)
+     if (!res.ok) throw new Error()
+     setPrompts(await res.json())
+   } catch {
+     toast({ title: 'Ошибка', description: 'Не удалось загрузить мастер-промпты', variant: 'destructive' })
+   } finally {
+     setLoading(false)
+   }
+  }, [filterName, filterDepartmentId, filterIsActive, filterCategory, toast])
 
   const fetchDepartments = useCallback(async () => {
     try { const res = await fetch('/api/departments'); if (res.ok) setDepartments(await res.json()) } catch { /* silent */ }
@@ -135,6 +147,7 @@ export function MasterPromptsModule() {
     setEditingPrompt(null)
     setFormName(''); setFormContent(''); setFormDescription(''); setFormDepartmentId('')
     setFormBusinessFunctionId(''); setFormGrade(''); setFormFunctionType('')
+    setFormCategory('generation'); setFormIsAiCulture(false)
     setEditDialogOpen(true)
   }
 
@@ -143,15 +156,26 @@ export function MasterPromptsModule() {
     setFormName(p.name); setFormContent(p.content); setFormDescription(p.description || '')
     setFormDepartmentId(p.departmentId || ''); setFormBusinessFunctionId(p.businessFunctionId || '')
     setFormGrade(p.grade || ''); setFormFunctionType(p.functionType || '')
+    setFormCategory(p.category || 'generation'); setFormIsAiCulture(!!p.isAiCulture)
     setEditDialogOpen(true)
   }
+ 
+  // Переменные, извлечённые из текущего текста промпта (для подсказки пользователю).
+  const detectedVariables = useMemo(() => extractVariables(formContent), [formContent])
 
   const handleSave = async () => {
     if (!formName.trim() || !formContent.trim()) {
       toast({ title: 'Ошибка', description: 'Название и содержимое обязательны', variant: 'destructive' }); return
     }
     try {
-      const body = { name: formName, content: formContent, description: formDescription, departmentId: formDepartmentId || null, businessFunctionId: formBusinessFunctionId || null, grade: formGrade || null, functionType: formFunctionType || null }
+      const body = {
+        name: formName, content: formContent, description: formDescription,
+        departmentId: formDepartmentId || null, businessFunctionId: formBusinessFunctionId || null,
+        grade: formGrade || null, functionType: formFunctionType || null,
+        category: formIsAiCulture ? 'ai_culture' : formCategory,
+        isAiCulture: formIsAiCulture,
+        variables: detectedVariables,
+      }
       if (editingPrompt) {
         const res = await fetch('/api/master-prompts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingPrompt.id, ...body }) })
         if (!res.ok) throw new Error()
@@ -206,6 +230,7 @@ export function MasterPromptsModule() {
     setFormName(p.name); setFormContent(p.content); setFormDescription(`Копия версии ${p.version}`)
     setFormDepartmentId(p.departmentId || ''); setFormBusinessFunctionId(p.businessFunctionId || '')
     setFormGrade(p.grade || ''); setFormFunctionType(p.functionType || '')
+    setFormCategory(p.category || 'generation'); setFormIsAiCulture(!!p.isAiCulture)
     setEditDialogOpen(true)
   }
 
@@ -251,14 +276,23 @@ export function MasterPromptsModule() {
             <Select value={filterIsActive} onValueChange={setFilterIsActive}>
               <SelectTrigger className="w-[140px]"><SelectValue placeholder="Статус" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Все статусы</SelectItem>
-                <SelectItem value="true">Активные</SelectItem>
-                <SelectItem value="false">Неактивные</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+               <SelectItem value="all">Все статусы</SelectItem>
+               <SelectItem value="true">Активные</SelectItem>
+               <SelectItem value="false">Неактивные</SelectItem>
+             </SelectContent>
+           </Select>
+           <Select value={filterCategory} onValueChange={setFilterCategory}>
+             <SelectTrigger className="w-[160px]"><SelectValue placeholder="Категория" /></SelectTrigger>
+             <SelectContent>
+               <SelectItem value="all">Все категории</SelectItem>
+               {Object.entries(PROMPT_CATEGORIES).map(([key, label]) => (
+                 <SelectItem key={key} value={key}>{label}</SelectItem>
+               ))}
+             </SelectContent>
+           </Select>
+         </div>
+       </CardContent>
+     </Card>
 
       {/* Content */}
       {loading ? <p className="text-center py-8 text-muted-foreground">Загрузка...</p> : groupedPrompts.length === 0 ? (
@@ -273,10 +307,12 @@ export function MasterPromptsModule() {
             <AccordionItem key={group.name} value={group.name} className="border rounded-lg">
               <AccordionTrigger className="px-4 py-2 hover:no-underline">
                 <div className="flex items-center gap-2 flex-1 text-left">
-                  <Brain className="h-4 w-4" />
-                  <span className="font-semibold">{group.name}</span>
-                  <Badge variant="secondary" className="text-xs">v{group.latestVersion.version}</Badge>
-                  {group.activeVersion ? <Badge className="text-xs bg-green-600">Активна v{group.activeVersion.version}</Badge> : <Badge variant="destructive" className="text-xs">Нет активной</Badge>}
+                 <Brain className="h-4 w-4" />
+                 <span className="font-semibold">{group.name}</span>
+                 <Badge variant="secondary" className="text-xs">v{group.latestVersion.version}</Badge>
+                 {group.latestVersion.isAiCulture && <Badge className="text-xs bg-violet-600">Культура ИИ</Badge>}
+                 <Badge variant="outline" className="text-xs">{categoryLabel(group.latestVersion.category)}</Badge>
+                 {group.activeVersion ? <Badge className="text-xs bg-green-600">Активна v{group.activeVersion.version}</Badge> : <Badge variant="destructive" className="text-xs">Нет активной</Badge>}
                   <Badge variant="outline" className="text-xs">{group.prompts.length} версий</Badge>
                 </div>
               </AccordionTrigger>
@@ -320,9 +356,32 @@ export function MasterPromptsModule() {
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingPrompt ? 'Редактировать промпт' : 'Создать промпт'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Название *</Label><Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Название промпта" /></div>
-            <div><Label>Содержимое *</Label><Textarea value={formContent} onChange={e => setFormContent(e.target.value)} placeholder="Текст промпта..." className="min-h-[200px] font-mono text-sm" /></div>
-            <div><Label>Описание</Label><Input value={formDescription} onChange={e => setFormDescription(e.target.value)} placeholder="Описание версии" /></div>
+           <div><Label>Название *</Label><Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Название промпта" /></div>
+           <div className="flex flex-wrap items-center gap-4">
+             <div className="flex-1 min-w-[180px]">
+               <Label className="text-xs">Категория</Label>
+               <Select value={formCategory} onValueChange={setFormCategory} disabled={formIsAiCulture}>
+                 <SelectTrigger><SelectValue placeholder="Категория" /></SelectTrigger>
+                 <SelectContent>
+                   {Object.entries(PROMPT_CATEGORIES).map(([key, label]) => (
+                     <SelectItem key={key} value={key}>{label}</SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+             </div>
+             <label className="flex items-center gap-2 text-sm mt-5 cursor-pointer select-none">
+               <input type="checkbox" checked={formIsAiCulture} onChange={e => { setFormIsAiCulture(e.target.checked); if (e.target.checked) setFormCategory('ai_culture') }} className="h-4 w-4" />
+               <span className="flex items-center gap-1"><Sparkles className="h-3.5 w-3.5 text-violet-600" /> Культура ИИ</span>
+             </label>
+           </div>
+           <div><Label>Содержимое *</Label><Textarea value={formContent} onChange={e => setFormContent(e.target.value)} placeholder="Текст промпта..." className="min-h-[200px] font-mono text-sm" /></div>
+           {detectedVariables.length > 0 && (
+             <div className="flex flex-wrap items-center gap-1.5">
+               <span className="text-xs text-muted-foreground">Переменные:</span>
+               {detectedVariables.map(v => <Badge key={v} variant="outline" className="text-xs font-mono">{`{{${v}}}`}</Badge>)}
+             </div>
+           )}
+           <div><Label>Описание</Label><Input value={formDescription} onChange={e => setFormDescription(e.target.value)} placeholder="Описание версии" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="text-xs">Подразделение</Label><Select value={formDepartmentId} onValueChange={setFormDepartmentId}><SelectTrigger><SelectValue placeholder="Все" /></SelectTrigger><SelectContent><SelectItem value="_none">Все</SelectItem>{departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select></div>
               <div><Label className="text-xs">Бизнес-функция</Label><Select value={formBusinessFunctionId} onValueChange={setFormBusinessFunctionId}><SelectTrigger><SelectValue placeholder="Все" /></SelectTrigger><SelectContent><SelectItem value="_none">Все</SelectItem>{businessFunctions.map(bf => <SelectItem key={bf.id} value={bf.id}>{bf.name}</SelectItem>)}</SelectContent></Select></div>
@@ -340,8 +399,10 @@ export function MasterPromptsModule() {
           <DialogHeader><DialogTitle>{viewingPrompt?.name} — v{viewingPrompt?.version}</DialogTitle></DialogHeader>
           <div className="space-y-2">
             <div className="flex gap-2">
-              {viewingPrompt?.isActive ? <Badge className="bg-green-600">Активна</Badge> : <Badge variant="secondary">Неактивна</Badge>}
-              {viewingPrompt?.businessFunction && <Badge variant="outline">{viewingPrompt.businessFunction.name}</Badge>}
+             {viewingPrompt?.isActive ? <Badge className="bg-green-600">Активна</Badge> : <Badge variant="secondary">Неактивна</Badge>}
+             {viewingPrompt?.isAiCulture && <Badge className="bg-violet-600">Культура ИИ</Badge>}
+             <Badge variant="outline">{categoryLabel(viewingPrompt?.category)}</Badge>
+             {viewingPrompt?.businessFunction && <Badge variant="outline">{viewingPrompt.businessFunction.name}</Badge>}
               {gradeLabel(viewingPrompt?.grade ?? null) && <Badge variant="outline">{gradeLabel(viewingPrompt?.grade ?? null)}</Badge>}
             </div>
             <pre className="whitespace-pre-wrap text-sm bg-muted p-4 rounded-lg max-h-[500px] overflow-y-auto">{viewingPrompt?.content}</pre>

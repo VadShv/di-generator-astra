@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+ import { PROMPT_CATEGORIES, type PromptCategory } from '@/lib/master-prompt'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { positionId } = body
+     const { positionId, category } = body
 
     if (!positionId) {
       return NextResponse.json({ error: 'ID должности обязателен' }, { status: 400 })
@@ -19,9 +20,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Должность не найдена' }, { status: 404 })
     }
 
-    // Get all active master prompts
+     // Опциональная фильтрация по категории (generation/audit/improvement/ai_culture).
+     const validCategory: PromptCategory | null =
+       typeof category === 'string' && category in PROMPT_CATEGORIES ? (category as PromptCategory) : null
+
+     // Получаем все активные промпты (с фильтром по категории, если задана).
     const activePrompts = await db.masterPrompt.findMany({
-      where: { isActive: true },
+       where: {
+         isActive: true,
+         ...(validCategory ? { category: validCategory } : {}),
+       },
       include: { department: true, businessFunction: true },
     })
 

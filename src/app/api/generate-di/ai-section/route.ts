@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import ZAI from 'z-ai-web-dev-sdk'
+ import { getProviderClient } from '@/lib/ai-connector'
+ import { resolveMasterPrompt, renderPrompt, buildContextFromPosition } from '@/lib/master-prompt'
 
 // POST /api/generate-di/ai-section - Generate a SINGLE section with AI
 // Supports two modes:
@@ -23,11 +24,14 @@ export async function POST(request: Request) {
       }
 
       // Resolve master prompt
-      const masterPrompt = await resolveMasterPromptInternal(
-        position.departmentId,
-        position.businessFunctionId,
-        position.grade
-      )
+      const masterPrompt = await resolveMasterPrompt('generation', {
+        departmentId: position.departmentId,
+        businessFunctionId: position.businessFunctionId,
+        grade: position.grade,
+      })
+      const renderedMasterPrompt = masterPrompt
+        ? renderPrompt(masterPrompt.content, buildContextFromPosition(position))
+        : null
 
       // Get archive DIs as reference
       const archiveDIs = await db.archiveDI.findMany({
@@ -52,8 +56,8 @@ ${position.functions ? `Выполняемые функции: ${position.functi
       const systemPrompt = `Ты — эксперт по созданию должностных инструкций для компании Группа Астра.
 Ты создаёшь профессиональные, подробные и формально корректные должностные инструкции на русском языке в соответствии с требованиями трудового законодательства РФ.
 
-${masterPrompt ? `МАСТЕР-ПРОМПТ (основные правила и стиль):
-${masterPrompt.content}` : 'Используй стандартный корпоративный стиль должностных инструкций.'}
+${renderedMasterPrompt ? `МАСТЕР-ПРОМПТ (основные правила и стиль):
+${renderedMasterPrompt}` : 'Используй стандартный корпоративный стиль должностных инструкций.'}
 
 ИНФОРМАЦИЯ О ДОЛЖНОСТИ:
 ${posContext}
@@ -79,16 +83,15 @@ ${archiveContext}
 
       userPrompt += '\n\nСгенерируй подробное, профессиональное содержание для этой секции.'
 
-      const zai = await ZAI.create()
-      const completion = await zai.chat.completions.create({
+      const client = await getProviderClient()
+      const result = await client.generate({
         messages: [
-          { role: 'assistant', content: systemPrompt },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        thinking: { type: 'disabled' },
       })
 
-      const response = completion.choices[0]?.message?.content || ''
+      const response = result.content || ''
 
       // Return the generated content (don't save to DB yet - manual mode)
       return NextResponse.json({
@@ -132,11 +135,14 @@ ${archiveContext}
     const templateSection = generatedDI.template?.sections.find((s) => s.title === section.sectionTitle)
 
     // Resolve master prompt
-    const masterPrompt = await resolveMasterPromptInternal(
-      generatedDI.position.departmentId,
-      generatedDI.position.businessFunctionId,
-      generatedDI.position.grade
-    )
+    const masterPrompt = await resolveMasterPrompt('generation', {
+      departmentId: generatedDI.position.departmentId,
+      businessFunctionId: generatedDI.position.businessFunctionId,
+      grade: generatedDI.position.grade,
+    })
+    const renderedMasterPrompt = masterPrompt
+      ? renderPrompt(masterPrompt.content, buildContextFromPosition(generatedDI.position))
+      : null
 
     // Get archive DIs as reference
     const archiveDIs = await db.archiveDI.findMany({
@@ -167,8 +173,8 @@ ${generatedDI.position.functions ? `Выполняемые функции: ${gen
     const systemPrompt = `Ты — эксперт по созданию должностных инструкций для компании Группа Астра.
 Ты создаёшь профессиональные, подробные и формально корректные должностные инструкции на русском языке.
 
-${masterPrompt ? `МАСТЕР-ПРОМПТ:
-${masterPrompt.content}` : 'Используй стандартный корпоративный стиль должностных инструкций.'}
+${renderedMasterPrompt ? `МАСТЕР-ПРОМПТ:
+${renderedMasterPrompt}` : 'Используй стандартный корпоративный стиль должностных инструкций.'}
 
 ИНФОРМАЦИЯ О ДОЛЖНОСТИ:
 ${posContext}
@@ -197,17 +203,16 @@ ${otherSections || 'Другие секции ещё не сгенерирова
 
     userPrompt += '\n\nСгенерируй подробное, профессиональное содержание для этой секции.'
 
-    // Call AI
-    const zai = await ZAI.create()
-    const completion = await zai.chat.completions.create({
+    // Вызов ИИ через универсальный коннектор.
+    const client = await getProviderClient()
+    const result = await client.generate({
       messages: [
-        { role: 'assistant', content: systemPrompt },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      thinking: { type: 'disabled' },
     })
 
-    const response = completion.choices[0]?.message?.content || ''
+    const response = result.content || ''
 
     // Update the section in the database
     const updatedSection = await db.generatedDISection.update({
@@ -222,38 +227,6 @@ ${otherSections || 'Другие секции ещё не сгенерирова
     return NextResponse.json(updatedSection)
   } catch (error) {
     console.error('AI Section error:', error)
-    return NextResponse.json({ error: 'Ошибка AI-генерации секции' }, { status: 500 })
-  }
-}
-
-async function resolveMasterPromptInternal(
-  departmentId: string,
-  businessFunctionId: string | null,
-  grade: string | null
-) {
-  const combinations: Record<string, string | null>[] = []
-
-  if (departmentId && businessFunctionId && grade) combinations.push({ departmentId, businessFunctionId, grade })
-  if (departmentId && businessFunctionId) combinations.push({ departmentId, businessFunctionId, grade: null })
-  if (departmentId && grade) combinations.push({ departmentId, businessFunctionId: null, grade })
-  if (departmentId) combinations.push({ departmentId, businessFunctionId: null, grade: null })
-  if (businessFunctionId && grade) combinations.push({ departmentId: null, businessFunctionId, grade })
-  if (businessFunctionId) combinations.push({ departmentId: null, businessFunctionId, grade: null })
-  if (grade) combinations.push({ departmentId: null, businessFunctionId: null, grade })
-  combinations.push({ departmentId: null, businessFunctionId: null, grade: null })
-
-  for (const combo of combinations) {
-    const prompt = await db.masterPrompt.findFirst({
-      where: {
-        isActive: true,
-        departmentId: combo.departmentId || null,
-        businessFunctionId: combo.businessFunctionId || null,
-        grade: combo.grade || null,
-      },
-      orderBy: { version: 'desc' },
-    })
-    if (prompt) return prompt
-  }
-
-  return null
+   return NextResponse.json({ error: 'Ошибка AI-генерации секции' }, { status: 500 })
+ }
 }

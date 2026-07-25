@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import ZAI from 'z-ai-web-dev-sdk'
+ import { getProviderClient } from '@/lib/ai-connector'
+ import { resolveMasterPrompt, renderPrompt, buildContextFromPosition } from '@/lib/master-prompt'
 
 // POST /api/generate-di/ai-improve - Improve existing section content with AI
 export async function POST(request: Request) {
@@ -56,6 +57,16 @@ ${positionContext}
 - Не добавляй заголовок секции в начало текста
 - Возвращай только улучшенный текст без пояснений`
 
+    // Резолвим промпт категории "improvement" (если есть) и рендерим переменные.
+    const improvePrompt = await resolveMasterPrompt('improvement', {
+      departmentId: section.generatedDI.position.departmentId,
+      businessFunctionId: section.generatedDI.position.businessFunctionId,
+      grade: section.generatedDI.position.grade,
+    })
+    const renderedImprovePrompt = improvePrompt
+      ? renderPrompt(improvePrompt.content, buildContextFromPosition(section.generatedDI.position))
+      : null
+
     const userPrompt = `Текущий текст секции "${section.sectionTitle}":
 
 ${section.sectionContent}
@@ -64,17 +75,16 @@ ${section.sectionContent}
 
 Верни улучшенный текст секции.`
 
-    // Call AI
-    const zai = await ZAI.create()
-    const completion = await zai.chat.completions.create({
+    // Вызов ИИ через универсальный коннектор. Промпт "improvement" добавляется к system.
+    const client = await getProviderClient()
+    const result = await client.generate({
       messages: [
-        { role: 'assistant', content: systemPrompt },
+        { role: 'system', content: renderedImprovePrompt ? `${systemPrompt}\n\nПРОМПТ УЛУЧШЕНИЯ:\n${renderedImprovePrompt}` : systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      thinking: { type: 'disabled' },
     })
 
-    const response = completion.choices[0]?.message?.content || ''
+    const response = result.content || ''
 
     // Update the section in the database
     const updatedSection = await db.generatedDISection.update({

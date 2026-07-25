@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import ZAI from 'z-ai-web-dev-sdk'
+ import { getProviderClient } from '@/lib/ai-connector'
+ import { resolveMasterPrompt, renderPrompt, buildContextFromPosition } from '@/lib/master-prompt'
 
 // POST /api/generate-di/ai-audit - AI audit of existing DI with 5 legal error classes
 export async function POST(request: Request) {
@@ -39,8 +40,18 @@ export async function POST(request: Request) {
 Бизнес-функция: ${di.position.businessFunction?.name || 'Не указана'}
 Проект: ${di.position.project?.name || 'Не указан'}`
 
-    // Initialize AI
-    const zai = await ZAI.create()
+    // Получаем клиент ИИ-провайдера.
+    const client = await getProviderClient()
+
+    // Резолвим промпт категории "audit" (если есть) и рендерим переменные.
+    const auditPrompt = await resolveMasterPrompt('audit', {
+      departmentId: di.position.departmentId,
+      businessFunctionId: di.position.businessFunctionId,
+      grade: di.position.grade,
+    })
+    const renderedAuditPrompt = auditPrompt
+      ? renderPrompt(auditPrompt.content, buildContextFromPosition(di.position))
+      : null
 
     // ─────────────────────────────────────────────────
     // ПРАВОВОЕ ЯДРО — 5 классов реальных ошибок
@@ -132,15 +143,14 @@ ${diText}
   "summary": "общее текстовое резюме аудита (2-3 предложения)"
 }`
 
-    const completion = await zai.chat.completions.create({
+    const result = await client.generate({
       messages: [
-        { role: 'assistant', content: systemPrompt },
+        { role: 'system', content: renderedAuditPrompt ? `${systemPrompt}\n\nПРОМПТ АУДИТА:\n${renderedAuditPrompt}` : systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      thinking: { type: 'disabled' },
     })
 
-    const aiResponse = completion.choices[0]?.message?.content || ''
+    const aiResponse = result.content || ''
 
     // Parse AI response - try to extract JSON
     let auditData: Record<string, unknown>

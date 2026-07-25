@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import ZAI from 'z-ai-web-dev-sdk'
+ import { getProviderClient } from '@/lib/ai-connector'
 
 // POST /api/compare/ai-diff - AI-powered comparison of two versions
 export async function POST(request: Request) {
@@ -94,16 +94,15 @@ ${text2}
 
 Проведи детальный анализ различий между этими версиями.`
 
-    const zai = await ZAI.create()
-    const completion = await zai.chat.completions.create({
+    const client = await getProviderClient()
+    const result = await client.generate({
       messages: [
-        { role: 'assistant', content: systemPrompt },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      thinking: { type: 'disabled' },
     })
 
-    const aiSummary = completion.choices[0]?.message?.content || 'Не удалось сгенерировать сравнение'
+    const aiSummary = result.content || 'Не удалось сгенерировать сравнение'
 
     // Also do a simple line-by-line diff
     const lines1 = text1.split('\n')
