@@ -10,15 +10,15 @@ export async function GET(
     const { id } = await params
 
     const archiveDI = await db.archiveDI.findUnique({
-      where: { id },
-      include: {
-        position: {
-          include: {
-            department: true,
-          },
-        },
-      },
-    })
+     where: { id },
+     include: {
+       position: {
+         include: {
+            department: { include: { company: true } },
+         },
+       },
+     },
+   })
 
     if (!archiveDI) {
       return NextResponse.json(

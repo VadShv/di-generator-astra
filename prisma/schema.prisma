@@ -147,8 +147,10 @@ model ArchiveDI {
   id          String   @id @default(cuid())
   title       String
   content     String   // Полный текст ДИ
-  positionId  String
-  position    Position   @relation(fields: [positionId], references: [id])
+  // positionId опционален: архивную ДИ можно загрузить без привязки к должности
+  // и привязать позже (см. ТЗ раздел 18).
+  positionId  String?
+  position    Position?  @relation(fields: [positionId], references: [id])
   fileName    String?    // Имя загруженного файла
   uploadedAt  DateTime @default(now())
   createdAt   DateTime @default(now())
