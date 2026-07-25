@@ -18,6 +18,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { Zap, Loader2, CheckCircle2, XCircle, Building2, Users, FileText, Layers } from 'lucide-react'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { ShieldAlert, Trash2 } from 'lucide-react'
 
 interface Company { id: string; name: string; shortName: string | null; code: string; _count: { departments: number } }
 interface Department { id: string; name: string; code: string; companyId: string | null; company: Company | null; _count: { positions: number } }
@@ -49,6 +54,11 @@ export function MassGenerationModule() {
   const [progress, setProgress] = useState(0)
   const [results, setResults] = useState<MassGenerateResult[] | null>(null)
   const [resultDialogOpen, setResultDialogOpen] = useState(false)
+  // Пакетные операции над результатами генерации
+  const [batchAuditLoading, setBatchAuditLoading] = useState(false)
+  const [batchAuditOpen, setBatchAuditOpen] = useState(false)
+  const [batchDeleteLoading, setBatchDeleteLoading] = useState(false)
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -121,7 +131,6 @@ export function MassGenerationModule() {
     setResults(null)
 
     try {
-      setProgress(30)
       const res = await fetch('/api/generate-di/mass-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -131,8 +140,6 @@ export function MassGenerationModule() {
           templateId: selectedTemplateId,
         }),
       })
-
-      setProgress(80)
 
       if (!res.ok) {
         const err = await res.json()
@@ -153,6 +160,87 @@ export function MassGenerationModule() {
       toast({ title: 'Ошибка', description: msg, variant: 'destructive' })
     } finally {
       setGenerating(false)
+    }
+  }
+
+  // Индикатор выполнения: пока идёт массовая генерация (единый синхронный запрос),
+  // плавно «пульсируем» значением прогресса, чтобы пользователь видел живой отклик.
+  useEffect(() => {
+    if (!generating) {
+      return
+    }
+    let value = 5
+    setProgress(value)
+    const timer = setInterval(() => {
+      // Медленный рост до 90, без достижения 100 до реального завершения
+      value = value >= 90 ? 90 : value + Math.max(1, Math.round((90 - value) * 0.05))
+      setProgress(value)
+    }, 600)
+    return () => clearInterval(timer)
+  }, [generating])
+
+  // Список ID успешно созданных ДИ для пакетных операций
+  const successDiIds = results
+    ? results.filter(r => r.success && r.diId).map(r => r.diId)
+    : []
+
+  const handleBatchAudit = async () => {
+    if (successDiIds.length === 0) {
+      toast({ title: 'Нет ДИ для аудита', variant: 'destructive' })
+      return
+    }
+    setBatchAuditLoading(true)
+    try {
+      const res = await fetch('/api/generate-di/batch-audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ diIds: successDiIds }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Ошибка пакетного аудита')
+      }
+      toast({
+        title: 'Аудит завершён',
+        description: `Проверено ${data.successCount} из ${data.total}. Ошибок: ${data.failCount}`,
+      })
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Неизвестная ошибка'
+      toast({ title: 'Ошибка аудита', description: msg, variant: 'destructive' })
+    } finally {
+      setBatchAuditLoading(false)
+      setBatchAuditOpen(false)
+    }
+  }
+
+  const handleBatchDelete = async () => {
+    if (successDiIds.length === 0) {
+      toast({ title: 'Нет ДИ для удаления', variant: 'destructive' })
+      return
+    }
+    setBatchDeleteLoading(true)
+    try {
+      const res = await fetch('/api/generate-di/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ diIds: successDiIds, confirm: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Ошибка пакетного удаления')
+      }
+      toast({
+        title: 'Удаление завершено',
+        description: `Удалено ${data.successCount} из ${data.total}. Ошибок: ${data.failCount}`,
+      })
+      setResults(null)
+      setResultDialogOpen(false)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Неизвестная ошибка'
+      toast({ title: 'Ошибка удаления', description: msg, variant: 'destructive' })
+    } finally {
+      setBatchDeleteLoading(false)
+      setBatchDeleteOpen(false)
     }
   }
 
@@ -333,12 +421,17 @@ export function MassGenerationModule() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                    <span className="text-sm font-medium">Генерация в процессе...</span>
-                  </div>
-                  <Progress value={progress} className="h-2" />
-                  <p className="text-xs text-muted-foreground">
-                    AI генерирует ДИ для каждой должности. Это может занять несколько минут.
-                  </p>
+                   <span className="text-sm font-medium">Генерация в процессе...</span>
+                    {affectedPositions > 0 && (
+                      <span className="text-xs text-muted-foreground ml-2">
+                        Обработка {affectedPositions} должностей...
+                      </span>
+                    )}
+                 </div>
+                 <Progress value={progress} className="h-2" />
+                 <p className="text-xs text-muted-foreground">
+                   AI генерирует ДИ для каждой должности. Это может занять несколько минут.
+                 </p>
                 </div>
               )}
 
@@ -399,13 +492,48 @@ export function MassGenerationModule() {
       {/* Results Dialog */}
       <Dialog open={resultDialogOpen} onOpenChange={setResultDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Результаты массовой генерации</DialogTitle>
-            <DialogDescription>Детали генерации ДИ для каждой должности</DialogDescription>
-          </DialogHeader>
-          {results && (
-            <Table>
-              <TableHeader>
+         <DialogHeader>
+           <DialogTitle>Результаты массовой генерации</DialogTitle>
+           <DialogDescription>Детали генерации ДИ для каждой должности</DialogDescription>
+         </DialogHeader>
+          {results && successDiIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 p-3">
+              <span className="text-sm font-medium">
+                Успешно создано: {successDiIds.length}
+              </span>
+              <div className="ml-auto flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={batchAuditLoading || batchDeleteLoading}
+                  onClick={() => setBatchAuditOpen(true)}
+                >
+                  {batchAuditLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <ShieldAlert className="h-4 w-4 mr-1" />
+                  )}
+                  Аудит всех
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={batchAuditLoading || batchDeleteLoading}
+                  onClick={() => setBatchDeleteOpen(true)}
+                >
+                  {batchDeleteLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-1" />
+                  )}
+                  Удалить все
+                </Button>
+              </div>
+            </div>
+          )}
+         {results && (
+           <Table>
+             <TableHeader>
                 <TableRow>
                   <TableHead>Должность</TableHead>
                   <TableHead>Название ДИ</TableHead>
@@ -432,9 +560,62 @@ export function MassGenerationModule() {
                 ))}
               </TableBody>
             </Table>
-          )}
-        </DialogContent>
-      </Dialog>
+         )}
+       </DialogContent>
+     </Dialog>
+
+      {/* Подтверждение пакетного аудита */}
+      <AlertDialog open={batchAuditOpen} onOpenChange={setBatchAuditOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Запустить аудит всех ДИ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Будет проверено {successDiIds.length} должностных инструкций через активного ИИ-провайдера.
+              Операция может занять некоторое время.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={batchAuditLoading}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={batchAuditLoading}
+              onClick={(e) => {
+                e.preventDefault()
+                handleBatchAudit()
+              }}
+            >
+              {batchAuditLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Запустить аудит
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Подтверждение пакетного удаления */}
+      <AlertDialog open={batchDeleteOpen} onOpenChange={setBatchDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить все созданные ДИ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Будет безвозвратно удалено {successDiIds.length} должностных инструкций
+              вместе со связанными разделами и результатами аудита. Действие необратимо.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={batchDeleteLoading}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={batchDeleteLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault()
+                handleBatchDelete()
+              }}
+            >
+              {batchDeleteLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Удалить безвозвратно
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
