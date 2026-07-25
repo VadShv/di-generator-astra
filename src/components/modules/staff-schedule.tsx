@@ -835,9 +835,9 @@ export function StaffScheduleModule() {
       </Card>
 
       {/* ====== Main Content: Tree + Positions ====== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* ====== Left: Organization Tree ====== */}
-        <Card>
+      <div className="flex flex-col gap-4 max-w-5xl mx-auto w-full">
+        {/* ====== Block 1: Organization Tree ====== */}
+        <Card className="shadow-sm">
           <Collapsible open={!orgTreeCollapsed} onOpenChange={(v) => setOrgTreeCollapsed(!v)}>
           <CollapsibleTrigger asChild>
           <CardHeader className="pb-2 cursor-pointer hover:bg-muted/40 transition-colors">
@@ -856,7 +856,7 @@ export function StaffScheduleModule() {
           </CardHeader>
           </CollapsibleTrigger>
           <CollapsibleContent>
-          <CardContent className="max-h-[700px] overflow-y-auto">
+          <CardContent className="max-h-[460px] overflow-y-auto">
             {companies.length === 0 && orphanDepts.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Landmark className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -886,9 +886,9 @@ export function StaffScheduleModule() {
           </Collapsible>
         </Card>
 
-        {/* ====== Right: Positions ====== */}
-        <Card>
-          <Collapsible open={!positionsCollapsed} onOpenChange={(v) => setPositionsCollapsed(!v)}>
+        {/* ====== Block 2: Positions ====== */}
+        <Card className="shadow-sm">
+         <Collapsible open={!positionsCollapsed} onOpenChange={(v) => setPositionsCollapsed(!v)}>
           <CollapsibleTrigger asChild>
           <CardHeader className="pb-2 cursor-pointer hover:bg-muted/40 transition-colors">
             <div className="flex items-center justify-between gap-2">
@@ -1445,7 +1445,7 @@ export function StaffScheduleModule() {
        onSelectDept={d => { setDetailPos(null); setDetailDept(d) }}
        onEditPos={p => { setDetailPos(null); openEditPos(p) }}
        onChanged={fetchPositions}
-     />
-    </div>
-  )
+    />
+   </div>
+ )
 }
