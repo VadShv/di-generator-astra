@@ -24,14 +24,15 @@ model Company {
   actualAddress   String?      // Фактический адрес
   director        String?      // Руководитель
   description     String?      // Описание
-  departments     Department[]
-  staffingTables  StaffingTable[]
-  uploadedDocuments UploadedDocument[]
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+ departments     Department[]
+ staffingTables  StaffingTable[]
+ uploadedDocuments UploadedDocument[]
+  masterPrompts      MasterPrompt[] // Промпты, привязанные к юр. лицу (Фаза 21)
+ createdAt       DateTime     @default(now())
+ updatedAt       DateTime     @updatedAt
 
-  @@index([inn])
-  @@index([name])
+ @@index([inn])
+ @@index([name])
 }
 
 // ==========================================
@@ -129,15 +130,16 @@ model Position {
   functions           String?     // Выполняемые функции (JSON строка с массивом)
   staffingTableId     String?  @unique  // Связь со строкой ШР (одна должность ← одна строка ШР)
   staffingTable       StaffingTable? @relation("StaffingTablePosition", fields: [staffingTableId], references: [id])
-  archiveDIs          ArchiveDI[]
-  generatedDIs        GeneratedDI[]
-  uploadedDocuments   UploadedDocument[]
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+ archiveDIs          ArchiveDI[]
+ generatedDIs        GeneratedDI[]
+ uploadedDocuments   UploadedDocument[]
+  masterPrompts      MasterPrompt[] // Промпты, привязанные к конкретной должности (Фаза 21)
+ createdAt           DateTime @default(now())
+ updatedAt           DateTime @updatedAt
 
-  @@index([departmentId])
-  @@index([businessFunctionId])
-  @@index([grade])
+ @@index([departmentId])
+ @@index([businessFunctionId])
+ @@index([grade])
 }
 
 // ==========================================
@@ -344,17 +346,30 @@ model MasterPrompt {
   department          Department? @relation(fields: [departmentId], references: [id])
   businessFunctionId  String?  // Применимо к бизнес-функции (null = все)
   businessFunction    BusinessFunction? @relation(fields: [businessFunctionId], references: [id])
-  grade               String?  // Применимо к грейду (null = все): "линейная" / "руководитель"
-  functionType        String?  // Применимо к функции (null = все)
-  description         String?  // Описание версии
-  // История версий промпта
-  versions            MasterPromptVersion[]
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+ grade               String?  // Применимо к грейду (null = все): "линейная" / "руководитель"
+ functionType        String?  // Применимо к функции (null = все)
+ description         String?  // Описание версии
+ // История версий промпта
+ versions            MasterPromptVersion[]
+  testResults         PromptTestResult[] // Результаты тестирования промпта (Фаза 21)
+ // Расширенные условия применимости (Фаза 21)
+ companyId           String?  // Применимо к юр. лицу (null = все)
+  company             Company? @relation(fields: [companyId], references: [id])
+  positionId          String?  // Применимо к конкретной должности (null = все)
+  position            Position? @relation(fields: [positionId], references: [id])
+  // Организация и метрики (Фаза 21)
+  tags                String   @default("[]") // JSON-массив тегов
+  estimatedTokens     Int?     // Оценка длины промпта в токенах
+  useCount            Int      @default(0) // Счётчик применений при генерации
+  lastUsedAt          DateTime? // Последнее применение при генерации
+ createdAt           DateTime @default(now())
+ updatedAt           DateTime @updatedAt
 
-  @@index([category])
-  @@index([isActive])
-  @@index([name])
+ @@index([category])
+ @@index([isActive])
+ @@index([name])
+  @@index([companyId])
+  @@index([positionId])
 }
 
 // Новая модель Фазы 1: история версий мастер-промпта
@@ -362,13 +377,48 @@ model MasterPromptVersion {
   id              String   @id @default(cuid())
   masterPromptId  String
   masterPrompt    MasterPrompt @relation(fields: [masterPromptId], references: [id], onDelete: Cascade)
-  version         Int      // Номер версии
-  content         String   // Содержимое промпта на момент версии
-  description     String?  // Описание изменений
-  createdBy       String?  // Кто изменил
+ version         Int      // Номер версии
+ content         String   // Содержимое промпта на момент версии
+ description     String?  // Описание изменений
+  diff            String?  // Краткое описание отличий от предыдущей версии (Фаза 21)
+ createdBy       String?  // Кто изменил
+ createdAt       DateTime @default(now())
+
+ @@index([masterPromptId])
+}
+
+// ==========================================
+// Цепочки промптов (Фаза 21)
+// Последовательность шагов: генерация → улучшение → аудит
+// ==========================================
+model PromptChain {
+  id          String   @id @default(cuid())
+  name        String   // Название цепочки
+  description String?  // Описание
+  steps       String   @default("[]") // JSON: [{category, order, stopOnError}]
+  isActive    Boolean  @default(false) // Активная цепочка
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+// ==========================================
+// Результаты тестирования промптов (Фаза 21)
+// ==========================================
+model PromptTestResult {
+  id              String   @id @default(cuid())
+  masterPromptId  String
+  masterPrompt    MasterPrompt @relation(fields: [masterPromptId], references: [id], onDelete: Cascade)
+  positionId      String?  // Должность, на которой тестировали
+  providerId      String?  // Использованный ИИ-провайдер
+  response        String   // Ответ модели
+  durationMs      Int      // Время генерации (мс)
+  rating          Int?     // Оценка пользователя (1–5)
   createdAt       DateTime @default(now())
 
   @@index([masterPromptId])
+  @@index([positionId])
 }
 
 // ==========================================

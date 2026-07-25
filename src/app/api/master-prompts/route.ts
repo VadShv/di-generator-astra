@@ -3,21 +3,70 @@ import { db } from '@/lib/db'
 import {
   resolveMasterPrompt as resolvePromptByCategory,
   savePromptVersion,
+  estimateTokens,
+  extractVariables,
   PROMPT_CATEGORIES,
   type PromptCategory,
+  type PromptCriteria,
 } from '@/lib/master-prompt'
 
 // Допустимые категории промптов (соответствуют PROMPT_CATEGORIES в src/lib/master-prompt.ts).
 const VALID_CATEGORIES = new Set<string>(Object.keys(PROMPT_CATEGORIES))
 
-// Проверить и привести категорию к строковому значению или null.
+// Привести строку к валидной категории или null.
 function normalizeCategory(value: unknown): string | null {
   if (typeof value !== 'string' || !value) return null
   return VALID_CATEGORIES.has(value) ? value : null
 }
 
-// GET /api/master-prompts - список всех мастер-промптов или резолв по критериям.
-// Поддерживает ?category=... для фильтрации списка и резолва по категории.
+// Нормализовать массив тегов или JSON-строку тегов в JSON-строку.
+function normalizeTags(value: unknown): string {
+  if (Array.isArray(value)) {
+    const tags = value.map((t) => String(t).trim()).filter(Boolean)
+    return JSON.stringify(tags)
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) {
+        return JSON.stringify(parsed.map((t) => String(t).trim()).filter(Boolean))
+      }
+    } catch {
+      // Не JSON — трактуем как один тег.
+      return JSON.stringify([value.trim()])
+    }
+  }
+  return '[]'
+}
+
+// Нормализовать переменные в JSON-строку.
+function normalizeVariables(value: unknown): string {
+  if (Array.isArray(value)) {
+    return JSON.stringify(value.map((v) => String(v).trim()).filter(Boolean))
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) {
+        return JSON.stringify(parsed.map((v) => String(v).trim()).filter(Boolean))
+      }
+    } catch {
+      // Не JSON — оставляем как есть.
+      return value
+    }
+  }
+  return '[]'
+}
+
+// GET /api/master-prompts — список промптов с фильтрами или резолв по критериям.
+// Поддерживаемые query-параметры:
+//   ?active=true            — только активные
+//   ?category=generation    — фильтр по категории
+//   ?tag=...                — фильтр по тегу (поиск в JSON-массиве)
+//   ?search=...             — поиск по содержимому (content)
+//   ?companyId=...          — фильтр по юр. лицу
+//   Резолв (если переданы departmentId/businessFunctionId/grade/positionId):
+//   ?category=...&departmentId=...&businessFunctionId=...&grade=...&positionId=...&companyId=...&functionType=...
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -26,27 +75,44 @@ export async function GET(request: NextRequest) {
     const businessFunctionId = searchParams.get('businessFunctionId')
     const grade = searchParams.get('grade')
     const category = searchParams.get('category')
+    const companyId = searchParams.get('companyId')
+    const positionId = searchParams.get('positionId')
+    const functionType = searchParams.get('functionType')
 
     // Если переданы критерии резолва — вернуть наиболее специфичный активный промпт.
-    // Категория опциональна: при её отсутствии резолвим по категории "generation".
-    if (departmentId || businessFunctionId || grade) {
+    if (departmentId || businessFunctionId || grade || positionId) {
       return await resolveMasterPromptHandler(
-        category as PromptCategory | null,
-        departmentId,
-        businessFunctionId,
-        grade
+        normalizeCategory(category) as PromptCategory | null,
+        {
+          departmentId,
+          businessFunctionId,
+          grade,
+          companyId,
+          positionId,
+          functionType,
+        }
       )
     }
+
+    // Обычный список с фильтрами.
+    const tag = searchParams.get('tag')
+    const search = searchParams.get('search')
 
     const where: Record<string, unknown> = {}
     if (activeOnly) where.isActive = true
     if (category) where.category = category
+    if (companyId) where.companyId = companyId
+    if (search) where.content = { contains: search, mode: 'insensitive' }
+    // Фильтр по тегу: ищем JSON-массив, содержащий тег.
+    if (tag) where.tags = { contains: `"${tag}"` }
 
     const prompts = await db.masterPrompt.findMany({
       where,
       include: {
         department: true,
         businessFunction: true,
+        company: true,
+        position: true,
       },
       orderBy: [
         { departmentId: 'desc' }, // Более специфичные первыми
@@ -67,67 +133,70 @@ export async function GET(request: NextRequest) {
 // которая фильтрует по категории и поддерживает каскад специфичности.
 async function resolveMasterPromptHandler(
   category: PromptCategory | null,
-  departmentId: string | null,
-  businessFunctionId: string | null,
-  grade: string | null
+  criteria: PromptCriteria
 ) {
   try {
-    const resolved = await resolvePromptByCategory(category || 'generation', {
-      departmentId: departmentId || null,
-      businessFunctionId: businessFunctionId || null,
-      grade: grade || null,
-    })
+    const resolved = await resolvePromptByCategory(category || 'generation', criteria)
     if (!resolved) return NextResponse.json(null)
-    // Догружаем связи для единообразия ответа со списком.
-    const full = await db.masterPrompt.findUnique({
+    // Догружаем связи для отображения деталей применимости.
+    const prompt = await db.masterPrompt.findUnique({
       where: { id: resolved.id },
-      include: { department: true, businessFunction: true },
+      include: {
+        department: true,
+        businessFunction: true,
+        company: true,
+        position: true,
+      },
     })
-    return NextResponse.json(full ?? resolved)
+    return NextResponse.json(prompt)
   } catch (error) {
-    console.error('MasterPrompt resolve error:', error)
-    return NextResponse.json({ error: 'Ошибка разрешения мастер-промпта' }, { status: 500 })
+    console.error('MasterPrompts resolve error:', error)
+    return NextResponse.json({ error: 'Ошибка резолва мастер-промпта' }, { status: 500 })
   }
 }
 
-// POST /api/master-prompts - создание мастер-промпта (с категорией, флагом Культуры ИИ,
-// списком переменных и автоматическим snapshot-ом в MasterPromptVersion).
+// POST /api/master-prompts — создание мастер-промпта.
+// Принимает расширенный набор полей (Фаза 21): tags, companyId, positionId, estimatedTokens.
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { name, content, departmentId, businessFunctionId, grade, functionType, description, category, isAiCulture, variables } = body
+    const {
+      name,
+      content,
+      isActive,
+      isAiCulture,
+      category,
+      variables,
+      departmentId,
+      businessFunctionId,
+      grade,
+      functionType,
+      description,
+      companyId,
+      positionId,
+      tags,
+    } = body
 
-    if (!name || typeof name !== 'string' || name.trim() === '') {
+    if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ error: 'Название промпта обязательно' }, { status: 400 })
     }
-
-    if (!content || typeof content !== 'string' || content.trim() === '') {
+    if (!content || typeof content !== 'string' || !content.trim()) {
       return NextResponse.json({ error: 'Содержимое промпта обязательно' }, { status: 400 })
     }
 
-    // Найти последнюю версию для того же имени и критериев применимости.
-    const existing = await db.masterPrompt.findFirst({
-      where: {
-        name: name.trim(),
-        departmentId: departmentId || null,
-        businessFunctionId: businessFunctionId || null,
-        grade: grade || null,
-        functionType: functionType || null,
-        // Учитываем категорию: версии нумеруются в пределах имени+критерии+категория.
-        category: normalizeCategory(category) || 'generation',
-      },
-      orderBy: { version: 'desc' },
-    })
-
-    const version = existing ? existing.version + 1 : 1
-    // Если явно задан флаг Культуры ИИ — категория принудительно ai_culture.
     const resolvedCategory = isAiCulture === true ? 'ai_culture' : (normalizeCategory(category) || 'generation')
-    // variables хранится как JSON-строка; принимаем массив или готовую строку.
+
+    // Автоматически определяем переменные из текста, если не переданы явно.
+    const detectedVariables = extractVariables(content)
     const variablesJson = Array.isArray(variables)
-      ? JSON.stringify(variables)
-      : typeof variables === 'string' && variables.trim()
-        ? variables
+      ? normalizeVariables(variables)
+      : detectedVariables.length > 0
+        ? JSON.stringify(detectedVariables)
         : '[]'
+
+    // Версия нового промпта — 1.
+    const version = 1
+    const estimatedTokensValue = estimateTokens(content)
 
     const prompt = await db.masterPrompt.create({
       data: {
@@ -135,15 +204,25 @@ export async function POST(request: Request) {
         content: content.trim(),
         version,
         category: resolvedCategory,
+        isActive: isActive !== undefined ? isActive : true,
         isAiCulture: isAiCulture === true,
         variables: variablesJson,
+        tags: normalizeTags(tags),
+        estimatedTokens: estimatedTokensValue,
         departmentId: departmentId || null,
         businessFunctionId: businessFunctionId || null,
         grade: grade || null,
         functionType: functionType || null,
+        companyId: companyId || null,
+        positionId: positionId || null,
         description: description?.trim() || null,
       },
-      include: { department: true, businessFunction: true },
+      include: {
+        department: true,
+        businessFunction: true,
+        company: true,
+        position: true,
+      },
     })
 
     // Сохраняем snapshot в историю версий.
@@ -162,12 +241,30 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT /api/master-prompts - обновление мастер-промпта. При изменении content
+// PUT /api/master-prompts — обновление мастер-промпта. При изменении content
 // инкрементируем version и создаём новый snapshot в MasterPromptVersion.
+// Принимает расширенный набор полей (Фаза 21).
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
-    const { id, name, content, isActive, departmentId, businessFunctionId, grade, functionType, description, category, isAiCulture, variables } = body
+    const {
+      id,
+      name,
+      content,
+      isActive,
+      isAiCulture,
+      category,
+      variables,
+      departmentId,
+      businessFunctionId,
+      grade,
+      functionType,
+      description,
+      companyId,
+      positionId,
+      tags,
+      changeDescription,
+    } = body
 
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'ID промпта обязателен' }, { status: 400 })
@@ -180,31 +277,47 @@ export async function PUT(request: Request) {
 
     // Если контент меняется — создадим новую версию и snapshot.
     const contentChanged = content !== undefined && typeof content === 'string' && content.trim() !== existing.content
+
     const resolvedCategory = isAiCulture === true ? 'ai_culture' : (normalizeCategory(category) || undefined)
-    const variablesJson = Array.isArray(variables)
-      ? JSON.stringify(variables)
-      : typeof variables === 'string' && variables.trim()
-        ? variables
-        : undefined
+
+    const updateData: Record<string, unknown> = {}
+    if (name !== undefined) updateData.name = name.trim()
+    if (content !== undefined) updateData.content = content.trim()
+    if (resolvedCategory !== undefined) updateData.category = resolvedCategory
+    if (isAiCulture !== undefined) updateData.isAiCulture = isAiCulture === true
+    if (isActive !== undefined) updateData.isActive = isActive
+    if (departmentId !== undefined) updateData.departmentId = departmentId || null
+    if (businessFunctionId !== undefined) updateData.businessFunctionId = businessFunctionId || null
+    if (grade !== undefined) updateData.grade = grade || null
+    if (functionType !== undefined) updateData.functionType = functionType || null
+    if (companyId !== undefined) updateData.companyId = companyId || null
+    if (positionId !== undefined) updateData.positionId = positionId || null
+    if (description !== undefined) updateData.description = description?.trim() || null
+    if (tags !== undefined) updateData.tags = normalizeTags(tags)
+
+    // Переменные: если переданы явно — используем; иначе пересчитываем из нового контента.
+    if (variables !== undefined) {
+      updateData.variables = normalizeVariables(variables)
+    } else if (contentChanged) {
+      updateData.variables = JSON.stringify(extractVariables(content))
+    }
+
+    // Пересчёт оценки токенов при изменении контента.
+    if (contentChanged) {
+      updateData.estimatedTokens = estimateTokens(content)
+      // Инкремент версии только при фактическом изменении контента.
+      updateData.version = existing.version + 1
+    }
 
     const prompt = await db.masterPrompt.update({
       where: { id },
-      data: {
-        name: name !== undefined ? name.trim() : undefined,
-        content: content !== undefined ? content.trim() : undefined,
-        category: resolvedCategory,
-        isAiCulture: isAiCulture !== undefined ? isAiCulture === true : undefined,
-        variables: variablesJson,
-        isActive: isActive !== undefined ? isActive : undefined,
-        departmentId: departmentId !== undefined ? (departmentId || null) : undefined,
-        businessFunctionId: businessFunctionId !== undefined ? (businessFunctionId || null) : undefined,
-        grade: grade !== undefined ? (grade || null) : undefined,
-        functionType: functionType !== undefined ? (functionType || null) : undefined,
-        description: description !== undefined ? (description?.trim() || null) : undefined,
-        // Инкремент версии только при фактическом изменении контента.
-        version: contentChanged ? existing.version + 1 : undefined,
+      data: updateData,
+      include: {
+        department: true,
+        businessFunction: true,
+        company: true,
+        position: true,
       },
-      include: { department: true, businessFunction: true },
     })
 
     // При изменении контента сохраняем snapshot новой версии.
@@ -213,8 +326,9 @@ export async function PUT(request: Request) {
         masterPromptId: prompt.id,
         version: prompt.version,
         content: prompt.content,
-        description: prompt.description,
+        description: changeDescription?.trim() || prompt.description,
         createdBy: 'api-update',
+        diff: changeDescription || null,
       })
     }
 
@@ -225,7 +339,7 @@ export async function PUT(request: Request) {
   }
 }
 
-// DELETE /api/master-prompts - Delete master prompt
+// DELETE /api/master-prompts — удаление мастер-промпта.
 export async function DELETE(request: Request) {
   try {
     const body = await request.json()
