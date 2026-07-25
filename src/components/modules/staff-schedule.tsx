@@ -23,12 +23,15 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { useToast } from '@/hooks/use-toast'
 import {
   Plus, Pencil, Trash2, ChevronRight, ChevronDown, Building2, Users, Search,
   Upload, FileSpreadsheet, FileText, Loader2, CheckCircle2, XCircle, AlertCircle,
   FileCheck, FileClock, FileX2, Landmark, FolderTree, Percent, Eye,
- ChevronUp, ChevronDown as ChevronDownIcon, MapPin, GraduationCap, Briefcase, Shield,
+  ChevronUp, MapPin, GraduationCap, Briefcase, Shield,
   Clock, UserCheck, Scale, TrendingUp, CheckSquare2,
   Hash, Calendar, Layers, Network, FileSignature, Building, User, BadgeCheck, AlertTriangle
 } from 'lucide-react'
@@ -94,6 +97,10 @@ export function StaffScheduleModule() {
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null)
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'tree' | 'positions'>('tree')
+
+  // Сворачивание основных блоков (структура организации / должности)
+  const [orgTreeCollapsed, setOrgTreeCollapsed] = useState(false)
+  const [positionsCollapsed, setPositionsCollapsed] = useState(false)
 
   // Company dialog
   const [companyDialogOpen, setCompanyDialogOpen] = useState(false)
@@ -830,15 +837,25 @@ export function StaffScheduleModule() {
       {/* ====== Main Content: Tree + Positions ====== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* ====== Left: Organization Tree ====== */}
-        <Card className="lg:col-span-4">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <FolderTree className="h-4 w-4 text-emerald-600" /> Структура организации
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Компании и подразделения с покрытием ДИ
-            </CardDescription>
+        <Card>
+          <Collapsible open={!orgTreeCollapsed} onOpenChange={(v) => setOrgTreeCollapsed(!v)}>
+          <CollapsibleTrigger asChild>
+          <CardHeader className="pb-2 cursor-pointer hover:bg-muted/40 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FolderTree className="h-4 w-4 text-emerald-600" />
+                <div>
+                  <CardTitle className="text-base">Структура организации</CardTitle>
+                  <CardDescription className="text-xs">
+                    Компании и подразделения с покрытием ДИ
+                  </CardDescription>
+                </div>
+              </div>
+              {orgTreeCollapsed ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
+            </div>
           </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
           <CardContent className="max-h-[700px] overflow-y-auto">
             {companies.length === 0 && orphanDepts.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
@@ -865,32 +882,46 @@ export function StaffScheduleModule() {
               </div>
             )}
           </CardContent>
+          </CollapsibleContent>
+          </Collapsible>
         </Card>
 
         {/* ====== Right: Positions ====== */}
-        <Card className="lg:col-span-8">
-          <CardHeader className="pb-2">
+        <Card>
+          <Collapsible open={!positionsCollapsed} onOpenChange={(v) => setPositionsCollapsed(!v)}>
+          <CollapsibleTrigger asChild>
+          <CardHeader className="pb-2 cursor-pointer hover:bg-muted/40 transition-colors">
             <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Users className="h-4 w-4 text-teal-600" /> Должности
-                {selectedDeptId && (
-                  <Badge variant="outline" className="ml-1 text-emerald-700 border-emerald-300">
-                    {departments.find(d => d.id === selectedDeptId)?.name}
-                  </Badge>
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-teal-600" />
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    Должности
+                    {selectedDeptId && (
+                      <Badge variant="outline" className="ml-1 text-emerald-700 border-emerald-300">
+                        {departments.find(d => d.id === selectedDeptId)?.name}
+                      </Badge>
+                    )}
+                    {selectedCompanyId && !selectedDeptId && (
+                      <Badge variant="outline" className="ml-1 text-emerald-700 border-emerald-300">
+                        {companies.find(c => c.id === selectedCompanyId)?.name}
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {(selectedDeptId || selectedCompanyId) && (
+                  <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={(e) => { e.stopPropagation(); setSelectedDeptId(null); setSelectedCompanyId(null) }}>
+                    Сбросить фильтр
+                  </Button>
                 )}
-                {selectedCompanyId && !selectedDeptId && (
-                  <Badge variant="outline" className="ml-1 text-emerald-700 border-emerald-300">
-                    {companies.find(c => c.id === selectedCompanyId)?.name}
-                  </Badge>
-                )}
-              </CardTitle>
-              {(selectedDeptId || selectedCompanyId) && (
-                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => { setSelectedDeptId(null); setSelectedCompanyId(null) }}>
-                  Сбросить фильтр
-                </Button>
-              )}
+                {positionsCollapsed ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
+              </div>
             </div>
           </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
           <CardContent className="p-0">
             {/* Search and filter bar */}
             <div className="px-4 pb-3 flex flex-col sm:flex-row gap-2">
@@ -1034,6 +1065,8 @@ export function StaffScheduleModule() {
               </div>
             )}
           </CardContent>
+          </CollapsibleContent>
+          </Collapsible>
         </Card>
       </div>
 
@@ -1407,11 +1440,12 @@ export function StaffScheduleModule() {
         getChildren={getChildren}
       />
       <PositionDetailCard
-        pos={detailPos}
-        onClosePos={() => setDetailPos(null)}
-        onSelectDept={d => { setDetailPos(null); setDetailDept(d) }}
-        onEditPos={p => { setDetailPos(null); openEditPos(p) }}
-      />
+       pos={detailPos}
+       onClosePos={() => setDetailPos(null)}
+       onSelectDept={d => { setDetailPos(null); setDetailDept(d) }}
+       onEditPos={p => { setDetailPos(null); openEditPos(p) }}
+       onChanged={fetchPositions}
+     />
     </div>
   )
 }

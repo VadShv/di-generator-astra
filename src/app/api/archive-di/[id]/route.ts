@@ -33,3 +33,25 @@ export async function GET(
     return NextResponse.json({ error: 'Ошибка загрузки архивной ДИ' }, { status: 500 })
   }
 }
+
+// DELETE /api/archive-di/[id] - Удаление архивной ДИ
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+
+    const existing = await db.archiveDI.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json({ error: 'Архивная ДИ не найдена' }, { status: 404 })
+    }
+
+    await db.archiveDI.delete({ where: { id } })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('ArchiveDI DELETE [id] error:', error)
+    return NextResponse.json({ error: 'Ошибка удаления архивной ДИ' }, { status: 500 })
+  }
+}

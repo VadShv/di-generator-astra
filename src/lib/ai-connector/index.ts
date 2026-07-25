@@ -19,6 +19,6 @@ export {
   getProviderClient,
   getZaiFallbackClient,
 } from './ai-provider-factory'
-export { OpenAICompatibleProvider, OllamaProvider, KladProvider } from './providers/openai-compatible'
+export { OpenAICompatibleProvider, OllamaProvider, CloudRuProvider, KladProvider } from './providers/openai-compatible'
 export { YandexCloudProvider } from './providers/yandex-cloud'
 export { ZaiProvider } from './providers/zai'

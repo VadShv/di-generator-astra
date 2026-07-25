@@ -67,8 +67,8 @@ export async function POST(request: Request) {
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return NextResponse.json({ error: 'Название провайдера обязательно' }, { status: 400 })
     }
-    const validTypes = ['openai_compatible', 'yandex_cloud', 'klad', 'ollama', 'zai']
-    if (!type || !validTypes.includes(type)) {
+   const validTypes = ['openai_compatible', 'yandex_cloud', 'cloud', 'klad', 'ollama', 'zai']
+   if (!type || !validTypes.includes(type)) {
       return NextResponse.json(
         { error: `Тип провайдера должен быть одним из: ${validTypes.join(', ')}` },
         { status: 400 }

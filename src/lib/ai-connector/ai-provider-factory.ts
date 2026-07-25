@@ -1,9 +1,9 @@
 // Фабрика провайдеров ИИ по типу (Фаза 2)
-// Создаёт конкретный клиент (OpenAI-compatible / Yandex / Ollama / Klad / zai)
+// Создаёт конкретный клиент (OpenAI-compatible / Yandex / Ollama / Cloud.ru / zai)
 // по AIProviderConfig. Это единая точка получения клиента для всех ИИ-роутов.
 
 import type { AIProviderClient, AIProviderConfig, AIProviderType } from './types'
-import { OpenAICompatibleProvider, OllamaProvider, KladProvider } from './providers/openai-compatible'
+import { OpenAICompatibleProvider, OllamaProvider, CloudRuProvider } from './providers/openai-compatible'
 import { YandexCloudProvider } from './providers/yandex-cloud'
 import { ZaiProvider } from './providers/zai'
 import { getZaiFallbackConfig } from './config'
@@ -13,15 +13,19 @@ import { getZaiFallbackConfig } from './config'
  * @throws Error если тип неизвестен или конфигурация неполна.
  */
 export function createProvider(config: AIProviderConfig): AIProviderClient {
-  switch (config.type) {
+  // Приводим к строке, чтобы принимать устаревший 'klad' из старых записей БД.
+  switch (config.type as string) {
     case 'openai_compatible':
       return new OpenAICompatibleProvider(config)
     case 'yandex_cloud':
       return new YandexCloudProvider(config)
     case 'ollama':
       return new OllamaProvider(config)
+    case 'cloud':
+      return new CloudRuProvider(config)
     case 'klad':
-      return new KladProvider(config)
+      // Алиас для старых записей в БД — используем клиент Cloud.ru
+      return new CloudRuProvider(config)
     case 'zai':
       return new ZaiProvider(config)
     default:

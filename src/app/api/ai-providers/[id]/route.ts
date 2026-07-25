@@ -72,8 +72,8 @@ export async function PATCH(request: Request, { params }: Params) {
       return NextResponse.json({ error: 'Провайдер не найден' }, { status: 404 })
     }
 
-    const validTypes = ['openai_compatible', 'yandex_cloud', 'klad', 'ollama', 'zai']
-    if (type && !validTypes.includes(type)) {
+   const validTypes = ['openai_compatible', 'yandex_cloud', 'cloud', 'klad', 'ollama', 'zai']
+   if (type && !validTypes.includes(type)) {
       return NextResponse.json({ error: `Недопустимый тип: ${type}` }, { status: 400 })
     }
     if (type === 'yandex_cloud' && !folderId && !existing.folderId) {

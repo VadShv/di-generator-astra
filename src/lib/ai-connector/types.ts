@@ -1,12 +1,12 @@
 // Типы универсального ИИ-коннектора (Фаза 2)
-// Покрывает: OpenAI-compatible (OpenAI, Klad.ru, Ollama, локальные LLM),
+// Покрывает: OpenAI-compatible (OpenAI, Cloud.ru, Ollama, локальные LLM),
 // Yandex Cloud (YandexGPT), и встроенный z-ai-web-dev-sdk как fallback.
 
 /** Тип ИИ-провайдера. Соответствует полю AIProvider.type в Prisma-схеме. */
 export type AIProviderType =
-  | 'openai_compatible' // OpenAI-совместимый API (OpenAI, Klad.ru, Ollama, vLLM, LiteLLM)
+  | 'openai_compatible' // OpenAI-совместимый API (OpenAI, Cloud.ru, Ollama, vLLM, LiteLLM)
   | 'yandex_cloud' // Yandex Cloud YandexGPT (IAM-токен + folder_id)
-  | 'klad' // Klad.ru (OpenAI-совместимый, но вынесен в отдельный тип для удобства)
+  | 'cloud' // Cloud.ru (OpenAI-совместимый, но вынесен в отдельный тип для удобства)
   | 'ollama' // Локальная LLM через Ollama (OpenAI-совместимый endpoint)
   | 'zai' // Встроенный z-ai-web-dev-sdk (fallback, не требует настроек)
 

@@ -28,7 +28,7 @@ import { useToast } from '@/hooks/use-toast'
 import { Cpu, Plus, Pencil, Trash2, Zap, CheckCircle2, XCircle, Star, Loader2 } from 'lucide-react'
 
 // Тип провайдера — соответствует AIProviderType из коннектора
-type ProviderType = 'openai_compatible' | 'yandex_cloud' | 'klad' | 'ollama' | 'zai'
+type ProviderType = 'openai_compatible' | 'yandex_cloud' | 'cloud' | 'ollama' | 'zai'
 
 interface AIProviderRow {
   id: string
@@ -53,7 +53,7 @@ interface AIProviderRow {
 const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
   openai_compatible: 'OpenAI-совместимый',
   yandex_cloud: 'Yandex Cloud',
-  klad: 'Klad.ru',
+  cloud: 'Cloud.ru',
   ollama: 'Ollama (локальная LLM)',
   zai: 'z-ai-web-dev-sdk (встроенный)',
 }
@@ -62,9 +62,16 @@ const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
 const BASE_URL_HINTS: Record<ProviderType, string> = {
   openai_compatible: 'https://api.openai.com',
   yandex_cloud: 'https://llm.api.cloud.yandex.net',
-  klad: 'https://api.klad.ru',
+  cloud: 'https://api.cloud.ru',
   ollama: 'http://localhost:11434',
   zai: 'Не требуется (встроенный SDK)',
+}
+
+// Нормализация типа провайдера из БД: устаревший 'klad' отображается как 'cloud' (Cloud.ru).
+// Для новых записей доступен только 'cloud'; старые записи 'klad' продолжают работать на бэке.
+function normalizeProviderType(type: string): ProviderType {
+  if (type === 'klad') return 'cloud'
+  return (type as ProviderType) || 'openai_compatible'
 }
 
 // Состояние формы (добавление/редактирование)
@@ -112,7 +119,9 @@ export function AiProvidersModule() {
       const res = await fetch('/api/ai-providers')
       if (!res.ok) throw new Error('Не удалось загрузить провайдеров')
       const data = (await res.json()) as AIProviderRow[]
-      setProviders(data)
+      setProviders(
+        data.map((p) => ({ ...p, type: normalizeProviderType(p.type) }))
+      )
     } catch (e) {
       toast({
         title: 'Ошибка',
@@ -143,10 +152,10 @@ export function AiProvidersModule() {
       // пустой конфиг
     }
     setForm({
-      id: p.id,
-      name: p.name,
-      type: p.type,
-      baseUrl: p.baseUrl || '',
+     id: p.id,
+     name: p.name,
+      type: normalizeProviderType(p.type),
+     baseUrl: p.baseUrl || '',
       apiKey: '', // ключ не возвращаем в открытом виде; пусто = не менять
       modelName: p.modelName,
       folderId: p.folderId || '',
@@ -312,9 +321,9 @@ export function AiProvidersModule() {
               ИИ-провайдеры
             </CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Универсальный коннектор ИИ-моделей. Поддержка OpenAI-совместимых API, Yandex Cloud,
-              Klad.ru, Ollama и встроенного z-ai-web-dev-sdk.
-            </p>
+             Универсальный коннектор ИИ-моделей. Поддержка OpenAI-совместимых API, Yandex Cloud,
+              Cloud.ru, Ollama и встроенного z-ai-web-dev-sdk.
+           </p>
           </div>
           <Button onClick={openAdd}>
             <Plus className="h-4 w-4 mr-2" />

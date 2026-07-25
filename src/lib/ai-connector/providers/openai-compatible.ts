@@ -1,5 +1,5 @@
 // Универсальный OpenAI-совместимый провайдер ИИ (Фаза 2)
-// Покрывает: OpenAI, Klad.ru, Ollama, vLLM, LiteLLM и любые API,
+// Покрывает: OpenAI, Cloud.ru, Ollama, vLLM, LiteLLM и любые API,
 // реализующие стандартный формат /v1/chat/completions.
 
 import type {
@@ -168,5 +168,8 @@ export class OpenAICompatibleProvider implements AIProviderClient {
 /** Специализация для Ollama (OpenAI-совместимый endpoint /v1/chat/completions, ключ не нужен). */
 export class OllamaProvider extends OpenAICompatibleProvider {}
 
-/** Специализация для Klad.ru (OpenAI-совместимый, ключ обязателен). */
-export class KladProvider extends OpenAICompatibleProvider {}
+/** Специализация для Cloud.ru (OpenAI-совместимый, ключ обязателен). */
+export class CloudRuProvider extends OpenAICompatibleProvider {}
+
+/** @deprecated Алиас для обратной совместимости — используйте CloudRuProvider. */
+export const KladProvider = CloudRuProvider

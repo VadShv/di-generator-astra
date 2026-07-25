@@ -15,6 +15,7 @@ import {
 import type { ComponentType } from 'react'
 import type { Company, Department, Position } from './staff-schedule-types'
 export type { Company, Department, Position }
+import { PositionDIWorkspace } from './position-di-workspace'
 
 // Статус ДИ по должности (дублирует логику основного модуля)
 function getDIStatus(pos: Position) {
@@ -81,6 +82,7 @@ export interface PositionDetailProps {
   onClosePos: () => void
   onSelectDept: (d: Department) => void
   onEditPos: (p: Position) => void
+  onChanged?: () => void
 }
 
 export function CompanyDetailCard(props: CompanyDetailProps) {
@@ -287,7 +289,7 @@ export function DepartmentDetailCard(props: DepartmentDetailProps) {
 }
 
 export function PositionDetailCard(props: PositionDetailProps) {
-  const { pos: p, onClosePos, onSelectDept, onEditPos } = props
+  const { pos: p, onClosePos, onSelectDept, onEditPos, onChanged } = props
   if (!p) return null
   const st = getDIStatus(p)
   const signedByEmployee = p.generatedDIs.some(d => d.signedByEmployee)
@@ -296,7 +298,7 @@ export function PositionDetailCard(props: PositionDetailProps) {
 
   return (
     <Dialog open={!!p} onOpenChange={v => !v && onClosePos()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className={`flex items-center justify-center h-8 w-8 rounded-lg ${st.color} text-white`}><FileText className="h-4 w-4" /></span>
@@ -339,6 +341,12 @@ export function PositionDetailCard(props: PositionDetailProps) {
             <p className="text-sm whitespace-pre-wrap">{p.functions}</p>
           </div>
         )}
+
+        {/* Рабочая область по ДИ: архив / генерация / сравнение / утверждение */}
+        <div className="rounded-lg border p-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Работа с должностными инструкциями</p>
+          <PositionDIWorkspace position={p} onChanged={onChanged} />
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => { onClosePos(); onEditPos(p) }}>
