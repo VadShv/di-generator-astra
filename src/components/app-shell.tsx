@@ -17,6 +17,9 @@ import {
   MessageCircle,
   ArrowLeft,
 } from 'lucide-react'
+import { BookOpen, Cpu, Zap, History, ShieldCheck, HelpCircle } from 'lucide-react'
+import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
+import { GlobalSearch, SearchTrigger } from '@/components/global-search'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -30,16 +33,28 @@ const MasterPromptsModule = lazy(() => import('@/components/modules/master-promp
 const GenerationModule = lazy(() => import('@/components/modules/generation').then(m => ({ default: m.GenerationModule })))
 const TrackingModule = lazy(() => import('@/components/modules/tracking').then(m => ({ default: m.TrackingModule })))
 const ComparisonModule = lazy(() => import('@/components/modules/comparison').then(m => ({ default: m.ComparisonModule })))
+const DictionariesModule = lazy(() => import('@/components/modules/dictionaries').then(m => ({ default: m.DictionariesModule })))
+const AiProvidersModule = lazy(() => import('@/components/modules/ai-providers').then(m => ({ default: m.AiProvidersModule })))
+const MassGenerationModule = lazy(() => import('@/components/modules/mass-generation').then(m => ({ default: m.MassGenerationModule })))
+const AiAuditModule = lazy(() => import('@/components/modules/ai-audit').then(m => ({ default: m.AiAuditModule })))
+const VersionHistoryModule = lazy(() => import('@/components/modules/version-history').then(m => ({ default: m.VersionHistoryModule })))
+const InstructionsModule = lazy(() => import('@/components/modules/instructions').then(m => ({ default: m.InstructionsModule })))
 
 const navItems: { id: ActiveSection; label: string; icon: React.ReactNode; group: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: <LayoutDashboard className="h-4 w-4" />, group: 'Обзор' },
-  { id: 'staff-schedule', label: 'Штатное расписание', icon: <Users className="h-4 w-4" />, group: 'Данные' },
-  { id: 'archive', label: 'Архив ДИ', icon: <Archive className="h-4 w-4" />, group: 'Данные' },
+ { id: 'staff-schedule', label: 'Штатное расписание', icon: <Users className="h-4 w-4" />, group: 'Данные' },
+  { id: 'dictionaries', label: 'Справочники', icon: <BookOpen className="h-4 w-4" />, group: 'Данные' },
+ { id: 'archive', label: 'Архив ДИ', icon: <Archive className="h-4 w-4" />, group: 'Данные' },
   { id: 'templates', label: 'Шаблоны ДИ', icon: <FileText className="h-4 w-4" />, group: 'Настройка' },
-  { id: 'master-prompts', label: 'Мастер-промпты', icon: <Brain className="h-4 w-4" />, group: 'Настройка' },
-  { id: 'generation', label: 'Генерация ДИ', icon: <Sparkles className="h-4 w-4" />, group: 'Генерация' },
+ { id: 'master-prompts', label: 'Мастер-промпты', icon: <Brain className="h-4 w-4" />, group: 'Настройка' },
+  { id: 'ai-providers', label: 'ИИ-провайдеры', icon: <Cpu className="h-4 w-4" />, group: 'Настройка' },
+ { id: 'generation', label: 'Генерация ДИ', icon: <Sparkles className="h-4 w-4" />, group: 'Генерация' },
+  { id: 'mass-generation', label: 'Массовая генерация', icon: <Zap className="h-4 w-4" />, group: 'Генерация' },
   { id: 'tracking', label: 'Отслеживание', icon: <GitBranch className="h-4 w-4" />, group: 'Жизненный цикл' },
-  { id: 'comparison', label: 'Сравнение версий', icon: <GitCompareArrows className="h-4 w-4" />, group: 'Жизненный цикл' },
+ { id: 'comparison', label: 'Сравнение версий', icon: <GitCompareArrows className="h-4 w-4" />, group: 'Жизненный цикл' },
+  { id: 'version-history', label: 'История версий', icon: <History className="h-4 w-4" />, group: 'Жизненный цикл' },
+  { id: 'ai-audit', label: 'Аудит ДИ', icon: <ShieldCheck className="h-4 w-4" />, group: 'Жизненный цикл' },
+  { id: 'instructions', label: 'Инструкции', icon: <HelpCircle className="h-4 w-4" />, group: 'Обзор' },
 ]
 
 const moduleComponents: Record<ActiveSection, React.ComponentType> = {
@@ -50,7 +65,13 @@ const moduleComponents: Record<ActiveSection, React.ComponentType> = {
   'master-prompts': MasterPromptsModule,
   generation: GenerationModule,
   tracking: TrackingModule,
-  comparison: ComparisonModule,
+ comparison: ComparisonModule,
+  dictionaries: DictionariesModule,
+  'ai-providers': AiProvidersModule,
+  'mass-generation': MassGenerationModule,
+  'ai-audit': AiAuditModule,
+  'version-history': VersionHistoryModule,
+  instructions: InstructionsModule,
 }
 
 function ModuleLoader() {
@@ -65,7 +86,23 @@ export default function AppShell() {
   const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen } = useAppStore()
   const [logoFlipped, setLogoFlipped] = useState(false)
   const groups = ['Обзор', 'Данные', 'Настройка', 'Генерация', 'Жизненный цикл']
-  const ActiveModule = moduleComponents[activeSection]
+ const ActiveModule = moduleComponents[activeSection]
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  // Хоткей глобального поиска: Cmd/Ctrl + K
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSearchOpen(v => !v)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  // Подпись активного раздела для хлебных крошек
+  const activeLabel = navItems.find(n => n.id === activeSection)?.label ?? activeSection
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -150,13 +187,34 @@ export default function AppShell() {
           {sidebarOpen && <p className="text-xs text-muted-foreground text-center">v1.0 • Группа Астра</p>}
         </div>
       </aside>
-      <main className={cn('flex-1 transition-all duration-300', sidebarOpen ? 'ml-64' : 'ml-16')}>
-        <div className="p-6 max-w-[1600px] mx-auto">
-          <Suspense fallback={<ModuleLoader />}>
-            <ActiveModule key={activeSection} />
-          </Suspense>
-        </div>
-      </main>
+     <main className={cn('flex-1 transition-all duration-300', sidebarOpen ? 'ml-64' : 'ml-16')}>
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b bg-background/95 backdrop-blur px-6 py-3">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <button type="button" onClick={() => setActiveSection('dashboard')} className="text-muted-foreground hover:text-foreground">
+                    Генератор ДИ
+                  </button>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage className="font-medium">{activeLabel}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+          <div className="ml-auto">
+            <SearchTrigger onClick={() => setSearchOpen(true)} />
+          </div>
+        </header>
+       <div className="p-6 max-w-[1600px] mx-auto">
+         <Suspense fallback={<ModuleLoader />}>
+           <ActiveModule key={activeSection} />
+         </Suspense>
+       </div>
+     </main>
+      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
   )
 }
