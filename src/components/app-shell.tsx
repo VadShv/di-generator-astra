@@ -65,7 +65,7 @@ const moduleComponents: Record<ActiveSection, React.ComponentType> = {
   'master-prompts': MasterPromptsModule,
   generation: GenerationModule,
   tracking: TrackingModule,
- comparison: ComparisonModule,
+  comparison: ComparisonModule,
   dictionaries: DictionariesModule,
   'ai-providers': AiProvidersModule,
   'mass-generation': MassGenerationModule,
@@ -187,8 +187,16 @@ export default function AppShell() {
           {sidebarOpen && <p className="text-xs text-muted-foreground text-center">v1.0 • Группа Астра</p>}
         </div>
       </aside>
-     <main className={cn('flex-1 transition-all duration-300', sidebarOpen ? 'ml-64' : 'ml-16')}>
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b bg-background/95 backdrop-blur px-6 py-3">
+     <main className={cn('flex-1 transition-all duration-300', sidebarOpen ? 'sm:ml-64' : 'sm:ml-16')}>
+        {/* Затемнение-оверлей для мобильных при открытом сайдбаре */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/40 sm:hidden"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+       <header className="sticky top-0 z-30 flex items-center gap-3 border-b bg-background/95 backdrop-blur px-6 py-3">
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
