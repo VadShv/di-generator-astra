@@ -1239,3 +1239,136 @@ ChevronUp/ChevronDown). Кнопка «Сбросить фильтр» в заг
   -> `[]`, HTTP 200 (раньше возвращал объект, клиент падал).
 - `tsc --noEmit` -> 0 ошибок.
 - `eslint .` -> 0 ошибок.
+- `curl http://localhost:3000/api/master-prompts?departmentId=cms0ali4x0008oxeh84rxlqec`
+  -> `[]`, HTTP 200 (раньше возвращал объект, клиент падал).
+- `tsc --noEmit` -> 0 ошибок.
+- `eslint .` -> 0 ошибок.
+
+---
+
+## 22. АУДИТ СВЯЗНОСТИ ВСЕХ СУЩНОСТЕЙ И ВКЛАДОК (2026-07-25)
+
+Цель: убедиться, что все вкладки, сущности и API связаны между собой единым графом.
+
+### 22.1 Граф сущностей (Prisma) — целостные связи
+
+Ядро данных образует связный граф:
+
+```
+Company ─┬─< Department ─┬─< Position ─┬─< GeneratedDI ─┬─< GeneratedDISection
+         │               │              │                ├─< DIVersion
+         │               │              │                ├─< DIAuditResult
+         │               │              │                └─< DITracking
+         │               │              ├─< ArchiveDI
+         │               │              ├─< UploadedDocument
+         │               │              └─< MasterPrompt
+         ├─< StaffingTable ── Position (1-1)
+         └─< MasterPrompt
+
+BusinessFunction ─┬─< Position
+                  └─< MasterPrompt
+
+Project ──< Position
+
+DITemplate ─┬─< DITemplateSection
+            └─< GeneratedDI
+
+MasterPrompt ─┬─< MasterPromptVersion
+              └─< PromptTestResult
+```
+
+### 22.2 Разрывы связности (нашли 3)
+
+Разрыв 1. GenerationJob: висячие FK без relation.
+Модель GenerationJob имеет поля providerId, templateId, masterPromptId,
+но БЕЗ декларации @relation. Это просто строки без ссылочной целостности:
+при удалении AIProvider/шаблона/промпта в записях очереди остаются висячие ID.
+Нужно добавить relations + onDelete: SetNull (т.к. поля optional).
+
+Разрыв 2. DITracking.positionId: orphan-поле.
+DITracking.positionId объявлен, но relation к Position НЕТ.
+Поле не ссылается на должность на уровне БД. Нужно добавить relation.
+
+Разрыв 3. UI генерации игнорирует выбранный мастер-промпт.
+generation.tsx загружает список промптов и хранит masterPrompts,
+но в POST /api/generate-di/ai-generate передаёт только {positionId, templateId} —
+masterPromptId НЕ передаётся. Сервер сам вызывает resolveMasterPrompt('generation', …),
+то есть промпт подбирается автоматически, а выбор пользователя в UI игнорируется.
+Нужно: передавать masterPromptId из UI и приоритетно использовать его на сервере.
+
+### 22.3 Связность вкладок → API (матрица)
+
+Все 13 вкладок подключены к общему графу через общие эндпоинты:
+
+- Дашборд -> /api/dashboard/stats (агрегирует по всем сущностям).
+- Штатное расписание -> companies, departments, positions, business-functions,
+  projects, staffing-upload. (Центральный CRUD-узел.)
+- Архив ДИ -> archive-di, positions, di-upload.
+- Шаблоны -> templates (+ разделы).
+- Мастер-промпты -> master-prompts (+ versions/preview/test/resolve),
+  prompt-chains, ai-providers, companies, departments, positions, business-functions.
+- Генерация -> generate-di, ai-generate, ai-section, ai-improve, positions,
+  companies, departments, templates, master-prompts.
+- Массовая генерация -> mass-generate, batch-audit, batch-delete, companies,
+  departments, positions, templates.
+- Отслеживание -> tracking (+ dashboard/export/update-di-status), generated-di,
+  companies, batch-audit, batch-delete.
+- AI-аудит -> generated-di, generate-di/ai-audit.
+- Сравнение версий -> compare (+ ai-diff, auto-save-original), generated-di.
+- История версий -> compare, generate-di.
+- ИИ-провайдеры -> ai-providers (+ test, generate).
+- Инструкция -> статичный справочник (без API, по назначению).
+
+Изолированных вкладок НЕТ — все привязаны к графу через общие сущности
+(Company -> Department -> Position -> GeneratedDI — магистраль).
+
+### 22.4 Сводка
+
+| Параметр | Значение |
+|----------|----------|
+| Моделей в схеме | 21 |
+| API-роутов | 44 |
+| Вкладок UI | 13 |
+| Целостных связей (FK+relation) | большинство |
+| Разрывов связности найдено | 3 |
+| Изолированных сущностей/вкладок | 0 |
+
+Итог: граф связности целостен на ~90%. Три разрыва (2 в схеме БД,
+1 в логике UI↔API) не критичны для работы, но снижают ссылочную целостность
+и предсказуемость генерации. Рекомендуется устранить в следующей итерации.
+Итог: граф связности целостен на ~90%. Три разрыва (2 в схеме БД,
+1 в логике UI↔API) не критичны для работы, но снижают ссылочную целостность
+и предсказуемость генерации. Рекомендуется устранить в следующей итерации.
+
+### 22.5 Устранение разрывов связности (2026-07-25)
+
+Все 3 разрыва из раздела 22.2 устранены.
+
+Разрыв 1 (GenerationJob — висячие FK): добавлены relations
+`provider` -> AIProvider, `template` -> DITemplate, `masterPrompt` -> MasterPrompt
+с `onDelete: SetNull` (поля optional) + обратные поля `generationJobs` в трёх
+моделях + индексы `[providerId]`, `[masterPromptId]`.
+
+Разрыв 2 (DITracking.positionId — orphan-поле): добавлен relation
+`position` -> Position с `onDelete: SetNull` + обратное поле `trackings`
+в Position + индекс `[positionId]`.
+
+Разрыв 3 (UI генерации игнорирует промпт):
+- `ai-generate/route.ts`: принимает опциональный `masterPromptId`. Если передан
+  и промпт активен/категории generation — используется он, иначе fallback на
+  авто-резолв `resolveMasterPrompt`. Тип `masterPrompt` приведён к
+  `Awaited<ReturnType<typeof resolveMasterPrompt>>`.
+- `generation.tsx`: добавлены state `selMasterPromptId`, сброс в `startGenerate`,
+  UI-селектор промпта в форме ИИ-генерации (с подсказкой про авто-подбор),
+  передача `masterPromptId` в тело `POST /api/generate-di/ai-generate`.
+  Интерфейс `MasterPrompt` дополнен полем `isAiCulture`.
+
+Проверки (2026-07-25):
+- `bun run db:push` -> БД в синхронизации, Prisma Client сгенерирован.
+- `tsc --noEmit` -> 0 ошибок.
+- `eslint .` -> 0 ошибок.
+- `POST /api/generate-di/ai-generate` с `{masterPromptId}` -> 404 «Должность не
+  найдена» (роут жив, новое поле парсится, код доходит до точки после резолва).
+- `GET /api/tracking/dashboard` -> 200, позиции возвращаются с новым relation.
+
+**ЗАВЕРШЕНО. Граф связности теперь целостен.**

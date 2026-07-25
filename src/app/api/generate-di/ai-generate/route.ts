@@ -7,7 +7,7 @@ import { db } from '@/lib/db'
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { positionId, templateId } = body
+    const { positionId, templateId, masterPromptId } = body
 
     if (!positionId || typeof positionId !== 'string') {
       return NextResponse.json({ error: 'ID должности обязателен' }, { status: 400 })
@@ -27,11 +27,30 @@ export async function POST(request: Request) {
     }
 
     // b) Резолвим мастер-промпт категории "generation" и рендерим переменные.
-    const masterPrompt = await resolveMasterPrompt('generation', {
-      departmentId: position.departmentId,
-      businessFunctionId: position.businessFunctionId,
-      grade: position.grade,
-    })
+    // Фаза 22: если пользователь явно выбрал промпт — используем его (с проверкой
+    // активности и категории), иначе fallback на автоматический резолв по критериям.
+    type ResolvedPrompt = Awaited<ReturnType<typeof resolveMasterPrompt>>
+    let masterPrompt: ResolvedPrompt = null
+    if (masterPromptId && typeof masterPromptId === 'string') {
+      const explicit = await db.masterPrompt.findUnique({ where: { id: masterPromptId } })
+      if (explicit && explicit.isActive && explicit.category === 'generation') {
+        masterPrompt = {
+          id: explicit.id,
+          name: explicit.name,
+          content: explicit.content,
+          category: explicit.category,
+          isAiCulture: explicit.isAiCulture,
+          version: explicit.version,
+        }
+      }
+    }
+    if (!masterPrompt) {
+      masterPrompt = await resolveMasterPrompt('generation', {
+        departmentId: position.departmentId,
+        businessFunctionId: position.businessFunctionId,
+        grade: position.grade,
+      })
+    }
     const renderedMasterPrompt = masterPrompt
       ? renderPrompt(masterPrompt.content, buildContextFromPosition(position))
       : null

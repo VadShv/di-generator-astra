@@ -133,7 +133,8 @@ model Position {
  archiveDIs          ArchiveDI[]
  generatedDIs        GeneratedDI[]
  uploadedDocuments   UploadedDocument[]
-  masterPrompts      MasterPrompt[] // Промпты, привязанные к конкретной должности (Фаза 21)
+ masterPrompts      MasterPrompt[] // Промпты, привязанные к конкретной должности (Фаза 21)
+ trackings          DITracking[] // Отслеживание ДИ по должности (Фаза 22)
  createdAt           DateTime @default(now())
  updatedAt           DateTime @updatedAt
 
@@ -196,6 +197,7 @@ model DITemplate {
   description  String?
   sections     DITemplateSection[]
   generatedDIs GeneratedDI[]
+  generationJobs GenerationJob[] // Задачи массовой генерации по этому шаблону (Фаза 22)
   isActive     Boolean  @default(true)
   isPrimary    Boolean  @default(false) // Основной шаблон — предвыбран при ручной генерации
   createdAt    DateTime @default(now())
@@ -271,6 +273,7 @@ model DITracking {
   departmentId   String?
   department     Department? @relation(fields: [departmentId], references: [id])
   positionId     String?
+  position       Position?   @relation(fields: [positionId], references: [id], onDelete: SetNull)
   status         String   // sent_for_review | returned_with_comments | approved | rejected | signed | missing | draft | review | outdated
   assignee       String?  // Ответственный
   notes          String?  // Заметки
@@ -278,6 +281,7 @@ model DITracking {
   updatedAt      DateTime @updatedAt
 
   @@index([departmentId])
+  @@index([positionId])
   @@index([status])
   @@index([generatedDIId])
 }
@@ -352,6 +356,7 @@ model MasterPrompt {
  // История версий промпта
  versions            MasterPromptVersion[]
   testResults         PromptTestResult[] // Результаты тестирования промпта (Фаза 21)
+  generationJobs      GenerationJob[] // Задачи массовой генерации с этим промптом (Фаза 22)
  // Расширенные условия применимости (Фаза 21)
  companyId           String?  // Применимо к юр. лицу (null = все)
   company             Company? @relation(fields: [companyId], references: [id])
@@ -439,6 +444,7 @@ model AIProvider {
   lastTestedAt    DateTime? // Последняя проверка соединения
   lastTestStatus  String?  // ok | error
   lastTestMessage String?  // Сообщение теста
+  generationJobs  GenerationJob[] // Задачи массовой генерации через этот провайдер (Фаза 22)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -460,13 +466,18 @@ model GenerationJob {
   failed          Int      @default(0) // Завершилось ошибкой
   results         String   @default("[]") // JSON: [{positionId, status, message, diId}]
   providerId      String?  // Используемый ИИ-провайдер
+  provider        AIProvider?   @relation(fields: [providerId], references: [id], onDelete: SetNull)
   templateId      String?  // Используемый шаблон
+  template        DITemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
   masterPromptId  String?  // Используемый мастер-промпт
+  masterPrompt    MasterPrompt? @relation(fields: [masterPromptId], references: [id], onDelete: SetNull)
   startedAt       DateTime?
   finishedAt      DateTime?
   createdBy       String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  @@index([providerId])
+  @@index([masterPromptId])
   @@index([status])
 }

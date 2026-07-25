@@ -33,7 +33,7 @@ interface Project { id: string; name: string }
 interface Position { id: string; title: string; code: string; departmentId: string; department: Department; grade?: string | null; businessFunctionId?: string | null; businessFunction?: BusinessFunction | null; projectId?: string | null; project?: Project | null; headcount: number; functions?: string | null }
 interface TemplateSection { id: string; title: string; order: number; promptGuidance?: string | null; isRequired: boolean; content?: string | null }
 interface Template { id: string; name: string; description?: string | null; isActive: boolean; isPrimary: boolean; sections: TemplateSection[] }
-interface MasterPrompt { id: string; name: string; content: string; version: number; isActive: boolean; departmentId?: string | null; businessFunctionId?: string | null; businessFunction?: BusinessFunction | null; grade?: string | null; description?: string | null }
+interface MasterPrompt { id: string; name: string; content: string; version: number; isActive: boolean; isAiCulture?: boolean; departmentId?: string | null; businessFunctionId?: string | null; businessFunction?: BusinessFunction | null; grade?: string | null; description?: string | null }
 interface GeneratedDISection { id: string; sectionTitle: string; sectionContent: string; order: number; aiGenerated: boolean; editedBy?: string | null }
 interface GeneratedDI { id: string; positionId: string; templateId?: string | null; title: string; status: string; signedByEmployee: boolean; position: Position & { department: Department }; template?: Template | null; sections: GeneratedDISection[]; createdAt: string; updatedAt: string }
 
@@ -74,8 +74,9 @@ export function GenerationModule() {
   const [departments, setDepartments] = useState<{ id: string; name: string; companyId: string | null }[]>([])
 
   // Generate form (AI)
-  const [selPositionId, setSelPositionId] = useState('')
-  const [selTemplateId, setSelTemplateId] = useState('')
+ const [selPositionId, setSelPositionId] = useState('')
+ const [selTemplateId, setSelTemplateId] = useState('')
+ const [selMasterPromptId, setSelMasterPromptId] = useState('')
   const [generating, setGenerating] = useState(false)
 
   // Manual creation form
@@ -130,7 +131,7 @@ export function GenerationModule() {
 
   useEffect(() => { (async () => { setLoading(true); await Promise.all([fetchDIs(), fetchPositions(), fetchTemplates(), fetchPrompts(), fetchCompanies(), fetchDepartments()]); setLoading(false) })() }, [fetchDIs, fetchPositions, fetchTemplates, fetchPrompts, fetchCompanies, fetchDepartments])
 
-  const startGenerate = () => { setSelPositionId(''); setSelTemplateId(''); setGenerating(false); setViewMode('generate') }
+  const startGenerate = () => { setSelPositionId(''); setSelTemplateId(''); setSelMasterPromptId(''); setGenerating(false); setViewMode('generate') }
 
   const startManual = () => {
     setManualTitle(''); setManualPositionId(''); setManualDepartment(''); setManualCategory('Руководители'); setManualSignedByEmployee(false)
@@ -226,7 +227,7 @@ export function GenerationModule() {
     if (!selPositionId || !selTemplateId) { toast({ title: 'Ошибка', description: 'Выберите должность и шаблон', variant: 'destructive' }); return }
     setGenerating(true)
     try {
-      const res = await fetch('/api/generate-di/ai-generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ positionId: selPositionId, templateId: selTemplateId }) })
+      const res = await fetch('/api/generate-di/ai-generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ positionId: selPositionId, templateId: selTemplateId, masterPromptId: selMasterPromptId || undefined }) })
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Ошибка') }
       const data = await res.json()
       setEditingDI(data); setEditSections(data.sections || []); setEditTitle(data.title); setEditSignedByEmployee(data.signedByEmployee ?? false)
@@ -645,14 +646,31 @@ export function GenerationModule() {
             )}
             <div>
               <Label>Шаблон *</Label>
-              <Select value={selTemplateId} onValueChange={setSelTemplateId}>
-                <SelectTrigger><SelectValue placeholder="Выберите шаблон" /></SelectTrigger>
-                <SelectContent>{templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name} {t.isPrimary ? '⭐ Основной' : ''}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <Button onClick={handleGenerateAll} disabled={generating} className="bg-purple-600 hover:bg-purple-700">
-              {generating ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Генерация всех секций...</> : <><Wand2 className="h-4 w-4 mr-1.5" /> Сгенерировать всё</>}
-            </Button>
+            <Select value={selTemplateId} onValueChange={setSelTemplateId}>
+              <SelectTrigger><SelectValue placeholder="Выберите шаблон" /></SelectTrigger>
+              <SelectContent>{templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name} {t.isPrimary ? '⭐ Основной' : ''}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          {/* Фаза 22: выбор мастер-промпта для генерации (необязательно — по умолчанию авто-резолв) */}
+          <div>
+            <Label>Мастер-промпт <span className="text-muted-foreground text-xs">(необязательно)</span></Label>
+            <Select value={selMasterPromptId} onValueChange={setSelMasterPromptId}>
+              <SelectTrigger><SelectValue placeholder="Авто-подбор по критериям должности" /></SelectTrigger>
+              <SelectContent>
+                {masterPrompts.map(p => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name} {p.isAiCulture ? '🤖' : ''} {p.departmentId || p.businessFunctionId || p.grade ? '· привязан' : '· общий'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {masterPrompts.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-1">Нет активных промптов — будет использован авто-подбор или системный промпт по умолчанию.</p>
+            )}
+          </div>
+           <Button onClick={handleGenerateAll} disabled={generating} className="bg-purple-600 hover:bg-purple-700">
+             {generating ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Генерация всех секций...</> : <><Wand2 className="h-4 w-4 mr-1.5" /> Сгенерировать всё</>}
+           </Button>
           </CardContent>
         </Card>
         {selTemplateId && templates.find(t => t.id === selTemplateId) && (
