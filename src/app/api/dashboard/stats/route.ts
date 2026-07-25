@@ -35,15 +35,18 @@ export async function GET() {
     })
   } catch (error) {
     console.error('Dashboard stats error:', error)
-    return NextResponse.json({
-      departments: 0,
-      positions: 0,
-      archiveDIs: 0,
-      templates: 0,
-      masterPrompts: 0,
-      generatedDIs: 0,
-      pendingTracking: 0,
-      pendingComparison: 0,
-    })
+    return NextResponse.json(
+      {
+        departments: 0,
+        positions: 0,
+        archiveDIs: 0,
+        templates: 0,
+        masterPrompts: 0,
+        generatedDIs: 0,
+        pendingTracking: 0,
+        pendingComparison: 0,
+      },
+      { status: 500 }
+    )
   }
 }
