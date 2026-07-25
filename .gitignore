@@ -75,3 +75,6 @@ worklog.md
 dev.log
 server.log
 *.bak
+
+# AstraCode config
+.astracode/

@@ -4,7 +4,8 @@ import { useAppStore, type ActiveSection } from '@/lib/store'
 import { useState } from 'react'
 import {
   LayoutDashboard, Users, BookOpen, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows,
-  Menu, ChevronLeft, Zap, Shield, History, BookOpenIcon,
+ Menu, ChevronLeft, Zap, Shield, History, BookOpenIcon,
+  Cpu,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -23,6 +24,7 @@ import { MassGenerationModule } from '@/components/modules/mass-generation'
 import { AiAuditModule } from '@/components/modules/ai-audit'
 import { VersionHistoryModule } from '@/components/modules/version-history'
 import { InstructionsModule } from '@/components/modules/instructions'
+import { AiProvidersModule } from '@/components/modules/ai-providers'
 
 const navItems: { id: ActiveSection; label: string; icon: React.ElementType; iconBg: string; iconColor: string; group: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: LayoutDashboard, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', group: 'Обзор' },
@@ -30,8 +32,9 @@ const navItems: { id: ActiveSection; label: string; icon: React.ElementType; ico
   { id: 'dictionaries', label: 'Справочники', icon: BookOpen, iconBg: 'bg-sky-100', iconColor: 'text-sky-600', group: 'Данные' },
   { id: 'archive', label: 'Архив ДИ', icon: Archive, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', group: 'Данные' },
   { id: 'templates', label: 'Шаблоны ДИ', icon: FileText, iconBg: 'bg-rose-100', iconColor: 'text-rose-600', group: 'Настройка' },
-  { id: 'master-prompts', label: 'Мастер-промпты', icon: Brain, iconBg: 'bg-purple-100', iconColor: 'text-purple-600', group: 'Настройка' },
-  { id: 'generation', label: 'Генерация ДИ', icon: Sparkles, iconBg: 'bg-cyan-100', iconColor: 'text-cyan-600', group: 'Генерация' },
+ { id: 'master-prompts', label: 'Мастер-промпты', icon: Brain, iconBg: 'bg-purple-100', iconColor: 'text-purple-600', group: 'Настройка' },
+  { id: 'ai-providers', label: 'ИИ-провайдеры', icon: Cpu, iconBg: 'bg-violet-100', iconColor: 'text-violet-600', group: 'Настройка' },
+ { id: 'generation', label: 'Генерация ДИ', icon: Sparkles, iconBg: 'bg-cyan-100', iconColor: 'text-cyan-600', group: 'Генерация' },
   { id: 'mass-generation', label: 'Массовая генерация', icon: Zap, iconBg: 'bg-orange-100', iconColor: 'text-orange-600', group: 'Генерация' },
   { id: 'tracking', label: 'Отслеживание', icon: GitBranch, iconBg: 'bg-orange-100', iconColor: 'text-orange-700', group: 'Жизненный цикл' },
   { id: 'version-history', label: 'Версионирование', icon: History, iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600', group: 'Жизненный цикл' },
@@ -46,8 +49,9 @@ const modules: Record<ActiveSection, React.ReactNode> = {
   'dictionaries': <DictionariesModule />,
   archive: <ArchiveModule />,
   templates: <TemplatesModule />,
-  'master-prompts': <MasterPromptsModule />,
-  generation: <GenerationModule />,
+ 'master-prompts': <MasterPromptsModule />,
+  'ai-providers': <AiProvidersModule />,
+ generation: <GenerationModule />,
   'mass-generation': <MassGenerationModule />,
   tracking: <TrackingModule />,
   'version-history': <VersionHistoryModule />,

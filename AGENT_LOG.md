@@ -139,7 +139,7 @@ bun run dev   # http://0.0.0.0:3000
 |------|-----------|--------|
 | 0 | Аудит и развёртывание | ✅ Завершена |
 | 1 | Миграция на PostgreSQL + новая схема данных | ✅ Завершена |
-| 2 | Универсальный коннектор ИИ-моделей | ⏳ Ожидает |
+| 2 | Универсальный коннектор ИИ-моделей | ✅ Готово |
 | 3 | Загрузка штатного расписания из Excel | ⏳ Ожидает |
 | 4 | Загрузка старых ДИ (PDF/DOCX) | ⏳ Ожидает |
 | 5 | Мастер-промпты и «Культура ИИ» | ⏳ Ожидает |
@@ -307,7 +307,7 @@ bun next dev -p 3000 -H 0.0.0.0
 |-------------|--------|--------------------------|
 | Штатное расписание (upload) | 🔴 СЛОМАНО | Создать `/api/upload/staff-schedule` с парсингом xlsx (Фаза 3) |
 | Архив ДИ (upload) | 🔴 СЛОМАНО | Создать `/api/upload/archive-di` с извлечением текста pdf/docx (Фаза 4) |
-| ИИ-коннектор | 🟡 ОГРАНИЧНО | Заменить жёсткий z-ai-sdk на универсальный коннектор (Фаза 2) |
+| ИИ-коннектор | 🟢 РАБОТАЕТ | Универсальный коннектор готов (Фаза 2 ✅): OpenAI/Yandex/Klad/Ollama + fallback zai |
 | БД (SQLite) | 🟡 РАБОТАЕТ | Мигрировать на PostgreSQL + расширить схему (Фаза 1) |
 | Экспорт docx | 🟡 ЧАСТИЧНО | Серверная генерация docx или документация клиентской (Фаза 7) |
 | Мастер-промпты | 🟡 РАБОТАЕТ | Добавить категории, «Культуру ИИ», переменные (Фаза 5) |
@@ -344,3 +344,84 @@ bun next dev -p 3000 -H 0.0.0.0   # http://localhost:3000
 - Node.js не установлен — только bun (для `next`-бинаря использовать `bun next ...`)
 
 **ФАЗА 0 ЗАВЕРШЕНА.** Перехожу к Фазе 1 (PostgreSQL + новая схема).
+
+---
+
+## 9. ФАЗА 2: Универсальный коннектор ИИ-моделей — РЕЗУЛЬТАТЫ
+
+**Цель:** заменить жёсткую привязку к `z-ai-web-dev-sdk` на гибкий коннектор, поддерживающий
+OpenAI-совместимые API (OpenAI, Klad.ru, Ollama, vLLM, LiteLLM), Yandex Cloud (YandexGPT) и
+встроенный z-ai-web-dev-sdk как fallback. Все 6 существующих ИИ-роутов теперь могут использовать
+единую точку генерации.
+
+### 2.1 Модуль `src/lib/ai-connector/`
+| Файл | Назначение |
+|------|-----------|
+| `types.ts` | Интерфейсы: `AIProviderType`, `AIProviderConfig`, `ChatMessage`, `GenerateRequest`, `GenerateResponse`, `TestConnectionResult`, `AIProviderClient` |
+| `crypto.ts` | Шифрование API-ключей AES-256-GCM (`encryptApiKey`/`decryptApiKey`/`maskApiKey`). Формат `v1:iv:authTag:ciphertext`. Обратная совместимость с открытым хранением |
+| `config.ts` | Чтение из БД модели `AIProvider`, расшифровка ключа → `AIProviderConfig`. Приоритет: конкретный id → isDefault → isActive → fallback zai |
+| `ai-provider-factory.ts` | `createProvider(config)` — фабрика по типу; `getProviderClient(providerId?)` — главный helper для роутов; `getZaiFallbackClient()` |
+| `index.ts` | Barrel-файл — единая точка импорта |
+| `providers/openai-compatible.ts` | Универсальный клиент `/v1/chat/completions` (OpenAI, Klad.ru, Ollama). Нормализация baseUrl, AbortController-таймаут, обработка ошибок в формате OpenAI |
+| `providers/yandex-cloud.ts` | YandexGPT: обмен OAuth→IAM (с кэшем 12ч), folder_id, modelUri, формат `alternatives[].message.text` |
+| `providers/zai.ts` | Fallback на z-ai-web-dev-sdk. **Исправлен баг** `role: 'assistant'`→`'system'`. Динамический импорт с поддержкой ESM-default и CJS-интеропа (Turbopack оборачивает модуль) |
+
+**Ключевая архитектурная идея:** все провайдеры реализуют единый интерфейс `AIProviderClient`
+с методами `generate(request)` и `testConnection()`. Существующие ИИ-роуты могут постепенно
+мигрировать на `getProviderClient()` — при отсутствии настроенного провайдера автоматически
+включается fallback zai (обратная совместимость, ничего не ломается).
+
+### 2.2 API-роуты `src/app/api/ai-providers/`
+| Метод | Путь | Функция |
+|-------|------|---------|
+| GET | `/api/ai-providers` | Список всех провайдеров (ключи не возвращаются — только маска) |
+| POST | `/api/ai-providers` | Создание провайдера (ключ шифруется перед сохранением) |
+| GET | `/api/ai-providers/[id]` | Получение одного провайдера |
+| PATCH | `/api/ai-providers/[id]` | Обновление (пустой apiKey = не менять; при isDefault снимается флаг с остальных) |
+| DELETE | `/api/ai-providers/[id]` | Удаление |
+| POST | `/api/ai-providers/test` | Тест соединения. По `providerId` (сохранённый) или «на лету» по полям. Обновляет `lastTestStatus` в БД |
+| POST | `/api/ai-providers/generate` | Универсальная генерация: `{ providerId?, messages, temperature?, maxTokens? }`. Без id — активный/дефолтный/fallback |
+
+### 2.3 UI модуль `src/components/modules/ai-providers.tsx`
+- Таблица провайдеров с индикаторами: тип (badge), статус теста (OK/Ошибка/Не проверен), «По умолчанию»
+- Кнопка «Тест» с spinner (сохраняет результат в БД, показывает latency и пример ответа через toast)
+- Форма добавления/редактирования (Dialog): название, тип (select), baseUrl, modelName, folder_id
+  (только для Yandex Cloud), apiKey (password, с подсказкой про шифрование), temperature, maxTokens,
+  переключатели isActive/isDefault
+- Условные обязательные поля: для zai baseUrl/apiKey не требуются; для yandex_cloud обязателен folder_id
+- Кнопка «Сделать активным» (установка isDefault); подтверждение удаления (AlertDialog)
+- Skeleton при загрузке, empty state с подсказкой про fallback zai
+
+### 2.4 Регистрация модуля
+- `src/lib/store.ts`: добавлен `'ai-providers'` в `ActiveSection`
+- `src/app/page.tsx`: импорт `AiProvidersModule`, navItem в группу «Настройка» (иконка `Cpu`),
+  запись в `modules`
+
+### 2.5 Проверка (dev-сервер, PostgreSQL)
+- `bun run db:push` — ✅ БД в синхронизации (схема AIProvider уже была создана в Фазе 1)
+- `bun run lint` — ✅ без ошибок
+- `bunx tsc --noEmit` — ✅ ошибок в коде Фазы 2 нет (2 pre-existing ошибки в мёртвом коде
+  `app-shell.tsx`/`archive.tsx` — не относятся к Фазе 2)
+- **API-тесты (curl):**
+  - GET `/api/ai-providers` → 200, `[]` (пусто — корректно)
+  - POST создание Ollama-провайдера → 201, ключ замаскирован (`apiKeyMask: "—"`, `hasApiKey: false`)
+  - GET список после создания → 200, провайдер в списке
+  - PATCH `isDefault:false` → 200, обновление применилось
+  - POST `/test` (тип zai) → корректная ошибка про отсутствие `.z-ai-config` (z-ai-sdk требует конфиг-файл)
+  - POST `/generate` (через дефолтный Ollama) → ожидаемая ошибка соединения (Ollama не запущен на ВМ — коннектор правильно пытается достучаться, это не баг)
+  - DELETE → 200, провайдер удалён; финальный список пуст
+
+### 2.6 Замечания и ограничения
+- **z-ai-web-dev-sdk fallback** требует файл `.z-ai-config` (baseUrl+apiKey) в проекте/доме.
+  Это ограничение самого SDK, не коннектора. Для реальной работы рекомендуется настроить
+  внешний провайдер (OpenAI/Yandex/Klad) через UI — тогда fallback не используется.
+- **Ollama на ВМ не запущен** — тестовая генерация через Ollama даёт ошибку сети (ожидаемо).
+  Чтобы использовать: установить Ollama и запустить `ollama pull qwen2.5`.
+- Ключи шифруются AES-256-GCM с ключом из `AI_PROVIDER_ENCRYPTION_KEY` (в `.env`).
+  Для production — заменить dev-ключ и хранить через секреты окружения.
+- Существующие 6 ИИ-роутов (`ai-generate`, `ai-section`, `ai-improve`, `ai-audit`,
+  `mass-generate`, `compare/ai-diff`) пока используют `ZAI.create()` напрямую — миграция
+  на `getProviderClient()` запланирована в Фазе 5 (интеграция мастер-промптов) для централизованного
+  управления. Коннектор уже готов к этой интеграции.
+
+**ФАЗА 2 ЗАВЕРШЕНА.** Перехожу к Фазе 3 (загрузка штатного расписания из Excel).
