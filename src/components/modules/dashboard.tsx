@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows, TrendingUp, ArrowRight, Zap, Shield, History, BookOpen } from 'lucide-react'
 
 import { useAppStore, type ActiveSection } from '@/lib/store'
+import { useToast } from '@/hooks/use-toast'
 
 interface Stats {
   departments: number
@@ -46,18 +47,20 @@ const statCardsConfig = [
 export function DashboardModule() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
-  const { setActiveSection } = useAppStore()
+ const { setActiveSection } = useAppStore()
+  const { toast } = useToast()
 
-  useEffect(() => {
-    async function loadStats() {
+ useEffect(() => {
+   async function loadStats() {
       try {
         const res = await fetch('/api/dashboard/stats')
         if (res.ok) {
           setStats(await res.json())
         }
-      } catch (e) {
-        console.error(e)
-      } finally {
+     } catch (e) {
+       console.error(e)
+        toast({ title: 'Ошибка', description: 'Не удалось загрузить статистику', variant: 'destructive' })
+     } finally {
         setLoading(false)
       }
     }
