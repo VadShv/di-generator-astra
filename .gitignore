@@ -70,3 +70,8 @@ screenshot*.png
 
 # Work artifacts
 worklog.md
+# Local artifacts (sandbox)
+3100
+dev.log
+server.log
+*.bak
