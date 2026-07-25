@@ -9,11 +9,10 @@ import {
   FileText,
   Brain,
   Sparkles,
-  GitBranch,
-  GitCompareArrows,
-  Menu,
-  ChevronLeft,
-  Loader2,
+ GitBranch,
+ Menu,
+ ChevronLeft,
+ Loader2,
   MessageCircle,
   ArrowLeft,
 } from 'lucide-react'
@@ -32,12 +31,11 @@ const TemplatesModule = lazy(() => import('@/components/modules/templates').then
 const MasterPromptsModule = lazy(() => import('@/components/modules/master-prompts').then(m => ({ default: m.MasterPromptsModule })))
 const GenerationModule = lazy(() => import('@/components/modules/generation').then(m => ({ default: m.GenerationModule })))
 const TrackingModule = lazy(() => import('@/components/modules/tracking').then(m => ({ default: m.TrackingModule })))
-const ComparisonModule = lazy(() => import('@/components/modules/comparison').then(m => ({ default: m.ComparisonModule })))
 const DictionariesModule = lazy(() => import('@/components/modules/dictionaries').then(m => ({ default: m.DictionariesModule })))
 const AiProvidersModule = lazy(() => import('@/components/modules/ai-providers').then(m => ({ default: m.AiProvidersModule })))
 const MassGenerationModule = lazy(() => import('@/components/modules/mass-generation').then(m => ({ default: m.MassGenerationModule })))
 const AiAuditModule = lazy(() => import('@/components/modules/ai-audit').then(m => ({ default: m.AiAuditModule })))
-const VersionHistoryModule = lazy(() => import('@/components/modules/version-history').then(m => ({ default: m.VersionHistoryModule })))
+const DIVersionsModule = lazy(() => import('@/components/modules/di-versions').then(m => ({ default: m.DIVersionsModule })))
 const InstructionsModule = lazy(() => import('@/components/modules/instructions').then(m => ({ default: m.InstructionsModule })))
 
 const navItems: { id: ActiveSection; label: string; icon: React.ReactNode; group: string }[] = [
@@ -50,9 +48,8 @@ const navItems: { id: ActiveSection; label: string; icon: React.ReactNode; group
   { id: 'ai-providers', label: 'ИИ-провайдеры', icon: <Cpu className="h-4 w-4" />, group: 'Настройка' },
  { id: 'generation', label: 'Генерация ДИ', icon: <Sparkles className="h-4 w-4" />, group: 'Генерация' },
   { id: 'mass-generation', label: 'Массовая генерация', icon: <Zap className="h-4 w-4" />, group: 'Генерация' },
-  { id: 'tracking', label: 'Отслеживание', icon: <GitBranch className="h-4 w-4" />, group: 'Жизненный цикл' },
- { id: 'comparison', label: 'Сравнение версий', icon: <GitCompareArrows className="h-4 w-4" />, group: 'Жизненный цикл' },
-  { id: 'version-history', label: 'История версий', icon: <History className="h-4 w-4" />, group: 'Жизненный цикл' },
+ { id: 'tracking', label: 'Отслеживание', icon: <GitBranch className="h-4 w-4" />, group: 'Жизненный цикл' },
+  { id: 'version-history', label: 'Версии и сравнение', icon: <History className="h-4 w-4" />, group: 'Жизненный цикл' },
   { id: 'ai-audit', label: 'Аудит ДИ', icon: <ShieldCheck className="h-4 w-4" />, group: 'Жизненный цикл' },
   { id: 'instructions', label: 'Инструкции', icon: <HelpCircle className="h-4 w-4" />, group: 'Обзор' },
 ]
@@ -64,13 +61,12 @@ const moduleComponents: Record<ActiveSection, React.ComponentType> = {
   templates: TemplatesModule,
   'master-prompts': MasterPromptsModule,
   generation: GenerationModule,
-  tracking: TrackingModule,
-  comparison: ComparisonModule,
+ tracking: TrackingModule,
   dictionaries: DictionariesModule,
   'ai-providers': AiProvidersModule,
   'mass-generation': MassGenerationModule,
   'ai-audit': AiAuditModule,
-  'version-history': VersionHistoryModule,
+  'version-history': DIVersionsModule,
   instructions: InstructionsModule,
 }
 
