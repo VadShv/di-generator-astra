@@ -97,10 +97,10 @@ export function CompanyDetailCard(props: CompanyDetailProps) {
 
   return (
     <Dialog open={!!c} onOpenChange={v => !v && onCloseCompany()}>
-      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Landmark className="h-5 w-5 text-emerald-600" />
+      <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto">
+       <DialogHeader>
+         <DialogTitle className="flex items-center gap-2">
+           <Landmark className="h-5 w-5 text-emerald-600" />
            {c.name}
            {c.type && <Badge variant="outline" className="border-emerald-300 text-emerald-700">{c.type}</Badge>}
           </DialogTitle>
@@ -196,12 +196,12 @@ export function DepartmentDetailCard(props: DepartmentDetailProps) {
 
   return (
     <Dialog open={!!d} onOpenChange={v => !v && onCloseDept()}>
-      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-emerald-600" />
-            {d.name}
-            <Badge variant="outline" className="font-mono">{d.code}</Badge>
+      <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto">
+       <DialogHeader>
+         <DialogTitle className="flex items-center gap-2">
+           <Building2 className="h-5 w-5 text-emerald-600" />
+           {d.name}
+           <Badge variant="outline" className="font-mono">{d.code}</Badge>
           </DialogTitle>
           <DialogDescription>
             {d.company ? <span>{d.company.name} · </span> : <span className="text-amber-600">Без юр. лица · </span>}
@@ -298,12 +298,12 @@ export function PositionDetailCard(props: PositionDetailProps) {
 
   return (
     <Dialog open={!!p} onOpenChange={v => !v && onClosePos()}>
-      <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span className={`flex items-center justify-center h-8 w-8 rounded-lg ${st.color} text-white`}><FileText className="h-4 w-4" /></span>
-            {p.title}
-            <Badge variant="outline" className="font-mono">{p.code}</Badge>
+      <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto">
+       <DialogHeader>
+         <DialogTitle className="flex items-center gap-2">
+           <span className={`flex items-center justify-center h-8 w-8 rounded-lg ${st.color} text-white`}><FileText className="h-4 w-4" /></span>
+           {p.title}
+           <Badge variant="outline" className="font-mono">{p.code}</Badge>
           </DialogTitle>
           <DialogDescription>Карточка должности</DialogDescription>
         </DialogHeader>
