@@ -8,12 +8,19 @@
 #   ./scripts/start-postgres.sh status # статус
 #
 # Требования: бинари PostgreSQL в /tmp/pgroot (см. AGENT_LOG.md, Фаза 1).
+#
+# ПРИМЕЧАНИЕ: кластер хранится ВНУТРИ проекта (./.pgdata), чтобы данные
+# переживали перезапуск сессии/контейнера. /tmp/pgdata очищается между
+# сессиями AstraCode. Лог работы — /tmp/pg.log (временный).
 
 set -euo pipefail
 
 PGROOT="${PGROOT:-/tmp/pgroot}"
 PGBIN="$PGROOT/usr/lib/postgresql/16/bin"
-PGDATA="${PGDATA:-/tmp/pgdata}"
+# Путь к данным по умолчанию — внутри проекта (.pgdata), переопределяется через PGDATA.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PGDATA="${PGDATA:-$PROJECT_DIR/.pgdata}"
 PGHOST="127.0.0.1"
 PGPORT="5432"
 PGUSER="astra"
@@ -45,7 +52,7 @@ case "$CMD" in
     # Проверяем, не запущен ли уже
     if "$PGBIN/pg_ctl" -D "$PGDATA" status >/dev/null 2>&1; then
       echo "✅ PostgreSQL уже запущен (PID: $("$PGBIN/pg_ctl" -D "$PGDATA" status 2>/dev/null | grep -oE 'PID: [0-9]+' | grep -oE '[0-9]+'))"
-      echo "   БД: di_generator | пользователь: $PGUSER | $PGHOST:$PGPORT"
+      echo "   БД: di_generator | пользователь: $PGUSER | $PGHOST:$PGPORT | данные: $PGDATA"
       exit 0
     fi
     echo "🚀 Запуск PostgreSQL ..."
@@ -60,6 +67,7 @@ case "$CMD" in
       echo "📦 Создана БД di_generator"
     fi
     echo "✅ PostgreSQL готов: postgresql://astra:astra@$PGHOST:$PGPORT/di_generator"
+    echo "   Кластер данных: $PGDATA"
     ;;
   stop)
     "$PGBIN/pg_ctl" -D "$PGDATA" stop

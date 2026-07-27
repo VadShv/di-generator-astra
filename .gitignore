@@ -79,3 +79,12 @@ server.log
 
 # AstraCode config
 .astracode/
+
+# PostgreSQL portable cluster (данные БД — не в git)
+/.pgdata/
+
+# Portable PostgreSQL binaries (распакованные .deb — переживают очистку /tmp)
+/vendor/pg-debs/
+
+# Дампы БД (pg_dump — не в git)
+/backups/
