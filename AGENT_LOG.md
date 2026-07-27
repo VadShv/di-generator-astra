@@ -2020,4 +2020,84 @@ src/components/modules/archive.tsx.
 - Вкладка «Стек технологий» находится в группе «Помощь» (page.tsx) и
   «Обзор» (app-shell.tsx) — расхождение групп между двумя навигациями
   остаётся как есть.
-- Коммита НЕ было; последний коммит `abc9d5b Phase 26`.
+- Коммита НЕ было; последний коммит `abc9d5b Phase 26`. (устарело — см. §33.7)
+
+## 33. ВОРКФЛОУ ГЕНЕРАЦИИ ДИ В КАРТОЧКЕ ДОЛЖНОСТИ + ФИКС RADIX SELECT (2026-07-27)
+
+### 33.1 Постановка
+В карточке должности (вкладка «Штатное расписание» → клик на должность) нужен
+полноценный воркфлоу генерации новой ДИ: выбор шаблона (основной по умолчанию),
+выбор мастер-промпта (авто-подбор по умолчанию), архивная ДИ как база.
+Также: загрузка архивных ДИ (PDF/Word) не работала корректно — реализовать
+parse→preview→save. Весь функционал должен быть «удобным и прогрессивным».
+
+### 33.2 Изменения (`src/components/modules/position-di-workspace.tsx`, ~857 строк)
+- **Воркфлоу генерации** (таб `generated`): пошаговая настройка перед запуском —
+  Шаг 1: шаблон (основной по умолчанию, помечен ★), Шаг 2: мастер-промпт
+  (авто-подбор по умолчанию, с подписью какой промпт резолвится), Шаг 3:
+  архивная ДИ как база (опционально, чекбокс «как референс»).
+- **Загрузка архивных ДИ**: раздельный parse→preview→save. `handleArchiveParse`
+  (POST /api/di-upload?mode=parse) → предпросмотр распознанных секций в
+  `parsedPreview` → `handleConfirmSaveArchive` (POST ?mode=save) по подтверждению.
+  Drag&drop зона + подсказка про OCR для сканов.
+- **`loadAll`**: дополнительно грузит `/api/master-prompts?active=true` (фильтр
+  category==='generation') и `/api/master-prompts/resolve` для подписи дефолта.
+- **`handleGenerate`**: передаёт `masterPromptId` (sentinel → undefined) +
+  `archiveDIId` + `useArchiveAsReference` в `/api/generate-di/ai-generate`.
+
+### 33.3 ФИКС: runtime-ошибка Radix Select (главный баг сессии)
+- **Симптом**: при переходе на вкладку «Генерация» в карточке — ошибка
+  (клиентское исключение, таб не рендерится).
+- **Причина**: `<SelectItem value="">⚡ Авто-подбор...</SelectItem>` с ПУСТЫМ
+  value. Radix UI Select ЗАПРЕЩАЕТ value="" у SelectItem — throws
+  "A <Select.Item /> must have a value prop that is not an empty string".
+- **Решение**: sentinel-константа `const AUTO_PROMPT = '__auto__'` (стр. 124).
+  Все места согласованно заменены: init state `useState(AUTO_PROMPT)`,
+  `handleGenerate`: `=== AUTO_PROMPT ? undefined : selMasterPromptId`,
+  `<SelectItem value={AUTO_PROMPT}>`, условие показа подписи `=== AUTO_PROMPT`.
+- **Важно для будущих сессий**: в shadcn/Radix Select НИКОГДА не использовать
+  `value=""` для SelectItem — только непустые значения-маркеры. Это типичная
+  ловушка при реализации опции «по умолчанию/авто».
+
+### 33.4 Убрано дублирование UI
+В табе `generated` одновременно рендерились старая шапка (селектор шаблона +
+архив + кнопка) И новый пошаговый workflow — оба блока дублировали функционал.
+Старый блок удалён, оставлен чистый пошаговый workflow. Файл 898→857 строк.
+
+### 33.5 Тестовые данные в БД (созданы через API, сохранятся в .pgdata)
+- **Шаблон** `Стандартная ДИ` (id `cms3mtfrf0004oxj9o92cdpse`, isPrimary=true),
+  5 секций: Общие положения / Обязанности и функции / Права / Ответственность /
+  Условия работы — у каждой `promptGuidance`.
+- **Мастер-промпт** `Генерация ДИ — базовый` (id `cms3mtk3x000boxj91xk9bwdp`,
+  category=generation, активен, общий без привязок). Переменные автоопределены:
+  должность, подразделение, компания, грейд. Резолвится для любой должности.
+- `/api/master-prompts/resolve` для должности «Разработчик» возвращает этот промпт.
+
+### 33.6 Проверка (2026-07-27)
+- `bunx eslint src/components/modules/position-di-workspace.tsx` → exit 0.
+- В собранном клиентском чанке `__auto__` присутствует, `value:""` отсутствует.
+- Страница `?tab=staff-schedule` → 200 (~0.08s); главная 200 (~0.05s).
+- `/api/dashboard/stats` → 200: templates:1, masterPrompts:1, generatedDIs:1.
+- Все БД-роуты (companies, archive-di, master-prompts, templates, resolve) → 200.
+
+### 33.7 Коммит и push (2026-07-27)
+- Коммит `5de5e40` «DI workflow + журнал действий + фикс Turbopack».
+  14 файлов, +2213/−512. Включает также Фазы 31-32 (Turbopack, журнал действий),
+  которые до этого не были закоммичены.
+- **Push выполнен** на `origin/main` (github.com/VadShv/di-generator-astra).
+  remote обновлён: `abc9d5b..5de5e40`. Устаревшая заметка §32 «Коммита НЕ было»
+  более не актуальна.
+
+### 33.8 Заметки для следующих сессий
+- Для генерации ДИ нужен настроенный AI-провайдер (ключ API модели). Если
+  `/api/generate-di/ai-generate` возвращает ошибку провайдера — проверить
+  `/api/ai-providers` и наличие ключа.
+- Сервис запускается `bash scripts/start.sh start` (Turbopack + portable PG).
+  НЕ возвращать --webpack (см. §31). transpilePackages обязателен.
+- Запуск next dev через setsid-демон обязателен — иначе умирает при переключении
+  PTY-сессий AstraCode.
+- sandbox блокирует сеть → curl/psql/db:push только с require_escalated.
+  Использовать 127.0.0.1, не localhost (IPv6 hang).
+- Git push требует GitHub-токен (credential helper не настроен). Токен передаётся
+  в URL: `git push https://<token>@github.com/VadShv/di-generator-astra.git main`.
+  НЕ коммитить токен в файлы/логи.
