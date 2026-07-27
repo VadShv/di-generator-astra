@@ -8,11 +8,11 @@ import {
   Archive,
   FileText,
   Brain,
- Sparkles,
- ClipboardList,
- Menu,
- ChevronLeft,
- Loader2,
+  Sparkles,
+  ClipboardList,
+  Menu,
+  ChevronLeft,
+  Loader2,
   MessageCircle,
   ArrowLeft,
 } from 'lucide-react'
@@ -42,15 +42,15 @@ const TechStackModule = lazy(() => import('@/components/modules/tech-stack').the
 
 const navItems: { id: ActiveSection; label: string; icon: React.ReactNode; group: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: <LayoutDashboard className="h-4 w-4" />, group: 'Обзор' },
- { id: 'staff-schedule', label: 'Штатное расписание', icon: <Users className="h-4 w-4" />, group: 'Данные' },
+  { id: 'staff-schedule', label: 'Штатное расписание', icon: <Users className="h-4 w-4" />, group: 'Данные' },
   { id: 'dictionaries', label: 'Справочники', icon: <BookOpen className="h-4 w-4" />, group: 'Данные' },
- { id: 'archive', label: 'Архив ДИ', icon: <Archive className="h-4 w-4" />, group: 'Данные' },
+  { id: 'archive', label: 'Архив ДИ', icon: <Archive className="h-4 w-4" />, group: 'Данные' },
   { id: 'templates', label: 'Шаблоны ДИ', icon: <FileText className="h-4 w-4" />, group: 'Настройка' },
- { id: 'master-prompts', label: 'Мастер-промпты', icon: <Brain className="h-4 w-4" />, group: 'Настройка' },
+  { id: 'master-prompts', label: 'Мастер-промпты', icon: <Brain className="h-4 w-4" />, group: 'Настройка' },
   { id: 'ai-providers', label: 'ИИ-провайдеры', icon: <Cpu className="h-4 w-4" />, group: 'Настройка' },
- { id: 'generation', label: 'Генерация ДИ', icon: <Sparkles className="h-4 w-4" />, group: 'Генерация' },
+  { id: 'generation', label: 'Генерация ДИ', icon: <Sparkles className="h-4 w-4" />, group: 'Генерация' },
   { id: 'mass-generation', label: 'Массовая генерация', icon: <Zap className="h-4 w-4" />, group: 'Генерация' },
- { id: 'tracking', label: 'Журнал действий', icon: <ClipboardList className="h-4 w-4" />, group: 'Жизненный цикл' },
+  { id: 'tracking', label: 'Журнал действий', icon: <ClipboardList className="h-4 w-4" />, group: 'Жизненный цикл' },
   { id: 'version-history', label: 'Версии и сравнение', icon: <History className="h-4 w-4" />, group: 'Жизненный цикл' },
   { id: 'ai-audit', label: 'Аудит ДИ', icon: <ShieldCheck className="h-4 w-4" />, group: 'Жизненный цикл' },
   { id: 'instructions', label: 'Инструкции', icon: <HelpCircle className="h-4 w-4" />, group: 'Обзор' },
@@ -64,7 +64,7 @@ const moduleComponents: Record<ActiveSection, React.ComponentType> = {
   templates: TemplatesModule,
   'master-prompts': MasterPromptsModule,
   generation: GenerationModule,
- tracking: TrackingModule,
+  tracking: TrackingModule,
   dictionaries: DictionariesModule,
   'ai-providers': AiProvidersModule,
   'mass-generation': MassGenerationModule,
@@ -86,7 +86,7 @@ export default function AppShell() {
   const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen } = useAppStore()
   const [logoFlipped, setLogoFlipped] = useState(false)
   const groups = ['Обзор', 'Данные', 'Настройка', 'Генерация', 'Жизненный цикл']
- const ActiveModule = moduleComponents[activeSection]
+  const ActiveModule = moduleComponents[activeSection]
   const [searchOpen, setSearchOpen] = useState(false)
 
   // Хоткей глобального поиска: Cmd/Ctrl + K
@@ -115,9 +115,9 @@ export default function AppShell() {
                 className="flip-card flex-1 min-w-0 cursor-pointer"
                 onClick={() => setLogoFlipped(!logoFlipped)}
               >
-                <div className={cn('flip-card-inner', logoFlipped && 'flipped')}>
+                <div className={cn('flip-card-inner min-h-[3.25rem]', logoFlipped && 'flipped')}>
                   {/* FRONT SIDE */}
-                  <div className="flip-card-front flex items-center gap-2">
+                  <div className="flip-card-front rounded-lg bg-card p-2 flex items-center gap-2">
                     <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
                       <span className="text-primary-foreground font-bold text-sm">A</span>
                     </div>
@@ -127,14 +127,11 @@ export default function AppShell() {
                     </div>
                   </div>
                   {/* BACK SIDE */}
-                  <div className="flip-card-back rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 p-2.5 flex flex-col items-center justify-center text-center">
-                    <MessageCircle className="h-4 w-4 text-primary mb-1.5" />
-                    <p className="text-xs leading-relaxed text-foreground">
-                      Если возникли вопросы или предложения по работе сервиса, напишите в
-                    </p>
-                    <p className="text-sm font-semibold text-primary mt-0.5">
-                      тг @vadshv
-                    </p>
+                  <div className="flip-card-back rounded-lg bg-card p-2 flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+                      <MessageCircle className="h-4 w-4 text-primary-foreground" />
+                    </div>
+                    <span className="text-sm font-bold tracking-wide">@VADSHV</span>
                   </div>
                 </div>
               </div>
@@ -154,7 +151,7 @@ export default function AppShell() {
                     <span className="text-primary-foreground font-bold text-sm">A</span>
                   </div>
                   {/* BACK */}
-                  <div className="flip-card-back h-8 w-8 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex items-center justify-center">
+                  <div className="flip-card-back h-8 w-8 rounded-lg bg-card flex items-center justify-center">
                     <MessageCircle className="h-3.5 w-3.5 text-primary" />
                   </div>
                 </div>
@@ -187,7 +184,7 @@ export default function AppShell() {
           {sidebarOpen && <p className="text-xs text-muted-foreground text-center">v1.0 • Группа Астра</p>}
         </div>
       </aside>
-     <main className={cn('flex-1 transition-all duration-300', sidebarOpen ? 'sm:ml-64' : 'sm:ml-16')}>
+      <main className={cn('flex-1 transition-all duration-300', sidebarOpen ? 'sm:ml-64' : 'sm:ml-16')}>
         {/* Затемнение-оверлей для мобильных при открытом сайдбаре */}
         {sidebarOpen && (
           <div
@@ -196,7 +193,7 @@ export default function AppShell() {
             aria-hidden="true"
           />
         )}
-       <header className="sticky top-0 z-30 flex items-center gap-3 border-b bg-background/95 backdrop-blur px-6 py-3">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b bg-background/95 backdrop-blur px-6 py-3">
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
@@ -216,12 +213,12 @@ export default function AppShell() {
             <SearchTrigger onClick={() => setSearchOpen(true)} />
           </div>
         </header>
-       <div className="p-6 max-w-[1600px] mx-auto">
-         <Suspense fallback={<ModuleLoader />}>
-           <ActiveModule key={activeSection} />
-         </Suspense>
-       </div>
-     </main>
+        <div className="p-6 max-w-[1600px] mx-auto">
+          <Suspense fallback={<ModuleLoader />}>
+            <ActiveModule key={activeSection} />
+          </Suspense>
+        </div>
+      </main>
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
   )

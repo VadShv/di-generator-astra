@@ -121,28 +121,35 @@
   }
 }
 
-/* Flip card animation for the logo plaque */
 .flip-card {
-  perspective: 600px;
+  perspective: 1200px;
 }
 
 .flip-card-inner {
   position: relative;
-  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   transform-style: preserve-3d;
+  transition: transform 3.6s cubic-bezier(0.45, 0, 0.25, 1);
+  will-change: transform;
 }
 
+/* 2.5 оборота (900°) → финал на 180°, видна обратная сторона */
 .flip-card-inner.flipped {
-  transform: rotateY(180deg);
+  transform: rotateY(900deg);
 }
 
 .flip-card-front,
 .flip-card-back {
+  position: absolute;
+  inset: 0;
   backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Явный 3D-transform нужен, чтобы backface-visibility сработал на лицевой стороне */
+.flip-card-front {
+  transform: rotateY(0deg);
 }
 
 .flip-card-back {
-  position: absolute;
-  inset: 0;
   transform: rotateY(180deg);
 }

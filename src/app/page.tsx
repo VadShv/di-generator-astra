@@ -6,9 +6,9 @@ import {
   LayoutDashboard, Users, BookOpen, Archive, FileText, Brain, Sparkles,
  ClipboardList,
 Menu, ChevronLeft, Zap, Shield, History, BookOpenIcon,
- Cpu,
+Cpu,
 } from 'lucide-react'
-import { Boxes } from 'lucide-react'
+import { Boxes, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -78,21 +78,22 @@ export default function HomePage() {
                 className="flip-card flex-1 min-w-0 cursor-pointer"
                 onClick={() => setLogoFlipped(!logoFlipped)}
               >
-                <div className={cn('flip-card-inner', logoFlipped && 'flipped')}>
+                <div className={cn('flip-card-inner min-h-[3.25rem]', logoFlipped && 'flipped')}>
                   {/* FRONT SIDE */}
-                  <div className="flip-card-front flex items-center gap-2">
+                  <div className="flip-card-front rounded-lg bg-card p-2 flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
                     <div className="min-w-0">
                       <h1 className="font-semibold text-sm truncate">Группа Астра</h1>
                       <p className="text-xs text-muted-foreground truncate">Генератор ДИ</p>
                     </div>
                   </div>
-                  {/* BACK SIDE */}
-                  <div className="flip-card-back rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex flex-col items-center justify-center text-center">
-                    <p className="text-sm font-bold text-primary tracking-wide">
-                      @VADSHV
-                    </p>
-                  </div>
+                {/* BACK SIDE */}
+                <div className="flip-card-back rounded-lg bg-card p-2 flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+                      <Sparkles className="h-4 w-4 text-primary-foreground" />
+                    </div>
+                    <span className="text-sm font-bold tracking-wide">@VADSHV</span>
+                </div>
                 </div>
               </div>
               <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => setSidebarOpen(!sidebarOpen)}>
@@ -110,10 +111,10 @@ export default function HomePage() {
                   <div className="flip-card-front h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
                     <Sparkles className="h-4 w-4 text-primary-foreground" />
                   </div>
-                  {/* BACK */}
-                  <div className="flip-card-back h-8 w-8 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex items-center justify-center">
+                 {/* BACK */}
+                  <div className="flip-card-back h-8 w-8 rounded-lg bg-card flex items-center justify-center">
                     <span className="text-xs font-bold text-primary">@</span>
-                  </div>
+                 </div>
                 </div>
               </div>
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSidebarOpen(!sidebarOpen)}>
