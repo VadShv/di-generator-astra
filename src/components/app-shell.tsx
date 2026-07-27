@@ -8,8 +8,8 @@ import {
   Archive,
   FileText,
   Brain,
-  Sparkles,
- GitBranch,
+ Sparkles,
+ ClipboardList,
  Menu,
  ChevronLeft,
  Loader2,
@@ -17,6 +17,7 @@ import {
   ArrowLeft,
 } from 'lucide-react'
 import { BookOpen, Cpu, Zap, History, ShieldCheck, HelpCircle } from 'lucide-react'
+import { Boxes } from 'lucide-react'
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 import { GlobalSearch, SearchTrigger } from '@/components/global-search'
 import { Button } from '@/components/ui/button'
@@ -37,6 +38,7 @@ const MassGenerationModule = lazy(() => import('@/components/modules/mass-genera
 const AiAuditModule = lazy(() => import('@/components/modules/ai-audit').then(m => ({ default: m.AiAuditModule })))
 const DIVersionsModule = lazy(() => import('@/components/modules/di-versions').then(m => ({ default: m.DIVersionsModule })))
 const InstructionsModule = lazy(() => import('@/components/modules/instructions').then(m => ({ default: m.InstructionsModule })))
+const TechStackModule = lazy(() => import('@/components/modules/tech-stack').then(m => ({ default: m.TechStackModule })))
 
 const navItems: { id: ActiveSection; label: string; icon: React.ReactNode; group: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: <LayoutDashboard className="h-4 w-4" />, group: 'Обзор' },
@@ -48,10 +50,11 @@ const navItems: { id: ActiveSection; label: string; icon: React.ReactNode; group
   { id: 'ai-providers', label: 'ИИ-провайдеры', icon: <Cpu className="h-4 w-4" />, group: 'Настройка' },
  { id: 'generation', label: 'Генерация ДИ', icon: <Sparkles className="h-4 w-4" />, group: 'Генерация' },
   { id: 'mass-generation', label: 'Массовая генерация', icon: <Zap className="h-4 w-4" />, group: 'Генерация' },
- { id: 'tracking', label: 'Отслеживание', icon: <GitBranch className="h-4 w-4" />, group: 'Жизненный цикл' },
+ { id: 'tracking', label: 'Журнал действий', icon: <ClipboardList className="h-4 w-4" />, group: 'Жизненный цикл' },
   { id: 'version-history', label: 'Версии и сравнение', icon: <History className="h-4 w-4" />, group: 'Жизненный цикл' },
   { id: 'ai-audit', label: 'Аудит ДИ', icon: <ShieldCheck className="h-4 w-4" />, group: 'Жизненный цикл' },
   { id: 'instructions', label: 'Инструкции', icon: <HelpCircle className="h-4 w-4" />, group: 'Обзор' },
+  { id: 'tech-stack', label: 'Стек технологий', icon: <Boxes className="h-4 w-4" />, group: 'Обзор' },
 ]
 
 const moduleComponents: Record<ActiveSection, React.ComponentType> = {
@@ -68,6 +71,7 @@ const moduleComponents: Record<ActiveSection, React.ComponentType> = {
   'ai-audit': AiAuditModule,
   'version-history': DIVersionsModule,
   instructions: InstructionsModule,
+  'tech-stack': TechStackModule,
 }
 
 function ModuleLoader() {
@@ -161,7 +165,7 @@ export default function AppShell() {
             </div>
           )}
         </div>
-        <ScrollArea className="flex-1 py-2">
+        <ScrollArea className="flex-1 min-h-0 py-2">
           {groups.map((group) => {
             const items = navItems.filter((item) => item.group === group)
             if (items.length === 0) return null

@@ -4,7 +4,7 @@ export type ActiveSection =
  | 'dashboard' | 'staff-schedule' | 'dictionaries' | 'archive' | 'templates'
  | 'master-prompts' | 'generation' | 'tracking'
  | 'mass-generation' | 'ai-audit' | 'version-history' | 'instructions'
-  | 'ai-providers'
+  | 'ai-providers' | 'tech-stack'
 
 interface AppState {
   activeSection: ActiveSection

@@ -1,491 +1,555 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import {
-  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
-} from '@/components/ui/accordion'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
-import { Plus, Trash2, GitBranch, Download, Loader2, Building2, ShieldAlert } from 'lucide-react'
+import {
+  Plus, Trash2, ClipboardList, Tag, Loader2, Building2, Users, Briefcase,
+  FileText, GitCommitVertical, ShieldCheck, Archive, GitBranch, CheckCircle2,
+  Clock, AlertTriangle, MessageSquarePlus, Flag,
+} from 'lucide-react'
+import { CascadePositionSelector } from './cascade-position-selector'
 
-interface Department { id: string; name: string; code: string }
-interface Position { id: string; title: string; code: string; departmentId: string; department: Department }
-interface GeneratedDI { id: string; positionId: string; title: string; status: string; position: Position; trackings: DITracking[]; createdAt: string; updatedAt: string }
-interface DITracking { id: string; generatedDIId: string; status: string; assignee: string | null; notes: string | null; createdAt: string; generatedDI?: GeneratedDI }
-
-// Типы дашборда покрытия.
+// ============ Типы ============
 interface Company { id: string; name: string }
-interface DashboardPosition {
-  positionId: string; positionTitle: string; positionCode: string; grade: string | null
-  diStatus: 'actual' | 'outdated' | 'audit' | 'missing'
-  diId: string | null; diTitle: string | null; diDbStatus: string | null; updatedAt: string | null
+interface TrackingTag {
+  id: string
+  entityType: string
+  entityId: string
+  label: string
+  kind: string
+  color: string
+  assignee: string | null
+  dueDate: string | null
+  note: string | null
+  isResolved: boolean
+  createdBy: string | null
+  createdAt: string
+  updatedAt: string
+  _count?: { activityLogs: number }
 }
-interface DashboardDepartment {
-  departmentId: string; departmentName: string; departmentCode: string
-  company: { id: string; name: string } | null
-  summary: { total: number; actual: number; outdated: number; audit: number; missing: number }
-  positions: DashboardPosition[]
+interface FeedEvent {
+  id: string
+  type: string
+  title: string
+  description: string | null
+  author: string | null
+  createdAt: string
+  entityType: string | null
+  entityId: string | null
+  diId: string | null
+  diTitle: string | null
+  tagId: string | null
+  metadata: Record<string, unknown>
 }
-interface DashboardData { overall: { total: number; actual: number; outdated: number; audit: number; missing: number }; departments: DashboardDepartment[] }
+interface ActivityLog {
+  id: string
+  actionType: string
+  entityType: string | null
+  entityId: string | null
+  tagId: string | null
+  title: string
+  description: string | null
+  author: string | null
+  createdAt: string
+  tag?: { id: string; label: string } | null
+}
 
-const STATUSES = [
-  { value: 'draft', label: 'Черновик', color: 'bg-slate-200 text-slate-800' },
-  { value: 'sent_for_review', label: 'На рассмотрении', color: 'bg-amber-100 text-amber-800' },
-  { value: 'returned_with_comments', label: 'Возвращена с комментариями', color: 'bg-orange-100 text-orange-800' },
-  { value: 'approved', label: 'Согласована', color: 'bg-emerald-100 text-emerald-800' },
-  { value: 'rejected', label: 'Отклонена', color: 'bg-red-100 text-red-800' },
-  { value: 'signed', label: 'Подписана', color: 'bg-teal-100 text-teal-800' },
-  { value: 'cancelled', label: 'Отменена', color: 'bg-gray-100 text-gray-800' },
+// ============ Конфигурация меток ============
+const TAG_KINDS = [
+  { value: 'status', label: 'Статус процесса' },
+  { value: 'priority', label: 'Приоритет' },
+  { value: 'watch', label: 'На контроле' },
+  { value: 'milestone', label: 'Веха' },
 ]
+const TAG_COLORS = [
+  { value: 'slate', label: 'Серый', badge: 'bg-slate-100 text-slate-800', dot: 'bg-slate-500' },
+  { value: 'amber', label: 'Янтарный', badge: 'bg-amber-100 text-amber-800', dot: 'bg-amber-500' },
+  { value: 'red', label: 'Красный', badge: 'bg-red-100 text-red-800', dot: 'bg-red-500' },
+  { value: 'emerald', label: 'Зелёный', badge: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-500' },
+  { value: 'blue', label: 'Синий', badge: 'bg-blue-100 text-blue-800', dot: 'bg-blue-500' },
+  { value: 'violet', label: 'Фиолетовый', badge: 'bg-violet-100 text-violet-800', dot: 'bg-violet-500' },
+  { value: 'orange', label: 'Оранжевый', badge: 'bg-orange-100 text-orange-800', dot: 'bg-orange-500' },
+]
+function colorMeta(c: string) { return TAG_COLORS.find(x => x.value === c) ?? TAG_COLORS[1] }
+function kindLabel(k: string) { return TAG_KINDS.find(x => x.value === k)?.label ?? k }
 
-// Цветовая индикация статуса покрытия ДИ.
-const DI_STATUS_META: Record<string, { label: string; dot: string; badge: string }> = {
-  actual: { label: 'Актуальна', dot: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-800' },
-  outdated: { label: 'Требует обновления', dot: 'bg-amber-500', badge: 'bg-amber-100 text-amber-800' },
-  audit: { label: 'На аудите', dot: 'bg-blue-500', badge: 'bg-blue-100 text-blue-800' },
-  missing: { label: 'Отсутствует', dot: 'bg-red-500', badge: 'bg-red-100 text-red-800' },
+// ============ Конфигурация ленты событий ============
+const EVENT_META: Record<string, { icon: typeof FileText; color: string; label: string }> = {
+  di_created: { icon: FileText, color: 'text-blue-600', label: 'Создание ДИ' },
+  di_updated: { icon: GitCommitVertical, color: 'text-slate-600', label: 'Обновление ДИ' },
+  version_created: { icon: GitCommitVertical, color: 'text-violet-600', label: 'Версия ДИ' },
+  audit: { icon: ShieldCheck, color: 'text-amber-600', label: 'Аудит' },
+  archive_uploaded: { icon: Archive, color: 'text-teal-600', label: 'Архив' },
+  status_change: { icon: GitBranch, color: 'text-indigo-600', label: 'Смена статуса' },
+  tag_created: { icon: Tag, color: 'text-orange-600', label: 'Метка' },
+  tag_resolved: { icon: CheckCircle2, color: 'text-emerald-600', label: 'Метка закрыта' },
+  note: { icon: MessageSquarePlus, color: 'text-slate-600', label: 'Заметка' },
+  comment: { icon: MessageSquarePlus, color: 'text-slate-600', label: 'Комментарий' },
+  milestone: { icon: Flag, color: 'text-violet-600', label: 'Веха' },
+  reminder: { icon: Clock, color: 'text-amber-600', label: 'Напоминание' },
+}
+function eventMeta(t: string) { return EVENT_META[t] ?? { icon: ClipboardList, color: 'text-slate-600', label: t } }
+
+// ============ Сущность: подпись выбранного уровня ============
+function entityMeta(type: string | null) {
+  if (type === 'company') return { icon: Building2, label: 'Организация' }
+  if (type === 'department') return { icon: Users, label: 'Подразделение' }
+  if (type === 'position') return { icon: Briefcase, label: 'Должность' }
+  return { icon: ClipboardList, label: 'Все' }
 }
 
-function getStatusInfo(status: string) { return STATUSES.find(s => s.value === status) ?? STATUSES[0] }
+const ACTION_TYPES = [
+  { value: 'note', label: 'Заметка' },
+  { value: 'comment', label: 'Комментарий' },
+  { value: 'status_change', label: 'Смена статуса' },
+  { value: 'milestone', label: 'Веха' },
+  { value: 'reminder', label: 'Напоминание' },
+]
 
 export function TrackingModule() {
   const { toast } = useToast()
-  const [trackings, setTrackings] = useState<DITracking[]>([])
-  const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filterStatus, setFilterStatus] = useState<string>('all')
-  const [searchQuery, setSearchQuery] = useState('')
 
-  // Дашборд покрытия.
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null)
-  const [dashboardLoading, setDashboardLoading] = useState(true)
-  const [dashCompanyFilter, setDashCompanyFilter] = useState<string>('all')
-  const [dashStatusFilter, setDashStatusFilter] = useState<string>('all')
+  // Выбор сущности через каскадный селектор.
+  const [selCompanyId, setSelCompanyId] = useState('')
+  const [selDepartmentId, setSelDepartmentId] = useState('')
+  const [selPositionId, setSelPositionId] = useState('')
+
+  // Текущий фокус меток: наиболее конкретная выбранная сущность.
+  const focus = useMemo(() => {
+    if (selPositionId) return { entityType: 'position', entityId: selPositionId }
+    if (selDepartmentId) return { entityType: 'department', entityId: selDepartmentId }
+    if (selCompanyId) return { entityType: 'company', entityId: selCompanyId }
+    return null
+  }, [selPositionId, selDepartmentId, selCompanyId])
+
+  // Данные.
+  const [tags, setTags] = useState<TrackingTag[]>([])
+  const [feed, setFeed] = useState<FeedEvent[]>([])
+  const [tagsLoading, setTagsLoading] = useState(true)
+  const [feedLoading, setFeedLoading] = useState(true)
   const [companies, setCompanies] = useState<Company[]>([])
-  const [exporting, setExporting] = useState(false)
-  const [batchAuditOpen, setBatchAuditOpen] = useState(false)
-  const [batchAuditLoading, setBatchAuditLoading] = useState(false)
-  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
-  const [batchTarget, setBatchTarget] = useState<{ ids: string[]; label: string }>({ ids: [], label: '' })
 
-  // Dialogs
-  const [addDialogOpen, setAddDialogOpen] = useState(false)
-  const [statusDialogOpen, setStatusDialogOpen] = useState(false)
-  const [timelineDialogOpen, setTimelineDialogOpen] = useState(false)
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  // Фильтр ленты: всё или только по текущему фокусу.
+  const [feedScope, setFeedScope] = useState<'focus' | 'all'>('all')
 
-  // Form
-  const [formDIId, setFormDIId] = useState('')
-  const [formStatus, setFormStatus] = useState('sent_for_review')
-  const [formAssignee, setFormAssignee] = useState('')
-  const [formNotes, setFormNotes] = useState('')
-  const [selectedTracking, setSelectedTracking] = useState<DITracking | null>(null)
-  const [timelineDIId, setTimelineDIId] = useState<string | null>(null)
+  // Диалог метки.
+  const [tagDialogOpen, setTagDialogOpen] = useState(false)
+  const [editingTag, setEditingTag] = useState<TrackingTag | null>(null)
+  const [tagForm, setTagForm] = useState({ label: '', kind: 'status', color: 'amber', assignee: '', dueDate: '', note: '' })
 
-  const fetchTrackings = useCallback(async () => {
-    try {
-      const params = new URLSearchParams()
-      if (filterStatus && filterStatus !== 'all') params.set('status', filterStatus)
-      const res = await fetch(`/api/tracking?${params.toString()}`)
-      if (!res.ok) throw new Error()
-      setTrackings(await res.json())
-    } catch { toast({ title: 'Ошибка', description: 'Не удалось загрузить данные', variant: 'destructive' }) }
-  }, [filterStatus, toast])
+  // Диалог записи журнала.
+  const [logDialogOpen, setLogDialogOpen] = useState(false)
+  const [logForm, setLogForm] = useState({ actionType: 'note', title: '', description: '', author: '' })
 
-  const fetchDIs = useCallback(async () => {
-    try { const res = await fetch('/api/generated-di'); if (!res.ok) throw new Error(); setGeneratedDIs(await res.json()) } catch { /* silent */ }
-  }, [])
+  // Удаление.
+  const [tagToDelete, setTagToDelete] = useState<TrackingTag | null>(null)
 
+  // ============ Загрузка ============
   const fetchCompanies = useCallback(async () => {
     try { const res = await fetch('/api/companies'); if (res.ok) setCompanies(await res.json()) } catch { /* silent */ }
   }, [])
 
-  const fetchDashboard = useCallback(async () => {
+  const fetchTags = useCallback(async () => {
     try {
-      setDashboardLoading(true)
+      setTagsLoading(true)
       const params = new URLSearchParams()
-      if (dashCompanyFilter !== 'all') params.set('companyId', dashCompanyFilter)
-      if (dashStatusFilter !== 'all') params.set('status', dashStatusFilter)
-      const res = await fetch(`/api/tracking/dashboard?${params.toString()}`)
+      if (focus) { params.set('entityType', focus.entityType); params.set('entityId', focus.entityId) }
+      const res = await fetch(`/api/tracking-tags?${params.toString()}`)
       if (!res.ok) throw new Error()
-      setDashboard(await res.json())
+      setTags(await res.json())
     } catch {
-      toast({ title: 'Ошибка', description: 'Не удалось загрузить дашборд', variant: 'destructive' })
+      toast({ title: 'Ошибка', description: 'Не удалось загрузить метки', variant: 'destructive' })
     } finally {
-      setDashboardLoading(false)
+      setTagsLoading(false)
     }
-  }, [dashCompanyFilter, dashStatusFilter, toast])
+  }, [focus, toast])
 
-  useEffect(() => { (async () => { setLoading(true); await Promise.all([fetchTrackings(), fetchDIs(), fetchCompanies()]); setLoading(false) })() }, [fetchTrackings, fetchDIs, fetchCompanies])
-  useEffect(() => { fetchDashboard() }, [fetchDashboard])
-
-  const resetForm = () => { setFormDIId(''); setFormStatus('sent_for_review'); setFormAssignee(''); setFormNotes('') }
-
-  const handleCreate = async () => {
-    if (!formDIId || !formStatus) { toast({ title: 'Ошибка', description: 'Выберите ДИ и статус', variant: 'destructive' }); return }
+  const fetchFeed = useCallback(async () => {
     try {
-      const res = await fetch('/api/tracking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ generatedDIId: formDIId, status: formStatus, assignee: formAssignee || null, notes: formNotes || null }) })
-      if (!res.ok) throw new Error()
-      toast({ title: 'Успешно', description: 'Запись добавлена' }); resetForm(); setAddDialogOpen(false); fetchTrackings(); fetchDIs()
-    } catch { toast({ title: 'Ошибка', description: 'Не удалось создать запись', variant: 'destructive' }) }
-  }
-
-  const handleStatusChange = async () => {
-    if (!selectedTracking) return
-    try {
-      const res = await fetch('/api/tracking', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: selectedTracking.id, status: formStatus, assignee: formAssignee || selectedTracking.assignee, notes: formNotes || selectedTracking.notes }) })
-      if (!res.ok) throw new Error()
-      toast({ title: 'Успешно', description: 'Статус обновлён' }); setStatusDialogOpen(false); setSelectedTracking(null); resetForm(); fetchTrackings(); fetchDIs()
-    } catch { toast({ title: 'Ошибка', description: 'Не удалось обновить', variant: 'destructive' }) }
-  }
-
-  const handleDelete = async () => {
-    if (!selectedTracking) return
-    try {
-      const res = await fetch('/api/tracking', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: selectedTracking.id }) })
-      if (!res.ok) throw new Error()
-      toast({ title: 'Удалено' }); setDeleteDialogOpen(false); setSelectedTracking(null); fetchTrackings()
-    } catch { toast({ title: 'Ошибка', description: 'Не удалось удалить', variant: 'destructive' }) }
-  }
-
-  const handleUpdateDIStatus = async (diId: string, status: string) => {
-    try {
-      const res = await fetch('/api/tracking/update-di-status', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ generatedDIId: diId, status }) })
-      if (!res.ok) throw new Error()
-      toast({ title: 'Статус ДИ обновлён' }); fetchDIs()
-    } catch { toast({ title: 'Ошибка', description: 'Не удалось обновить статус ДИ', variant: 'destructive' }) }
-  }
-
-  const handleExport = async () => {
-    try {
-      setExporting(true)
-      const params = new URLSearchParams()
-      if (dashCompanyFilter !== 'all') params.set('companyId', dashCompanyFilter)
-      const res = await fetch(`/api/tracking/export?${params.toString()}`)
-      if (!res.ok) throw new Error()
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `di-tracking-${new Date().toISOString().slice(0, 10)}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      toast({ title: 'Успешно', description: 'Отчёт экспортирован в Excel' })
-    } catch {
-      toast({ title: 'Ошибка', description: 'Не удалось экспортировать отчёт', variant: 'destructive' })
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  // Пакетный аудит ДИ выбранных подразделений.
-  const handleBatchAudit = async () => {
-    try {
-      setBatchAuditLoading(true)
-      const res = await fetch('/api/generate-di/batch-audit', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ diIds: batchTarget.ids }),
-      })
+      setFeedLoading(true)
+      const params = new URLSearchParams({ limit: '150' })
+      if (feedScope === 'focus' && focus) {
+        params.set('entityType', focus.entityType)
+        params.set('entityId', focus.entityId)
+      }
+      const res = await fetch(`/api/activity-feed?${params.toString()}`)
       if (!res.ok) throw new Error()
       const data = await res.json()
-      toast({ title: 'Аудит завершён', description: `Проверено ${data.successCount} из ${data.total}. Ошибок: ${data.failCount}` })
-      setBatchAuditOpen(false)
-      fetchDashboard()
+      setFeed(data.events ?? [])
     } catch {
-      toast({ title: 'Ошибка', description: 'Не удалось выполнить пакетный аудит', variant: 'destructive' })
+      toast({ title: 'Ошибка', description: 'Не удалось загрузить ленту действий', variant: 'destructive' })
     } finally {
-      setBatchAuditLoading(false)
+      setFeedLoading(false)
     }
+  }, [feedScope, focus, toast])
+
+  useEffect(() => { fetchCompanies() }, [fetchCompanies])
+  useEffect(() => { fetchTags() }, [fetchTags])
+  useEffect(() => { fetchFeed() }, [fetchFeed])
+
+  // ============ Действия с метками ============
+  const openCreateTag = () => {
+    setEditingTag(null)
+    setTagForm({ label: '', kind: 'status', color: 'amber', assignee: '', dueDate: '', note: '' })
+    setTagDialogOpen(true)
+  }
+  const openEditTag = (t: TrackingTag) => {
+    setEditingTag(t)
+    setTagForm({
+      label: t.label,
+      kind: t.kind,
+      color: t.color,
+      assignee: t.assignee || '',
+      dueDate: t.dueDate ? t.dueDate.slice(0, 10) : '',
+      note: t.note || '',
+    })
+    setTagDialogOpen(true)
   }
 
-  // Пакетное удаление ДИ.
-  const handleBatchDelete = async () => {
+  const handleSaveTag = async () => {
+    if (!focus) { toast({ title: 'Выберите сущность', description: 'Сначала выберите организацию, подразделение или должность', variant: 'destructive' }); return }
+    if (!tagForm.label.trim()) { toast({ title: 'Ошибка', description: 'Введите название метки', variant: 'destructive' }); return }
     try {
-      setBatchAuditLoading(true)
-      const res = await fetch('/api/generate-di/batch-delete', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ diIds: batchTarget.ids, confirm: true }),
-      })
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-      toast({ title: 'Удаление завершено', description: `Удалено ${data.successCount} из ${data.total}. Ошибок: ${data.failCount}` })
-      setBatchDeleteOpen(false)
-      fetchDashboard()
+      const payload = {
+        entityType: focus.entityType,
+        entityId: focus.entityId,
+        label: tagForm.label.trim(),
+        kind: tagForm.kind,
+        color: tagForm.color,
+        assignee: tagForm.assignee || null,
+        dueDate: tagForm.dueDate || null,
+        note: tagForm.note || null,
+      }
+      if (editingTag) {
+        const res = await fetch('/api/tracking-tags', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingTag.id, ...payload }) })
+        if (!res.ok) throw new Error()
+        toast({ title: 'Метка обновлена' })
+      } else {
+        const res = await fetch('/api/tracking-tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        if (!res.ok) throw new Error()
+        toast({ title: 'Метка добавлена' })
+      }
+      setTagDialogOpen(false)
+      fetchTags()
+      fetchFeed()
     } catch {
-      toast({ title: 'Ошибка', description: 'Не удалось удалить ДИ', variant: 'destructive' })
-    } finally {
-      setBatchAuditLoading(false)
+      toast({ title: 'Ошибка', description: 'Не удалось сохранить метку', variant: 'destructive' })
     }
   }
 
-  // Get latest tracking per DI
-  const latestPerDI: Record<string, DITracking> = {}
-  for (const t of trackings) { if (!latestPerDI[t.generatedDIId] || new Date(t.createdAt) > new Date(latestPerDI[t.generatedDIId].createdAt)) latestPerDI[t.generatedDIId] = t }
+  const toggleTagResolved = async (t: TrackingTag) => {
+    try {
+      const res = await fetch('/api/tracking-tags', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: t.id, isResolved: !t.isResolved }) })
+      if (!res.ok) throw new Error()
+      fetchTags()
+      fetchFeed()
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось изменить статус метки', variant: 'destructive' })
+    }
+  }
 
-  const disWithTracking = generatedDIs.filter(di => latestPerDI[di.id]).map(di => ({ ...di, latestTracking: latestPerDI[di.id] }))
-  const filteredDIs = disWithTracking.filter(di => {
-    if (searchQuery) { const q = searchQuery.toLowerCase(); return di.title.toLowerCase().includes(q) || di.position?.title?.toLowerCase().includes(q) || (di.latestTracking.assignee && di.latestTracking.assignee.toLowerCase().includes(q)) }
-    return true
-  })
+  const handleDeleteTag = async () => {
+    if (!tagToDelete) return
+    try {
+      const res = await fetch('/api/tracking-tags', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: tagToDelete.id }) })
+      if (!res.ok) throw new Error()
+      toast({ title: 'Метка удалена' })
+      setTagToDelete(null)
+      fetchTags()
+      fetchFeed()
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось удалить метку', variant: 'destructive' })
+    }
+  }
 
-  // Kanban columns
-  const kanbanColumns = STATUSES.map(s => ({ ...s, items: filteredDIs.filter(di => di.latestTracking.status === s.value) }))
+  // ============ Действия с журналом ============
+  const openCreateLog = () => {
+    setLogForm({ actionType: 'note', title: '', description: '', author: '' })
+    setLogDialogOpen(true)
+  }
 
-  // Stats
-  const stats = STATUSES.map(s => ({ ...s, count: disWithTracking.filter(di => di.latestTracking.status === s.value).length }))
+  const handleSaveLog = async () => {
+    if (!logForm.title.trim()) { toast({ title: 'Ошибка', description: 'Введите заголовок записи', variant: 'destructive' }); return }
+    try {
+      const payload = {
+        actionType: logForm.actionType,
+        title: logForm.title.trim(),
+        description: logForm.description || null,
+        author: logForm.author || null,
+        entityType: focus?.entityType || null,
+        entityId: focus?.entityId || null,
+      }
+      const res = await fetch('/api/activity-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (!res.ok) throw new Error()
+      toast({ title: 'Запись добавлена в журнал' })
+      setLogDialogOpen(false)
+      fetchFeed()
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось добавить запись', variant: 'destructive' })
+    }
+  }
 
-  const ov = dashboard?.overall
-  const pct = (n: number) => (ov && ov.total > 0 ? Math.round((n / ov.total) * 100) : 0)
+  // ============ Производные метрики ============
+  const now = Date.now()
+  const activeTags = tags.filter(t => !t.isResolved)
+  const overdueTags = activeTags.filter(t => t.dueDate && new Date(t.dueDate).getTime() < now)
+  const focusMeta = entityMeta(focus?.entityType ?? null)
+
+  // Группировка ленты по дням.
+  const feedByDay = useMemo(() => {
+    const groups: Record<string, FeedEvent[]> = {}
+    for (const ev of feed) {
+      const day = new Date(ev.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+      if (!groups[day]) groups[day] = []
+      groups[day].push(ev)
+    }
+    return groups
+  }, [feed])
 
   return (
     <div className="space-y-4">
+      {/* Шапка */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div><h1 className="text-2xl font-bold flex items-center gap-2"><GitBranch className="h-6 w-6" /> Отслеживание</h1><p className="text-sm text-muted-foreground">Покрытие ДИ и согласование</p></div>
-        <Button onClick={() => { resetForm(); setAddDialogOpen(true) }}><Plus className="h-4 w-4 mr-1" /> Добавить запись</Button>
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><ClipboardList className="h-6 w-6" /> Журнал действий</h1>
+          <p className="text-sm text-muted-foreground">История создания и изменений ДИ, метки отслеживания процесса</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={openCreateLog}><MessageSquarePlus className="h-4 w-4 mr-1" /> Запись в журнал</Button>
+          <Button onClick={openCreateTag}><Tag className="h-4 w-4 mr-1" /> Добавить метку</Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="dashboard">
-        <TabsList>
-          <TabsTrigger value="dashboard">Дашборд покрытия</TabsTrigger>
-          <TabsTrigger value="approval">Согласование</TabsTrigger>
-        </TabsList>
-
-        {/* Дашборд покрытия */}
-        <TabsContent value="dashboard" className="space-y-4">
-          {/* Фильтры */}
-          <div className="flex flex-wrap gap-2 items-center">
-            <Select value={dashCompanyFilter} onValueChange={setDashCompanyFilter}>
-              <SelectTrigger className="w-[200px]"><SelectValue placeholder="Юр. лицо" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все юр. лица</SelectItem>
-                {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={dashStatusFilter} onValueChange={setDashStatusFilter}>
-              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Статус ДИ" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все статусы</SelectItem>
-                <SelectItem value="actual">Актуальна</SelectItem>
-                <SelectItem value="outdated">Требует обновления</SelectItem>
-                <SelectItem value="audit">На аудите</SelectItem>
-                <SelectItem value="missing">Отсутствует</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" onClick={handleExport} disabled={exporting}>
-              {exporting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />} Excel
-            </Button>
-          </div>
-
-          {/* Сводка */}
-          {dashboardLoading ? (
-            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-          ) : ov ? (
-            <>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Всего должностей</p><p className="text-2xl font-bold">{ov.total}</p></CardContent></Card>
-                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Актуальны</p><p className="text-2xl font-bold text-emerald-600">{ov.actual}</p><Progress value={pct(ov.actual)} className="h-1 mt-1" /></CardContent></Card>
-                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Требуют обновления</p><p className="text-2xl font-bold text-amber-600">{ov.outdated}</p><Progress value={pct(ov.outdated)} className="h-1 mt-1" /></CardContent></Card>
-                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">На аудите</p><p className="text-2xl font-bold text-blue-600">{ov.audit}</p><Progress value={pct(ov.audit)} className="h-1 mt-1" /></CardContent></Card>
-                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Отсутствуют</p><p className="text-2xl font-bold text-red-600">{ov.missing}</p><Progress value={pct(ov.missing)} className="h-1 mt-1" /></CardContent></Card>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Левая колонка: выбор сущности + метки */}
+        <div className="lg:col-span-5 space-y-4">
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><Building2 className="h-4 w-4" /> Область отслеживания</CardTitle></CardHeader>
+            <CardContent>
+              <CascadePositionSelector
+                positionId={selPositionId}
+                onPositionChange={setSelPositionId}
+                companyId={selCompanyId}
+                departmentId={selDepartmentId}
+                onCompanyChange={setSelCompanyId}
+                onDepartmentChange={setSelDepartmentId}
+                companies={companies}
+                compact
+              />
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <focusMeta.icon className="h-3.5 w-3.5" />
+                <span>Фокус: {focusMeta.label.toLowerCase()}{focus ? '' : ' (не выбран)'}</span>
               </div>
+            </CardContent>
+          </Card>
 
-              {/* Дерево подразделений */}
-              {dashboard && dashboard.departments.length > 0 ? (
-                <Accordion type="multiple" className="space-y-2">
-                  {dashboard.departments.map(dept => {
-                    const diIds = dept.positions.filter(p => p.diId).map(p => p.diId as string)
-                    return (
-                      <AccordionItem key={dept.departmentId} value={dept.departmentId} className="border rounded-lg">
-                        <AccordionTrigger className="px-4 py-2 hover:no-underline">
-                          <div className="flex items-center gap-2 flex-1 text-left">
-                            <Building2 className="h-4 w-4" />
-                            <span className="font-semibold">{dept.departmentName}</span>
-                            {dept.company && <Badge variant="outline" className="text-xs">{dept.company.name}</Badge>}
-                            <span className={`h-2.5 w-2.5 rounded-full ${dept.summary.missing > 0 ? 'bg-red-500' : dept.summary.outdated > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                            <Badge variant="secondary" className="text-xs">{dept.summary.total} должн.</Badge>
-                            {dept.summary.actual > 0 && <Badge className="text-xs bg-emerald-100 text-emerald-800">{dept.summary.actual} ✅</Badge>}
-                            {dept.summary.outdated > 0 && <Badge className="text-xs bg-amber-100 text-amber-800">{dept.summary.outdated} ⚠️</Badge>}
-                            {dept.summary.audit > 0 && <Badge className="text-xs bg-blue-100 text-blue-800">{dept.summary.audit} 🔍</Badge>}
-                            {dept.summary.missing > 0 && <Badge className="text-xs bg-red-100 text-red-800">{dept.summary.missing} ❌</Badge>}
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="px-4 pb-4">
-                          <Table>
-                            <TableHeader><TableRow>
-                              <TableHead>Должность</TableHead><TableHead>Грейд</TableHead><TableHead>Статус ДИ</TableHead><TableHead>ДИ</TableHead><TableHead>Обновлено</TableHead>
-                            </TableRow></TableHeader>
-                            <TableBody>
-                              {dept.positions.map(p => {
-                                const meta = DI_STATUS_META[p.diStatus]
-                                return (
-                                  <TableRow key={p.positionId}>
-                                    <TableCell className="text-sm font-medium">{p.positionTitle}<div className="text-xs text-muted-foreground">{p.positionCode}</div></TableCell>
-                                    <TableCell className="text-sm">{p.grade || '—'}</TableCell>
-                                    <TableCell><Badge className={`${meta.badge} border-0`}><span className={`h-1.5 w-1.5 rounded-full ${meta.dot} mr-1 inline-block`} />{meta.label}</Badge></TableCell>
-                                    <TableCell className="text-sm">{p.diTitle || '—'}</TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">{p.updatedAt ? new Date(p.updatedAt).toLocaleDateString('ru-RU') : '—'}</TableCell>
-                                  </TableRow>
-                                )
-                              })}
-                            </TableBody>
-                          </Table>
-                          {diIds.length > 0 && (
-                            <div className="flex gap-2 mt-2 pt-2 border-t">
-                              <Button variant="outline" size="sm" onClick={() => { setBatchTarget({ ids: diIds, label: dept.departmentName }); setBatchAuditOpen(true) }}><ShieldAlert className="h-4 w-4 mr-1" /> Аудит всех ({diIds.length})</Button>
-                              <Button variant="outline" size="sm" className="text-destructive" onClick={() => { setBatchTarget({ ids: diIds, label: dept.departmentName }); setBatchDeleteOpen(true) }}><Trash2 className="h-4 w-4 mr-1" /> Удалить все ({diIds.length})</Button>
-                            </div>
-                          )}
-                        </AccordionContent>
-                      </AccordionItem>
-                    )
-                  })}
-                </Accordion>
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-2"><Tag className="h-4 w-4" /> Метки отслеживания</CardTitle>
+                {focus && <Button size="sm" variant="ghost" onClick={openCreateTag}><Plus className="h-3.5 w-3.5" /></Button>}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {!focus ? (
+                <div className="text-center py-6 text-muted-foreground text-sm">
+                  <Tag className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                  Выберите организацию, подразделение или должность, чтобы накидывать метки
+                </div>
+              ) : tagsLoading ? (
+                <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : tags.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground text-sm">
+                  <Tag className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                  Меток пока нет
+                  <Button size="sm" variant="outline" className="mt-3" onClick={openCreateTag}><Plus className="h-3.5 w-3.5 mr-1" /> Добавить метку</Button>
+                </div>
               ) : (
-                <Card><CardContent className="p-8 text-center text-muted-foreground">
-                  <Building2 className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                  <p>Нет данных для отображения</p>
-                </CardContent></Card>
+                <ScrollArea className="max-h-[420px]">
+                  <div className="space-y-2 pr-2">
+                    {tags.map(t => {
+                      const cm = colorMeta(t.color)
+                      const overdue = !t.isResolved && t.dueDate && new Date(t.dueDate).getTime() < now
+                      return (
+                        <div key={t.id} className={`rounded-lg border p-3 ${t.isResolved ? 'opacity-60' : ''}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`h-2.5 w-2.5 rounded-full ${cm.dot} flex-shrink-0`} />
+                              <span className="font-medium text-sm truncate">{t.label}</span>
+                            </div>
+                            <Badge variant="outline" className="text-xs flex-shrink-0">{kindLabel(t.kind)}</Badge>
+                          </div>
+                          {t.note && <p className="text-xs text-muted-foreground mt-1">{t.note}</p>}
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                            <Badge className={`text-xs ${cm.badge} border-0`}>{t.entityType === 'company' ? 'Орг.' : t.entityType === 'department' ? 'Подразд.' : 'Должн.'}</Badge>
+                            {t.assignee && <Badge variant="secondary" className="text-xs">{t.assignee}</Badge>}
+                            {t.dueDate && (
+                              <Badge variant={overdue ? 'destructive' : 'outline'} className="text-xs">
+                                <Clock className="h-3 w-3 mr-1" />{new Date(t.dueDate).toLocaleDateString('ru-RU')}
+                              </Badge>
+                            )}
+                            {overdue && <Badge variant="destructive" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1" />Просрочено</Badge>}
+                            {t.isResolved && <Badge className="text-xs bg-emerald-100 text-emerald-800 border-0"><CheckCircle2 className="h-3 w-3 mr-1" />Закрыта</Badge>}
+                          </div>
+                          <div className="flex gap-1 mt-2">
+                            <Button variant="outline" size="sm" className="h-7" onClick={() => toggleTagResolved(t)}>
+                              {t.isResolved ? 'Открыть' : 'Закрыть'}
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-7" onClick={() => openEditTag(t)}>Изменить</Button>
+                            <Button variant="outline" size="sm" className="h-7 text-destructive" onClick={() => setTagToDelete(t)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </ScrollArea>
               )}
-            </>
-          ) : null}
-        </TabsContent>
+            </CardContent>
+          </Card>
+        </div>
 
-        {/* Канбан согласования */}
-        <TabsContent value="approval" className="space-y-4">
-          {/* Stats */}
-          <div className="flex flex-wrap gap-2">{stats.map(s => s.count > 0 && <Badge key={s.value} className={`${s.color} border-0`}>{s.label}: {s.count}</Badge>)}</div>
-
-          {/* Filters */}
-          <div className="flex flex-wrap gap-2">
-            <Input placeholder="Поиск..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="max-w-xs" />
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Статус" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Все статусы</SelectItem>{STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
-            </Select>
+        {/* Правая колонка: метрики + лента */}
+        <div className="lg:col-span-7 space-y-4">
+          {/* Метрики */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Всего меток</p><p className="text-2xl font-bold">{tags.length}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Активных</p><p className="text-2xl font-bold text-blue-600">{activeTags.length}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Просрочено</p><p className="text-2xl font-bold text-red-600">{overdueTags.length}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Событий в ленте</p><p className="text-2xl font-bold text-violet-600">{feed.length}</p></CardContent></Card>
           </div>
 
-          {loading ? <p className="text-center py-8 text-muted-foreground">Загрузка...</p> : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {kanbanColumns.map(col => col.items.length > 0 && (
-                <div key={col.value}>
-                  <div className="flex items-center gap-2 mb-2"><Badge className={`${col.color} border-0`}>{col.label}</Badge><span className="text-sm text-muted-foreground">{col.items.length}</span></div>
-                  <div className="space-y-2">
-                    {col.items.map(di => (
-                      <Card key={di.id} className="cursor-pointer hover:shadow-sm" onClick={() => { setTimelineDIId(di.id); setTimelineDialogOpen(true) }}>
-                        <CardContent className="p-3">
-                          <p className="font-medium text-sm">{di.title}</p>
-                          <p className="text-xs text-muted-foreground">{di.position?.title}</p>
-                          {di.latestTracking.assignee && <p className="text-xs mt-1">Исполнитель: {di.latestTracking.assignee}</p>}
-                          <p className="text-xs text-muted-foreground mt-1">{new Date(di.latestTracking.createdAt).toLocaleDateString('ru-RU')}</p>
-                        </CardContent>
-                      </Card>
+          {/* Лента действий */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Лента действий</CardTitle>
+                <div className="flex items-center gap-1">
+                  <Button size="sm" variant={feedScope === 'all' ? 'default' : 'outline'} onClick={() => setFeedScope('all')}>Все</Button>
+                  <Button size="sm" variant={feedScope === 'focus' ? 'default' : 'outline'} onClick={() => setFeedScope('focus')} disabled={!focus}>По фокусу</Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {feedLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : feed.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <ClipboardList className="h-10 w-10 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">Пока нет событий</p>
+                  <p className="text-xs mt-1">Создавайте ДИ, запускайте аудиты, добавляйте метки и записи — они появятся здесь</p>
+                </div>
+              ) : (
+                <ScrollArea className="max-h-[560px]">
+                  <div className="space-y-4 pr-2">
+                    {Object.entries(feedByDay).map(([day, evs]) => (
+                      <div key={day}>
+                        <div className="sticky top-0 bg-card py-1 z-10">
+                          <p className="text-xs font-medium text-muted-foreground">{day}</p>
+                          <Separator className="mt-1" />
+                        </div>
+                        <div className="space-y-1 mt-2">
+                          {evs.map(ev => {
+                            const em = eventMeta(ev.type)
+                            const Icon = em.icon
+                            return (
+                              <div key={ev.id} className="flex gap-3 py-2">
+                                <div className="flex-shrink-0 mt-0.5">
+                                  <Icon className={`h-4 w-4 ${em.color}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="text-sm font-medium truncate">{ev.title}</p>
+                                    <span className="text-xs text-muted-foreground flex-shrink-0">{new Date(ev.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+                                  </div>
+                                  {ev.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{ev.description}</p>}
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                    <Badge variant="outline" className="text-xs">{em.label}</Badge>
+                                    {ev.author && <Badge variant="secondary" className="text-xs">{ev.author}</Badge>}
+                                    {ev.diTitle && <Badge variant="outline" className="text-xs truncate max-w-[200px]">{ev.diTitle}</Badge>}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
-              ))}
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Диалог метки */}
+      <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editingTag ? 'Редактировать метку' : 'Новая метка отслеживания'}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            {!focus && <p className="text-sm text-amber-600">Сначала выберите сущность в области отслеживания.</p>}
+            <div><Label>Название *</Label><Input value={tagForm.label} onChange={e => setTagForm({ ...tagForm, label: e.target.value })} placeholder="Напр. «Согласование с юр.отделом»" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Категория</Label><Select value={tagForm.kind} onValueChange={v => setTagForm({ ...tagForm, kind: v })}><SelectTrigger /><SelectContent>{TAG_KINDS.map(k => <SelectItem key={k.value} value={k.value}>{k.label}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label>Цвет</Label><Select value={tagForm.color} onValueChange={v => setTagForm({ ...tagForm, color: v })}><SelectTrigger /><SelectContent>{TAG_COLORS.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
             </div>
-          )}
-        </TabsContent>
-      </Tabs>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Ответственный</Label><Input value={tagForm.assignee} onChange={e => setTagForm({ ...tagForm, assignee: e.target.value })} /></div>
+              <div><Label>Дедлайн</Label><Input type="date" value={tagForm.dueDate} onChange={e => setTagForm({ ...tagForm, dueDate: e.target.value })} /></div>
+            </div>
+            <div><Label>Пояснение</Label><Textarea value={tagForm.note} onChange={e => setTagForm({ ...tagForm, note: e.target.value })} className="min-h-[60px]" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTagDialogOpen(false)}>Отмена</Button>
+            <Button onClick={handleSaveTag} disabled={!focus}>{editingTag ? 'Сохранить' : 'Добавить'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* Add Dialog */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent><DialogHeader><DialogTitle>Добавить запись отслеживания</DialogTitle></DialogHeader>
+      {/* Диалог записи журнала */}
+      <Dialog open={logDialogOpen} onOpenChange={setLogDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Запись в журнал</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>ДИ *</Label><Select value={formDIId} onValueChange={setFormDIId}><SelectTrigger><SelectValue placeholder="Выберите ДИ" /></SelectTrigger><SelectContent>{generatedDIs.map(di => <SelectItem key={di.id} value={di.id}>{di.title}</SelectItem>)}</SelectContent></Select></div>
-            <div><Label>Статус *</Label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger /><SelectContent>{STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
-            <div><Label>Исполнитель</Label><Input value={formAssignee} onChange={e => setFormAssignee(e.target.value)} /></div>
-            <div><Label>Примечание</Label><Textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} className="min-h-[60px]" /></div>
+            <div><Label>Тип записи</Label><Select value={logForm.actionType} onValueChange={v => setLogForm({ ...logForm, actionType: v })}><SelectTrigger /><SelectContent>{ACTION_TYPES.map(a => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Заголовок *</Label><Input value={logForm.title} onChange={e => setLogForm({ ...logForm, title: e.target.value })} placeholder="Краткое описание действия" /></div>
+            <div><Label>Описание</Label><Textarea value={logForm.description} onChange={e => setLogForm({ ...logForm, description: e.target.value })} className="min-h-[80px]" /></div>
+            <div><Label>Автор</Label><Input value={logForm.author} onChange={e => setLogForm({ ...logForm, author: e.target.value })} /></div>
+            {focus && <p className="text-xs text-muted-foreground">Запись будет привязана к выбранной {focusMeta.label.toLowerCase()}.</p>}
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setAddDialogOpen(false)}>Отмена</Button><Button onClick={handleCreate}>Добавить</Button></DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLogDialogOpen(false)}>Отмена</Button>
+            <Button onClick={handleSaveLog}>Добавить</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Status Change Dialog */}
-      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
-        <DialogContent><DialogHeader><DialogTitle>Изменить статус</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div><Label>Новый статус</Label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger /><SelectContent>{STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
-            <div><Label>Исполнитель</Label><Input value={formAssignee} onChange={e => setFormAssignee(e.target.value)} /></div>
-            <div><Label>Примечание</Label><Textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} className="min-h-[60px]" /></div>
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => setStatusDialogOpen(false)}>Отмена</Button><Button onClick={handleStatusChange}>Обновить</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Timeline Dialog */}
-      <Dialog open={timelineDialogOpen} onOpenChange={setTimelineDialogOpen}>
-        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>История согласования</DialogTitle></DialogHeader>
-          <div className="space-y-2">
-            {timelineDIId && trackings.filter(t => t.generatedDIId === timelineDIId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(t => (
-              <div key={t.id} className="border rounded-lg p-3 space-y-1">
-                <div className="flex items-center justify-between"><Badge className={`${getStatusInfo(t.status).color} border-0`}>{getStatusInfo(t.status).label}</Badge><span className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleDateString('ru-RU')}</span></div>
-                {t.assignee && <p className="text-sm">Исполнитель: {t.assignee}</p>}
-                {t.notes && <p className="text-sm text-muted-foreground">{t.notes}</p>}
-                <div className="flex gap-1 mt-1">
-                  <Button variant="outline" size="sm" onClick={() => { setSelectedTracking(t); setFormStatus(t.status); setFormAssignee(t.assignee || ''); setFormNotes(''); setStatusDialogOpen(true) }}>Изменить</Button>
-                  <Button variant="outline" size="sm" className="text-destructive" onClick={() => { setSelectedTracking(t); setDeleteDialogOpen(true) }}>Удалить</Button>
-                </div>
-              </div>
-            ))}
-            {timelineDIId && (
-              <Button className="mt-2" size="sm" onClick={() => { setTimelineDialogOpen(false); handleUpdateDIStatus(timelineDIId, 'approved') }}>Утвердить ДИ</Button>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Tracking Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Удалить запись?</AlertDialogTitle></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Отмена</AlertDialogCancel><AlertDialogAction onClick={handleDelete}>Удалить</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-      </AlertDialog>
-
-      {/* Batch Audit Dialog */}
-      <AlertDialog open={batchAuditOpen} onOpenChange={setBatchAuditOpen}>
+      {/* Удаление метки */}
+      <AlertDialog open={!!tagToDelete} onOpenChange={(o) => !o && setTagToDelete(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Пакетный аудит ДИ?</AlertDialogTitle></AlertDialogHeader>
-          <p className="text-sm text-muted-foreground">Будет запущен аудит {batchTarget.ids.length} ДИ подразделения «{batchTarget.label}». Это может занять время.</p>
+          <AlertDialogHeader><AlertDialogTitle>Удалить метку?</AlertDialogTitle></AlertDialogHeader>
+          <p className="text-sm text-muted-foreground">Метка «{tagToDelete?.label}» будет удалена безвозвратно.</p>
           <AlertDialogFooter>
             <AlertDialogCancel>Отмена</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBatchAudit} disabled={batchAuditLoading}>
-              {batchAuditLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Запустить аудит
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Batch Delete Dialog */}
-      <AlertDialog open={batchDeleteOpen} onOpenChange={setBatchDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Удалить все ДИ подразделения?</AlertDialogTitle></AlertDialogHeader>
-          <p className="text-sm text-muted-foreground">Будет безвозвратно удалено {batchTarget.ids.length} ДИ подразделения «{batchTarget.label}» вместе со всеми версиями, секциями и результатами аудита.</p>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Отмена</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBatchDelete} disabled={batchAuditLoading} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {batchAuditLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Удалить
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDeleteTag} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Удалить</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

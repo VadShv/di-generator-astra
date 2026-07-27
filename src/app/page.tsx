@@ -3,10 +3,12 @@
 import { useAppStore, type ActiveSection } from '@/lib/store'
 import { useState } from 'react'
 import {
-  LayoutDashboard, Users, BookOpen, Archive, FileText, Brain, Sparkles, GitBranch,
- Menu, ChevronLeft, Zap, Shield, History, BookOpenIcon,
-  Cpu,
+  LayoutDashboard, Users, BookOpen, Archive, FileText, Brain, Sparkles,
+ ClipboardList,
+Menu, ChevronLeft, Zap, Shield, History, BookOpenIcon,
+ Cpu,
 } from 'lucide-react'
+import { Boxes } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -22,6 +24,7 @@ import { DictionariesModule } from '@/components/modules/dictionaries'
 import { MassGenerationModule } from '@/components/modules/mass-generation'
 import { AiAuditModule } from '@/components/modules/ai-audit'
 import { InstructionsModule } from '@/components/modules/instructions'
+import { TechStackModule } from '@/components/modules/tech-stack'
 import { AiProvidersModule } from '@/components/modules/ai-providers'
 import { DIVersionsModule } from '@/components/modules/di-versions'
 
@@ -35,10 +38,11 @@ const navItems: { id: ActiveSection; label: string; icon: React.ElementType; ico
   { id: 'ai-providers', label: 'ИИ-провайдеры', icon: Cpu, iconBg: 'bg-violet-100', iconColor: 'text-violet-600', group: 'Настройка' },
  { id: 'generation', label: 'Генерация ДИ', icon: Sparkles, iconBg: 'bg-cyan-100', iconColor: 'text-cyan-600', group: 'Генерация' },
   { id: 'mass-generation', label: 'Массовая генерация', icon: Zap, iconBg: 'bg-orange-100', iconColor: 'text-orange-600', group: 'Генерация' },
- { id: 'tracking', label: 'Отслеживание', icon: GitBranch, iconBg: 'bg-orange-100', iconColor: 'text-orange-700', group: 'Жизненный цикл' },
+ { id: 'tracking', label: 'Журнал действий', icon: ClipboardList, iconBg: 'bg-orange-100', iconColor: 'text-orange-700', group: 'Жизненный цикл' },
   { id: 'version-history', label: 'Версии и сравнение', icon: History, iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600', group: 'Жизненный цикл' },
   { id: 'ai-audit', label: 'AI-аудит', icon: Shield, iconBg: 'bg-red-100', iconColor: 'text-red-600', group: 'Анализ' },
   { id: 'instructions', label: 'Инструкция', icon: BookOpen, iconBg: 'bg-gray-100', iconColor: 'text-gray-600', group: 'Помощь' },
+  { id: 'tech-stack', label: 'Стек технологий', icon: Boxes, iconBg: 'bg-slate-100', iconColor: 'text-slate-600', group: 'Помощь' },
 ]
 
 const modules: Record<ActiveSection, React.ReactNode> = {
@@ -55,6 +59,7 @@ const modules: Record<ActiveSection, React.ReactNode> = {
   'version-history': <DIVersionsModule />,
   'ai-audit': <AiAuditModule />,
   'instructions': <InstructionsModule />,
+  'tech-stack': <TechStackModule />,
 }
 
 export default function HomePage() {
@@ -117,7 +122,7 @@ export default function HomePage() {
             </div>
           )}
         </div>
-        <ScrollArea className="flex-1 py-2">
+        <ScrollArea className="flex-1 min-h-0 py-2">
           {groups.map((group) => {
             const items = navItems.filter((item) => item.group === group)
             if (!items.length) return null

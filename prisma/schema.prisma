@@ -293,6 +293,61 @@ model DITracking {
 }
 
 // ==========================================
+// Метки отслеживания (Фаза 32: Журнал действий)
+// Накидываются на компанию/подразделение/должность для контроля процесса.
+// ==========================================
+model TrackingTag {
+  id           String   @id @default(cuid())
+  // На что навешана метка (одна из сущностей).
+  entityType   String   // company | department | position
+  entityId     String
+  // Заголовок/категория метки (например, «Согласование», «Срочно», «На контроле»).
+  label        String
+  // Семантика метки: статус процесса или приоритет.
+  kind         String   @default("status") // status | priority | watch | milestone
+  color        String   @default("amber")  // slate|amber|red|emerald|blue|violet|orange
+  assignee     String?  // Ответственный
+  dueDate      DateTime? // Дедлайн
+  note         String?  // Пояснение
+  isResolved   Boolean  @default(false)
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  activityLogs ActivityLog[]
+
+  @@index([entityType, entityId])
+  @@index([isResolved])
+  @@index([assignee])
+}
+
+// ==========================================
+// Журнал действий — ручные записи (Фаза 32)
+// Дополняют виртуальный activity-feed (который агрегирует события из других таблиц).
+// ==========================================
+model ActivityLog {
+  id           String   @id @default(cuid())
+  // Тип действия: note | status_change | comment | milestone | reminder
+  actionType   String   @default("note")
+  // К чему относится запись (опционально — может быть общей заметкой).
+  entityType   String?  // company | department | position | di | tag
+  entityId     String?
+  // Связь с меткой, если запись сделана в контексте метки.
+  tagId        String?
+  tag          TrackingTag? @relation(fields: [tagId], references: [id], onDelete: SetNull)
+  title        String
+  description  String?
+  author       String?
+  // Ссылка на связанную ДИ (если применимо).
+  generatedDIId String?
+  createdAt    DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([tagId])
+  @@index([generatedDIId])
+  @@index([createdAt])
+}
+
+// ==========================================
 // Версии ДИ (для сравнения и истории)
 // ==========================================
 model DIVersion {

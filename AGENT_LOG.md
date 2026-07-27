@@ -1372,6 +1372,346 @@ masterPromptId НЕ передаётся. Сервер сам вызывает r
 - `GET /api/tracking/dashboard` -> 200, позиции возвращаются с новым relation.
 
 **ЗАВЕРШЕНО. Граф связности теперь целостен.**
+
+---
+
+## 27. ВОССТАНОВЛЕНИЕ КОНТЕКСТА (2026-07-26)
+
+Сессия прервана и возобновлена. Поднят контекст по AGENT_LOG.md, git log и
+git status.
+
+### 27.1 Что уже сделано (по коммитам и логу)
+- Фазы 1–26 ЗАВЕРШЕНЫ и закоммичены. Последний коммит:
+  `abc9d5b Phase 26: объединение версионирования и сравнения в одну вкладку`.
+- Фаза 1: миграция SQLite → portable PostgreSQL 16 (бинари в /tmp/pgroot,
+  кластер в /tmp/pgdata, пользователь astra, БД di_generator). Скрипт
+  `scripts/start-postgres.sh` (start/stop/status/restart). ВАЖНО: в контейнере
+  sudo заблокирован (no new privileges), systemd нет → systemctl неприменим,
+  postgres — portable, НЕ системный, пользователь кластера `astra`, а не
+  системный `postgres`. Поэтому `systemctl status postgresql` и
+  `sudo -u postgres psql` неприменимы — нужен запуск portable-бинарями.
+- Фазы 2–10: Мастер-промпты (умный редактор, тест, цепочки, метрики).
+- Фазы 19–20: каскадный выбор должности в обычной и массовой генерации.
+- Фаза 22: устранение разрывов связности сущностей и вкладок.
+- Фаза 23: карточки ДИ — 4 типа, генерация на базе архивной, единые селекторы.
+- Фаза 24: аудит связности — единый каскадный выбор и полные связи во всех API.
+- Фаза 25: фикс вкладки «Версионирование» — каскадный фильтр по организации.
+- Фаза 26: объединение «Версионирование» + «Сравнение версий» в одну вкладку.
+- Граф связности вкладок, сущностей и API целостен (фиксация в Фазе 24).
+
+### 27.2 Состояние на момент восстановления
+- Git: ветка `main`, рабочее дерево чистое, main на 2 коммита впереди
+  origin/main (незапушенные коммиты).
+- БД не запущена: процессов postgres нет, порт 5432 не слушается.
+  Кластер `/tmp/pgdata` на месте (PG_VERSION присутствует) — нужен только
+  запуск portable-бинарями через `scripts/start-postgres.sh start`.
+- Незавершённых фаз/TODO в коде не обнаружено.
+
+### 27.3 С какого шага продолжаем
+- Шаг 1: запустить portable PostgreSQL (`scripts/start-postgres.sh start`).
+  Если бинари в /tmp/pgroot отсутствуют (очищены) — переустановить из .deb
+  согласно Фазе 1 (apt.postgresql.org + archive.ubuntu.com, распаковка через
+  `ar`+`tar` с чистым окружением env -i из-за конфликта liblzma/libicu).
+  ВНИМАНИЕ: libicu70.deb теперь пакуется как data.tar.zst (не xz) —
+  распаковывать через `tar --zstd -xf data.tar.zst`.
+- Шаг 2: `bun run db:push` (синхронизация схемы) + `bun run db:generate`.
+- Шаг 3: `bun next dev -p 3000` и проверка API-эндпоинтов.
+- Шаг 4: при необходимости — `git push origin main` для публикации 2 коммитов.
+
+ПРИМЕЧАНИЕ о среде: long-running процессы (postgres, next dev), запущенные в
+PTY-сессии AstraCode, убиваются при переключении между сессиями. Для
+устойчивого запуска запускать через `setsid ... </dev/null >/dev/null 2>/dev/null &`
+(отсоединённый демон). Также sandbox AstraCode блокирует создание TCP/unix
+сокетов клиентами — psql/db:push/curl к localhost выполнять с эскалацией
+(sandbox_permissions=require_escalated).
+
+**Контекст восстановлен. Продолжаем с Шага 1 (запуск PostgreSQL).**
+
+---
+
+## 28. ПЕРЕНОС КЛАСТЕРА PostgreSQL В ПРОЕКТ (2026-07-26)
+
+Проблема: кластер в /tmp/pgdata очищался между сессиями AstraCode → данные БД
+терялись при каждом перезапуске.
+
+Решение: кластер перенесён ВНУТРИ проекта (./.pgdata), что обеспечивает
+сохранность данных между сессиями/перезапусками контейнера.
+
+### 28.1 Что изменено
+- `scripts/start-postgres.sh`: PGDATA по умолчанию изменён с /tmp/pgdata на
+  `$PROJECT_DIR/.pgdata` (вычисляется относительно скрипта). Переопределяется
+  через env PGDATA. Лог /tmp/pg.log остаётся временным.
+- `.gitignore`: добавлен `/.pgdata/` — кластер (с данными) не попадает в git.
+- Старый кластер /tmp/pgdata остановлен (pg_ctl stop), stale shared memory
+  очищен (ipcrm).
+
+### 28.2 Проверка (2026-07-26)
+- Новый кластер инициализирован: `./.pgdata/PG_VERSION` присутствует.
+- `setsid ... start-postgres.sh start` → postgres (PID 15066) слушает
+  127.0.0.1:5432, данные в /home/astra/di-generator-astra/.pgdata.
+- `bun run db:push` → схема в синхронизации, 21 таблица создана, Prisma
+  Client v6.19.2 сгенерирован.
+- next dev (PID 12082) на :3000 жив, подключается к БД.
+
+### 28.3 Восстановление в будущих сессиях
+Контейнер/среда AstraCode очищает /tmp, но НЕ директорию проекта. Поэтому:
+- Кластер `./.pgdata` и данные сохранятся между сессиями.
+- При новом запуске: `bash scripts/start-postgres.sh start` — initdb НЕ
+  повторяется (кластер уже есть), данные на месте.
+- ВАЖНО: portable-бинари в /tmp/pgroot МОГУТ быть очищены — тогда перед
+  запуском postgres нужно переустановить их из .deb (см. Фазу 1 и раздел
+  27.3; libicu70.deb пакуется как data.tar.zst — распаковка через `tar --zstd`).
+
+**Фаза 28 ЗАВЕРШЕНА. Кластер PostgreSQL теперь хранится в проекте (./.pgdata),
+данные переживают перезапуск сессий.**
+
+---
+
+## 29. ФИКС: Turbopack ломает резолвинг @prisma/client → --webpack (2026-07-26)
+
+Симптом: после очистки кэша .next все БД-роуты (/api/companies, /api/departments,
+/api/dashboard/stats, /api/positions и др.) падали с HTTP 500, а вкладки в
+браузере (Штатное расписание, Дашборд) бесконечно грузились. При этом прямой
+запрос через PrismaClient (bun-скрипт) работал мгновенно (7–119ms), а простые
+роуты без БД (/api) и ранее-прогретые роуты (/api/business-functions) отвечали 200.
+
+### 29.1 Корневая причина
+Next.js 16 по умолчанию использует Turbopack для dev. Turbopack некорректно
+резолвит сгенерированный Prisma-клиент: despite `serverExternalPackages:
+["@prisma/client", ".prisma/client"]` в next.config.ts, при компиляции роута
+Turbopack генерирует виртуальный chunk с хэшированным именем
+`@prisma/client-2c3a283f134fdcb6` и затем не может его найти:
+
+```
+⨯ Error: Failed to load external module @prisma/client-2c3a283f134fdcb6:
+  Cannot find module '@prisma/client-2c3a283f134fdcb6' from
+  '.next/dev/server/chunks/ssr/[root-of-the-server]__874c2c3d._.js'
+  at module evaluation (file:///...src/lib/db.ts:1:1)
+```
+
+Ошибка маскировалась тем, что кэш .next содержал старые (корректные) чанки —
+непрогретые роуты просто «висели» на попытке скомпилироваться с ошибкой.
+
+### 29.2 Решение
+Отключить Turbopack в dev, использовать webpack (корректно резолвит Prisma):
+- `package.json`, script `dev`: добавлен флаг `--webpack`:
+  `"dev": "next dev -p 3000 -H 0.0.0.0 --webpack 2>&1 | tee dev.log"`
+- `next.config.ts` без изменений (`serverExternalPackages` оставлен).
+
+### 29.3 Проверка (2026-07-26)
+После перезапуска `bun next dev --webpack` ВСЕ БД-роуты возвращают 200:
+- /api/companies 200 (compile 13s первично, 437ms повторно)
+- /api/dashboard/stats 200 -> {departments:0,positions:0,...}
+- /api/tracking, /api/generate-di, /api/archive-di, /api/generated-di — 200
+- /api/departments, /api/positions — 200
+Первичная компиляция каждого роута в webpack-режиме занимает 7–30s (медленнее
+Turbopack), но корректна; повторные запросы — сотни ms.
+
+### 29.4 Важно для будущих сессий
+- Запуск dev: `bun run dev` (теперь с --webpack) или напрямую
+  `bun next dev -p 3000 -H 0.0.0.0 --webpack`.
+- НЕ возвращать Turbopack (без --webpack / с --turbo) — сломает все БД-роуты.
+- Логи dev: `dev.log` (tee) — смотреть ошибки компиляции там.
+- Если БД-роуты снова 500 — сначала проверить, не слетел ли флаг --webpack.
+
+**Фаза 29 ЗАВЕРШЕНА. Turbopack отключён (--webpack), все БД-роуты работают,
+вкладки грузятся.**
+## 30. ВОССТАНОВЛЕНИЕ + ФИКС СКРОЛЛА МЕНЮ + АНАЛИЗ ЗАДЕРЖЕК ЗАГРУЗКИ (2026-07-26)
+
+### 30.1 Восстановление сервисов
+- PostgreSQL поднят из сохранённого кластера ./.pgdata: PID 15066, 127.0.0.1:5432,
+  запуск через `setsid ... bash scripts/start-postgres.sh start` (отсоединённый демон).
+- Dev-сервер Next.js уже работал из прошлой сессии: `bun next dev -p 3000 -H 0.0.0.0
+  --webpack`, PID 19019/19034, слушает 0.0.0.0:3000. Новую копию НЕ поднимали —
+  порт занят (EADDRINUSE), проверять процесс и порт надо ЧЕРЕЗ эскалацию
+  (sandbox изолирует network namespace, из песочницы не видно хост-сокет).
+
+### 30.2 Фикс: скролл левого меню при увеличении масштаба
+- Симптом: при увеличении (zoom) страницы левое меню не помещается в экран и
+  не прокручивается — нижние пункты недоступны.
+- Корневая причина: классическая flexbox+overflow проблема. `<aside>` это
+  `fixed inset-y-0 flex flex-col`, в нём `ScrollArea className="flex-1 py-2"`.
+  Flex-элемент с `flex-1` без `min-h-0` не сжимается ниже размера контента →
+  вьюпорт ScrollArea не переполняется → полоса прокрутки не появляется.
+- Решение: добавлен `min-h-0` к ScrollArea в двух местах:
+  - src/components/app-shell.tsx:164 → `flex-1 min-h-0 py-2`
+  - src/app/page.tsx:120 → `flex-1 min-h-0 py-2` (аналогичный layout в page.tsx)
+- `min-h-0` разрешает flex-элементу сжиматься, вьюпорт ScrollArea начинает
+  переполняться и появляется вертикальный скролл.
+
+### 30.3 Анализ: медленная загрузка страниц по сравнению с прошлой сессией
+- Симптом: вкладки (Штатное расписание, Дашборд и др.) грузятся дольше, чем
+  в сессии до очистки кэша.
+- Измерения (webpack dev-режим, --webpack):
+  - Первый запрос (компиляция по требованию): /api/templates 2.96s,
+    /api/master-prompts 4.35s, /api/generated-di 3.36s, /api/archive-di 3.28s,
+    /api/tracking/dashboard 3.58s, /api/dashboard/stats 2.87s.
+  - Повторный запрос (нагретый): /api/dashboard/stats 0.02s,
+    /api/companies 0.01s, /api/departments 0.48s, /api/positions 0.51s,
+    /api/business-functions 0.63s, /api/projects 0.88s.
+- Корневая причина: переключение Turbopack→webpack (раздел 29). В прошлой
+  сессии Turbopack компилировал быстрее, а кэш .next был прогрет. После
+  очистки кэша + перехода на webpack каждый роут компилируется при первом
+  обращении (2–4s на роут), потом кэшируется. Вкладка «Штатное расписание»
+  ждёт Promise.all из 5 fetch (companies, departments, positions,
+  business-functions, projects) — на холодном старте это сумма компиляций.
+- БД данные: все 21 таблица пустые (0 строк) — поэтому дашборд показывает нули
+  (departments:0, positions:0 и т.д.). Медлительность НЕ связана с пустой БД:
+  даже пустые роуты компилируются. После прогрева всё мгновенно.
+- Прогрев выполнен: все 12 основных API-роутов пройдены и отдают 200.
+
+### 30.4 Вывод по производительности
+Webpack dev даёт корректность (Prisma работает) ценой медленной первой
+компиляции роута. Это норма dev-режима, не баг. Опции ускорения:
+- Прогрев: перед работой пройти по основным API/вкладкам (как сделано).
+- Production-build (`bun run build` + `bun run start`) — без первой компиляции,
+  но требует standalone-сборки и не удобен для правок.
+- Проверить, не починили ли в новом Next/Prisma резолвинг Turbopack
+  (на данный момент 16.1.1 + prisma 6.11.1 — всё ещё ломается, см. §29.1).
+
+**Фаза 30 ЗАВЕРШЕНА. Скролл меню починен (min-h-0), задержки загрузки
+объяснены webpack-компиляцией по требованию; БД-роуты прогреты и отдают 200.**
+## 31. ФИКС: возврат Turbopack через transpilePackages (быстро + Prisma работает) (2026-07-26)
+
+### 31.1 Постановка
+Раздел 30 выяснил, что медленная загрузка вкладок — следствие перехода
+Turbopack→webpack (раздел 29): webpack компилирует каждый роут при первом
+обращении 2–4s, Turbopack — 0.05–0.1s. Пользователь попросил вернуть скорость
+«как в прошлой сессии» → надо вернуть Turbopack, починив резолвинг Prisma.
+
+### 31.2 Воспроизведение ошибки (новые версии)
+Версии обновились: next 16.1.1→16.1.3, prisma 6.11.1→6.19.2. Проверил на чистом
+кэше .next с Turbopack (без --webpack) — ошибка из §29 воспроизвелась один в один:
+`Failed to load external module @prisma/client-2c3a283f134fdcb6: Cannot find
+module '@prisma/client-2c3a283f134fdcb6'`. Хэш стабилен (детерминированный).
+Т.е. баг НЕ починен в новых версиях, нужна конфиг-обходка.
+
+### 31.3 Что НЕ помогло
+- Убрать `serverExternalPackages` (оставить пустым) — Turbopack всё равно
+  детектит Prisma как external автоматически (по .prisma/client / WASM engine)
+  и генерирует хэшированный external-модуль. Та же ошибка 500.
+- Сменить generator на новый `prisma-client` (ESM/TS) — генерация проходит, но
+  `@prisma/client/index.js` реэкспортит `require('.prisma/client/default')`,
+  которого в новом генераторе нет (только .ts). Несовместимо с CommonJS-импортом
+  в коде без переписывания всех импортов. Откатил.
+- Явный `output = "../node_modules/@prisma/client"` для prisma-client-js —
+  генератор игнорирует, пишет «forwarded to .prisma/client». Не меняет поведение.
+
+### 31.4 Решение: transpilePackages
+Корень проблемы: Turbopack маркирует @prisma/client как external (через
+`externalRequire` в `[turbopack]_runtime.js`) и генерирует виртуальный модуль с
+хэшированным именем `@prisma/client-<hash>`, который потом не может резолвить.
+`serverExternalPackages` управляет списком externals, но НЕ отключает детект.
+Решение — наоборот, заставить Turbopack БАНДИТЬ @prisma/client как обычный
+модуль через `transpilePackages`:
+```ts
+// next.config.ts
+transpilePackages: ["@prisma/client", ".prisma/client"],
+```
+transpilePackages противоположен serverExternalPackages: вместо «не бандли,
+оставь external» — «втянуть в граф сборки». Prisma (Node-API engine, WASM)
+бандлится корректно, хэшированный external не генерируется.
+
+### 31.5 Изменения
+- next.config.ts: убран `serverExternalPackages`, добавлен
+  `transpilePackages: ["@prisma/client", ".prisma/client"]`.
+- package.json: из dev-скрипта убран `--webpack` (возврат к Turbopack).
+  `bun run dev` теперь = `next dev -p 3000 -H 0.0.0.0`.
+- prisma/schema.prisma: БЕЗ изменений (остался prisma-client-js).
+
+### 31.6 Проверка (2026-07-26)
+После рестарта `bun run dev` (Turbopack) на чистом кэше — все 12 БД-роутов 200:
+  companies 0.02s, departments 0.08s, positions 0.09s, business-functions 0.08s,
+  projects 0.09s, templates 0.11s, master-prompts 0.08s, generated-di 0.08s,
+  archive-di 0.09s, dashboard/stats 0.06s, tracking/dashboard 0.11s,
+  ai-providers 0.09s.
+Главная страница: 200 за 0.06s (на webpack было 2.2s). Первый прогон роутов
+0.02–0.11s (на webpack 2.9–4.4s). Скорость «как в прошлой сессии» восстановлена.
+
+### 31.7 Важно для будущих сессий
+- Turbopack теперь РАБОТАЕТ с Prisma благодаря transpilePackages. НЕ удалять
+  `transpilePackages` из next.config.ts — иначе вернётся ошибка
+  @prisma/client-<hash> (500 на всех БД-роутах).
+- НЕ возвращать `--webpack` (медленнее в 30–40 раз на первый запрос роута).
+- Если БД-роуты снова 500 под Turbopack — первое, что проверить: на месте ли
+  transpilePackages и не добавлен ли обратно serverExternalPackages для Prisma.
+
+**Фаза 31 ЗАВЕРШЕНА. Turbopack возвращён (transpilePackages), Prisma работает,
+скорость загрузки восстановлена: роуты 0.05–0.1s вместо 2–4s.**
+## 32. ПРЕВРАЩЕНИЕ ВКЛАДКИ «ОТСЛЕЖИВАНИЕ» → «ЖУРНАЛ ДЕЙСТВИЙ» (2026-07-26)
+
+### 32.1 Постановка
+Вкладка «Отслеживание» переработана в полноценный «Журнал действий» —
+историю созданий ДИ и изменений, с возможностью навешивать метки на
+компанию / подразделение / должность для контроля процесса создания ДИ.
+
+### 32.2 Новые модели Prisma (prisma/schema.prisma, применено через db:push)
+- `TrackingTag` — метки на сущностях. Поля: entityType (company|department|
+  position), entityId, label, kind (status|priority|watch|milestone),
+  color (7 вариантов: slate|amber|red|emerald|blue|violet|orange),
+  assignee, dueDate, note, isResolved, createdBy. Индексы по
+  [entityType, entityId], [isResolved], [assignee]. Backrelation
+  activityLogs ActivityLog[].
+- `ActivityLog` — ручные записи журнала. Поля: actionType
+  (note|status_change|comment|milestone|reminder), entityType?, entityId?,
+  tagId? (→ TrackingTag, onDelete: SetNull), title, description?, author?,
+  generatedDIId?. Индексы по [entityType, entityId], [tagId],
+  [generatedDIId], [createdAt].
+
+### 32.3 Новые API-роуты (все — GET/POST/PUT/DELETE, возвращают 200/201)
+- `/api/tracking-tags` — CRUD меток. Фильтры: entityType, entityId,
+  isResolved, assignee. Включает _count.activityLogs.
+- `/api/activity-log` — CRUD ручных записей журнала. Фильтры: entityType,
+  entityId, tagId, generatedDIId. Include tag.
+- `/api/activity-feed` — единая виртуальная лента событий. Агрегирует
+  события из 7 таблиц БЕЗ правок других роутов: GeneratedDI
+  (создание/обновление), DIVersion, DIAuditResult, ArchiveDI, DITracking
+  (смена статусов), TrackingTag (создана/закрыта), ActivityLog (ручные).
+  Поддерживает фильтр entityType+entityId с обходом иерархии подразделений
+  (для company — все должности компании; для department — должности
+  подразделения и потомков; для position — одна). Каждое событие
+  приводится к единому формату { id, type, title, description, author,
+  createdAt, entityType, entityId, diId, diTitle, tagId, metadata }.
+
+### 32.4 Перезапись модуля (src/components/modules/tracking.tsx, ~558 строк)
+Двухколоночный layout:
+- Левая колонка: CascadePositionSelector (область отслеживания) + список
+  меток (создание/редактирование/удаление/закрытие, цветовая кодировка,
+  детектор просрочек по dueDate, бейджи ответственного/дедлайна/типа).
+- Правая колонка: 4 метрические карточки (всего меток / активных /
+  просрочено / событий в ленте) + лента действий.
+- Лента сгруппирована по дням, иконки по типу события (EVENT_META на 12
+  типов), переключатель области «Все» ↔ «По фокусу».
+- Диалоги: создание/редактирование метки (название, категория, цвет,
+  ответственный, дедлайн, пояснение); запись в журнал (тип, заголовок,
+  описание, автор); подтверждение удаления (AlertDialog).
+
+### 32.5 Переименование навигации
+- app-shell.tsx + page.tsx: «Отслеживание» → «Журнал действий».
+- Иконка GitBranch → ClipboardList (импорт заменён в обоих файлах,
+  GitBranch полностью убран из app-shell).
+- id вкладки оставлен 'tracking' для совместимости.
+
+### 32.6 Проверка (2026-07-26)
+- tsc --noEmit → 0 ошибок.
+- eslint . (по изменённым файлам) → 0 ошибок.
+- Все 3 новых роута возвращают 200: activity-feed (0.24s),
+  tracking-tags (0.08s), activity-log (0.08s).
+- End-to-end цикл подтверждён:
+  • POST метки → 201 ✓
+  • POST записи журнала → 201 ✓
+  • Лента показывает оба события (tag_created + note) ✓
+  • PUT метки isResolved=true → лента показывает tag_resolved ✓
+  • DELETE метки и записи → success:true, финальная лента пуста ✓
+- Таблицы TrackingTag и ActivityLog присутствуют в БД (db:push применён).
+- Старые роуты /api/tracking*, /api/tracking/dashboard,
+  /api/tracking/export, /api/tracking/update-di-status — НЕ тронуты
+  (могут использоваться в другом месте; не удалены для безопасности).
+
+**Фаза 32 ЗАВЕРШЕНА. Вкладка «Отслеживание» превращена в «Журнал действий»:
+метки на компаниях/подразделениях/должностях + агрегированная лента событий
+из 7 таблиц + ручные записи журнала. Модуль работает end-to-end.**
+
 ## 25. ФИКС ВКЛАДКИ «ВЕРСИОНИРОВАНИЕ»: КАСКАДНЫЙ ФИЛЬТР ПО ОРГАНИЗАЦИИ (2026-07-25)
 
 ### 25.1 Постановка
@@ -1624,3 +1964,60 @@ src/components/modules/archive.tsx.
 все API возвращают полные связи (company/department/position), глобальный
 поиск покрывает архивные ДИ.**
 **ЗАВЕРШЕНО. Граф связности теперь целостен.**
+- Production-build (`bun run build` + `bun run start`) —没有了 первой компиляции,
+  но требует standalone-сборки и не удобен для правок.
+- Проверить, не починили ли в новом Next/Prisma резолвинг Turbopack
+  (на данный момент 16.1.1 + prisma 6.11.1 — всё ещё ломается, см. §29.1).
+- Проверить, не починили ли в новых версиях Next/Prisma резолвинг Turbopack
+ (на данный момент next 16.1.1 + prisma 6.11.1 — всё ещё ломается, см. §29.1).
+## §33. Вкладка «Стек технологий» + обновление «Инструкции» (26.07.2026)
+
+### Контекст восстановления
+- Дата восстановления контекста: 26.07.2026.
+- Предыдущая сессия (Phase 33) была прервана с повреждённым блоком в
+  `src/components/modules/instructions.tsx` (блок «Общие принципы работы»,
+  строки ~764-788) — из-за нескольких неудачных `apply_patch` там оказались
+  дублированный массив `tips` и висячие строки после `],`, что вызывало
+  синтаксические ошибки TS1005/TS1136/TS1128 (13 ошибок в строках 778-791).
+  Summary от другой модели утверждал, что «tsc проходит» — это было неверно;
+  фактический запуск `bunx tsc --noEmit` подтвердил поломку.
+
+### Что сделано в этой фазе
+1. **Новый модуль `src/components/modules/tech-stack.tsx`** (~418 строк) —
+   подробное описание стека технологий: 8 таб-групп (Среда выполнения, Фронтенд,
+   Бэкенд, База данных, ИИ-коннектор, Парсинг документов, Инфраструктура,
+   Качество кода), принципы архитектуры, команды эксплуатации с бейджами
+   эскалации. Экспортирует `TechStackModule`.
+2. **Навигация зарегистрирована** в двух местах:
+   - `src/components/app-shell.tsx`: lazy-импорт `TechStackModule`, nav-item
+     `{ id: 'tech-stack', label: 'Стек технологий', icon: <Boxes />, group: 'Обоз' }`,
+     регистрация в `moduleComponents`.
+   - `src/app/page.tsx`: прямой импорт, nav-item (group 'Помощь',
+     iconBg 'bg-slate-100'), регистрация в `modules`.
+3. **`src/lib/store.ts`**: добавлено `'tech-stack'` в тип `ActiveSection`.
+4. **`src/components/modules/instructions.tsx`** обновлён:
+   - Раздел `tracking` переименован: «Отслеживание ДИ» → «Журнал действий»
+     (description и subsections переписаны под модуль Activity Journal:
+     метки, лента действий и т.д.).
+   - Nav-блок (стр. ~753): «15 разделами, организованными в 7 групп»;
+     в группах упомянуты «Журнал действий» и «Стек технологий».
+   - **Исправлен повреждённый блок «Общие принципы работы»**: удалены
+     висячие строки (вторая копия tips) и выровнена индентация.
+
+### Валидация
+- `bunx tsc --noEmit` → 0 ошибок.
+- `bunx eslint` по всем изменённым файлам → 0 ошибок.
+- Dev-сервер (Turbopack) запущен на :3000, `/` → 200 (~0.11s),
+  `/api/dashboard/stats` → 200.
+
+### Заметки для следующих сессий
+- `instructions.tsx` ~69KB / 925 строк — превышает лимит `write_file` (64KB);
+  правки только через `apply_patch` небольшими хунками с уникальным контекстом.
+- `apply_patch` нормализует индентацию хунка: при удалении строк с разной
+  индентацией избегать повторяющихся `],`/`},`/`]` как контекста — они
+  неоднозначны и приводят к ошибке «invalid hunk». Использовать уникальные
+  строки (русский текст) как якоря.
+- Вкладка «Стек технологий» находится в группе «Помощь» (page.tsx) и
+  «Обзор» (app-shell.tsx) — расхождение групп между двумя навигациями
+  остаётся как есть.
+- Коммита НЕ было; последний коммит `abc9d5b Phase 26`.

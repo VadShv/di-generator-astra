@@ -61,6 +61,27 @@ interface TemplateRow {
   isPrimary: boolean
 }
 
+interface MasterPromptRow {
+  id: string
+  name: string
+  category: string
+  version: number
+  isAiCulture: boolean
+  departmentId: string | null
+  businessFunctionId: string | null
+  grade: string | null
+  companyId: string | null
+  positionId: string | null
+}
+
+// Промежуточный результат парсинга файла — показывается пользователю перед сохранением.
+interface ParsedPreview {
+  fileName: string
+  fileType: string
+  rawText: string
+  sections: { title: string; content: string }[]
+}
+
 interface PositionDIWorkspaceProps {
   position: Position
   // Колбэк для оповещения родителя об изменениях (чтобы обновить счетчики в дереве)
@@ -95,8 +116,12 @@ const STATUS_COLORS: Record<string, string> = {
   review: 'bg-amber-50 text-amber-700 border-amber-300',
   approved: 'bg-emerald-50 text-emerald-700 border-emerald-300',
   exported: 'bg-sky-50 text-sky-700 border-sky-300',
-  imported: 'bg-violet-50 text-violet-700 border-violet-300',
+ imported: 'bg-violet-50 text-violet-700 border-violet-300',
 }
+
+// Sentinel для опции «авто-подбор мастер-промпта». Radix Select запрещает
+// value="" у SelectItem, поэтому используем непустое значение-маркер.
+const AUTO_PROMPT = '__auto__'
 
 export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspaceProps) {
   const { toast } = useToast()
@@ -129,21 +154,53 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
   const [previewArchiveId, setPreviewArchiveId] = useState<string | null>(null)
   const [previewGenId, setPreviewGenId] = useState<string | null>(null)
 
+ // Мастер-промпты (выбор при генерации)
+ const [masterPrompts, setMasterPrompts] = useState<MasterPromptRow[]>([])
+ // '' = авто-подбор по критериям должности; иначе — выбранный промпт.
+ // AUTO_PROMPT = авто-подбор по критериям должности; иначе — выбранный промпт.
+ const [selMasterPromptId, setSelMasterPromptId] = useState<string>(AUTO_PROMPT)
+ const [resolvedPromptName, setResolvedPromptName] = useState<string | null>(null)
+
+  // Предпросмотр загружаемой архивной ДИ (после parse, до save)
+  const [parsedPreview, setParsedPreview] = useState<ParsedPreview | null>(null)
+  const [parsingArchive, setParsingArchive] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+
   // ===== Загрузка данных =====
   const loadAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [archRes, genRes, tmplRes] = await Promise.all([
-        fetch(`/api/archive-di?positionId=${position.id}`),
-        fetch('/api/generated-di'),
-        fetch('/api/templates'),
-      ])
-      if (archRes.ok) setArchiveDIs((await archRes.json()) as ArchiveDIRow[])
-      if (genRes.ok) {
-        const all = (await genRes.json()) as GeneratedDIRow[]
-        setGeneratedDIs(all.filter(d => d.positionId === position.id))
+     const [archRes, genRes, tmplRes] = await Promise.all([
+       fetch(`/api/archive-di?positionId=${position.id}`),
+       fetch('/api/generated-di'),
+       fetch('/api/templates'),
+     ])
+     if (archRes.ok) setArchiveDIs((await archRes.json()) as ArchiveDIRow[])
+     if (genRes.ok) {
+       const all = (await genRes.json()) as GeneratedDIRow[]
+       setGeneratedDIs(all.filter(d => d.positionId === position.id))
+     }
+     if (tmplRes.ok) setTemplates((await tmplRes.json()) as TemplateRow[])
+      // Мастер-промпты для выбора при генерации (только активные, категория generation)
+      const mpRes = await fetch('/api/master-prompts?active=true')
+      if (mpRes.ok) {
+        const allMp = (await mpRes.json()) as MasterPromptRow[]
+        setMasterPrompts(allMp.filter(p => p.category === 'generation'))
       }
-      if (tmplRes.ok) setTemplates((await tmplRes.json()) as TemplateRow[])
+      // Резолв «дефолтного» промпта для текущей должности (для подписи в UI).
+      try {
+        const rsvRes = await fetch('/api/master-prompts/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ positionId: position.id, category: 'generation' }),
+        })
+        if (rsvRes.ok) {
+          const rsv = await rsvRes.json()
+          setResolvedPromptName(rsv.prompt?.name ?? null)
+        }
+      } catch {
+        // Резолв не критичен — генерация всё равно сработает с авто-подбором на сервере.
+      }
     } catch {
       toast({ title: 'Ошибка', description: 'Не удалось загрузить данные по ДИ', variant: 'destructive' })
     } finally {
@@ -173,8 +230,14 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
     try {
       const res = await fetch('/api/generate-di/ai-generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ positionId: position.id, templateId: selectedTemplate, archiveDIId: selArchiveBaseId || undefined, useArchiveAsReference }),
+       headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+         positionId: position.id,
+         templateId: selectedTemplate,
+          masterPromptId: selMasterPromptId === AUTO_PROMPT ? undefined : selMasterPromptId,
+         archiveDIId: selArchiveBaseId || undefined,
+         useArchiveAsReference,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Ошибка генерации')
@@ -190,41 +253,74 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
   }
 
   // ===== Загрузка архивной ДИ (PDF/DOCX) =====
-  const handleArchiveUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploadingArchive(true)
+  // ===== Загрузка архивной ДИ: шаг 1 — парсинг файла в предпросмотр =====
+  const handleArchiveParse = async (file: File) => {
+    const name = file.name.toLowerCase()
+    if (!name.endsWith('.pdf') && !name.endsWith('.docx')) {
+      toast({ title: 'Неподдерживаемый формат', description: 'Допускаются только .pdf и .docx', variant: 'destructive' })
+      return
+    }
+    setParsingArchive(true)
+    setParsedPreview(null)
     try {
-      // 1. Парсинг файла
       const fd = new FormData()
       fd.append('file', file)
       const parseRes = await fetch('/api/di-upload?mode=parse', { method: 'POST', body: fd })
       const parsed = await parseRes.json()
       if (!parseRes.ok) throw new Error(parsed.error || 'Ошибка разбора файла')
+      setParsedPreview({
+        fileName: parsed.fileName,
+        fileType: parsed.fileType,
+        rawText: parsed.rawText,
+        sections: parsed.sections || [],
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ''
+      // Типичная причина пустого текста — PDF-скан без текстового слоя.
+      const hint = /извлечь текст|скан/i.test(msg)
+        ? 'Возможно, это скан. Распознайте текст (OCR) и загрузите текстовый PDF/DOCX.'
+        : msg
+      toast({ title: 'Ошибка разбора файла', description: hint, variant: 'destructive' })
+    } finally {
+      setParsingArchive(false)
+    }
+  }
 
-      // 2. Сохранение как архивной ДИ для позиции
+  // Обработчик выбора файла (input) — запускает парсинг.
+  const handleArchiveUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    await handleArchiveParse(file)
+    e.target.value = ''
+  }
+
+  // ===== Загрузка архивной ДИ: шаг 2 — подтверждение и сохранение =====
+  const handleConfirmSaveArchive = async () => {
+    if (!parsedPreview) return
+    setUploadingArchive(true)
+    try {
       const saveRes = await fetch('/api/di-upload?mode=save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fileName: parsed.fileName,
-          fileType: parsed.fileType,
-          rawText: parsed.rawText,
-          sections: parsed.sections,
+          fileName: parsedPreview.fileName,
+          fileType: parsedPreview.fileType,
+          rawText: parsedPreview.rawText,
+          sections: parsedPreview.sections,
           positionId: position.id,
           companyId: position.department?.companyId || null,
         }),
       })
       const saved = await saveRes.json()
       if (!saveRes.ok) throw new Error(saved.error || 'Ошибка сохранения')
-      toast({ title: '✓ Архивная ДИ загружена', description: `${parsed.sectionCount || 0} секций` })
+      toast({ title: '✓ Архивная ДИ загружена', description: `${parsedPreview.sections.length} секций` })
+      setParsedPreview(null)
       await loadAll()
       onChanged?.()
     } catch (e) {
-      toast({ title: 'Ошибка загрузки', description: e instanceof Error ? e.message : '', variant: 'destructive' })
+      toast({ title: 'Ошибка сохранения', description: e instanceof Error ? e.message : '', variant: 'destructive' })
     } finally {
       setUploadingArchive(false)
-      e.target.value = ''
     }
   }
 
@@ -384,17 +480,85 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
       </TabsList>
 
       {/* ===== Архивные ДИ ===== */}
-      <TabsContent value="archive" className="mt-3 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">Старые ДИ (PDF/DOCX) — используются как референс при генерации</p>
-          <label className="cursor-pointer">
-            <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleArchiveUpload} disabled={uploadingArchive} />
-            <span className="inline-flex items-center justify-center gap-1.5 rounded-md text-xs font-medium h-8 px-3 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
-              {uploadingArchive ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-              Загрузить ДИ
-            </span>
-          </label>
-        </div>
+     <TabsContent value="archive" className="mt-3 space-y-3">
+       <div className="flex items-center justify-between gap-2">
+         <p className="text-xs text-muted-foreground">Старые ДИ (PDF/DOCX) — используются как референс при генерации</p>
+         <label className="cursor-pointer">
+           <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleArchiveUpload} disabled={uploadingArchive} />
+           <span className="inline-flex items-center justify-center gap-1.5 rounded-md text-xs font-medium h-8 px-3 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
+             {uploadingArchive ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+             Загрузить ДИ
+           </span>
+         </label>
+       </div>
+
+        {/* Зона загрузки (drag&drop + клик) */}
+        <label
+          className={`block cursor-pointer rounded-lg border-2 border-dashed p-4 text-center transition-colors ${
+            dragOver ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-emerald-400 hover:bg-muted/40'
+          } ${(parsingArchive || uploadingArchive) ? 'opacity-60 pointer-events-none' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={async (e) => {
+            e.preventDefault()
+            setDragOver(false)
+            const file = e.dataTransfer.files?.[0]
+            if (file) await handleArchiveParse(file)
+          }}
+        >
+          <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleArchiveUpload} disabled={parsingArchive || uploadingArchive} />
+          {parsingArchive ? (
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Разбор файла…
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-1">
+              <Upload className="h-6 w-6 text-emerald-600" />
+              <p className="text-sm font-medium">Перетащите ДИ сюда или нажмите для выбора</p>
+              <p className="text-xs text-muted-foreground">PDF или DOCX — текстовый слой (сканы нужно прогнать через OCR)</p>
+            </div>
+          )}
+        </label>
+
+        {/* Предпросмотр распарсенного файла перед сохранением */}
+        {parsedPreview && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                <span className="text-sm font-medium truncate">{parsedPreview.fileName}</span>
+                <Badge variant="outline" className="text-xs h-5 uppercase">{parsedPreview.fileType}</Badge>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setParsedPreview(null)} disabled={uploadingArchive}>Отмена</Button>
+                <Button size="sm" className="h-7 bg-emerald-600 hover:bg-emerald-700" onClick={handleConfirmSaveArchive} disabled={uploadingArchive}>
+                  {uploadingArchive ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+                  {uploadingArchive ? 'Сохранение…' : 'Сохранить в архив'}
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span>{parsedPreview.sections.length} секций распознано</span>
+              <span>· {parsedPreview.rawText.length} символов</span>
+            </div>
+            {parsedPreview.sections.length > 0 ? (
+              <ScrollArea className="h-40 rounded border bg-background">
+                <div className="p-2 space-y-2">
+                  {parsedPreview.sections.map((s, i) => (
+                    <div key={i}>
+                      <p className="text-xs font-semibold text-muted-foreground">{s.title}</p>
+                      <p className="text-xs whitespace-pre-wrap line-clamp-3">{s.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            ) : (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                Секции не распознаны — текст будет сохранён целиком как одна секция.
+              </div>
+            )}
+          </div>
+        )}
 
         {archiveDIs.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground border rounded-lg border-dashed">
@@ -434,48 +598,97 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
         )}
       </TabsContent>
 
-      {/* ===== Сгенерированные ДИ ===== */}
-      <TabsContent value="generated" className="mt-3 space-y-3">
-        <div className="flex items-center gap-2 p-3 rounded-lg border bg-violet-50/50">
-          <Sparkles className="h-4 w-4 text-violet-600 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-violet-700">Генерация новой ДИ через ИИ</p>
-            <p className="text-xs text-muted-foreground">Шаблон определяет структуру секций</p>
+     {/* ===== Сгенерированные ДИ ===== */}
+   <TabsContent value="generated" className="mt-3 space-y-3">
+     {/* Воркфлоу генерации: пошаговая настройка перед запуском */}
+      <div className="rounded-lg border bg-violet-50/40 p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-violet-600 flex-shrink-0" />
+            <p className="text-sm font-medium text-violet-700">Генерация новой ДИ через ИИ</p>
           </div>
-          <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-            <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue placeholder="Шаблон" /></SelectTrigger>
-            <SelectContent>
-              {templates.map(t => (
-                <SelectItem key={t.id} value={t.id} className="text-xs">
-                  {t.name}{t.isPrimary ? ' ★' : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-         {/* Фаза 23: выбор архивной ДИ как базы генерации (ТЗ §4) */}
-         {archiveDIs.length > 0 && (
-           <div className="flex items-center gap-2 p-2 rounded-lg border bg-slate-50/60">
-             <Archive className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />
-             <Select value={selArchiveBaseId} onValueChange={setSelArchiveBaseId}>
-               <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue placeholder="Архивная ДИ как база" /></SelectTrigger>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Шаг 1. Шаблон (по умолчанию — основной) */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <span className="flex items-center justify-center h-4 w-4 rounded-full bg-violet-600 text-white text-[10px]">1</span>
+                Шаблон структуры
+              </label>
+              <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Выберите шаблон" /></SelectTrigger>
+                <SelectContent>
+                  {templates.map(t => (
+                    <SelectItem key={t.id} value={t.id} className="text-xs">
+                      {t.name}{t.isPrimary ? ' ★ Основной' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Шаг 2. Мастер-промпт (по умолчанию — авто-подбор) */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <span className="flex items-center justify-center h-4 w-4 rounded-full bg-violet-600 text-white text-[10px]">2</span>
+                Мастер-промпт
+              </label>
+             <Select value={selMasterPromptId} onValueChange={setSelMasterPromptId}>
+               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Авто-подбор по должности" /></SelectTrigger>
                <SelectContent>
-                 {archiveDIs.map(a => (
-                   <SelectItem key={a.id} value={a.id} className="text-xs">{a.title}</SelectItem>
+                  <SelectItem value={AUTO_PROMPT} className="text-xs">⚡ Авто-подбор по критериям должности</SelectItem>
+                 {masterPrompts.map(p => (
+                   <SelectItem key={p.id} value={p.id} className="text-xs">
+                     {p.name}{p.isAiCulture ? ' 🤖' : ''}{p.departmentId || p.businessFunctionId || p.grade ? ' · привязан' : ' · общий'} (v{p.version})
+                   </SelectItem>
                  ))}
                </SelectContent>
              </Select>
-             {selArchiveBaseId && (
-               <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
-                 <input type="checkbox" checked={useArchiveAsReference} onChange={(e) => setUseArchiveAsReference(e.target.checked)} className="rounded h-3 w-3" />
-                 <span>референс</span>
-               </label>
+              {selMasterPromptId === AUTO_PROMPT && (
+               <p className="text-[11px] text-muted-foreground">
+                 {resolvedPromptName
+                   ? <>Будет использован: <span className="font-medium">{resolvedPromptName}</span></>
+                   : 'Не найден — применится стандартный стиль ДИ.'}
+               </p>
              )}
-           </div>
-         )}
-          <Button size="sm" className="h-8 bg-violet-600 hover:bg-violet-700" onClick={handleGenerate} disabled={generating || !selectedTemplate}>
-            {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Sparkles className="h-3.5 w-3.5 mr-1.5" />}
-            {generating ? 'Генерация…' : 'Сгенерировать'}
-          </Button>
+            </div>
+
+            {/* Шаг 3. Архивная ДИ как база (опционально) */}
+            {archiveDIs.length > 0 && (
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <span className="flex items-center justify-center h-4 w-4 rounded-full bg-violet-600 text-white text-[10px]">3</span>
+                  Архивная ДИ как база (опционально)
+                </label>
+                <div className="flex items-center gap-2 p-2 rounded-lg border bg-slate-50/60">
+                  <Archive className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />
+                  <Select value={selArchiveBaseId} onValueChange={setSelArchiveBaseId}>
+                    <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Не использовать архивную ДИ" /></SelectTrigger>
+                    <SelectContent>
+                      {archiveDIs.map(a => (
+                        <SelectItem key={a.id} value={a.id} className="text-xs">{a.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selArchiveBaseId && (
+                    <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer whitespace-nowrap">
+                      <input type="checkbox" checked={useArchiveAsReference} onChange={(e) => setUseArchiveAsReference(e.target.checked)} className="rounded h-3 w-3" />
+                      <span>как референс</span>
+                    </label>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-1 border-t">
+            <p className="text-[11px] text-muted-foreground">
+              {selectedTemplate ? 'Готово к генерации' : 'Выберите шаблон, чтобы продолжить'}
+            </p>
+            <Button size="sm" className="h-9 px-4 bg-violet-600 hover:bg-violet-700" onClick={handleGenerate} disabled={generating || !selectedTemplate}>
+              {generating ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Sparkles className="h-4 w-4 mr-1.5" />}
+              {generating ? 'Генерация…' : 'Сгенерировать ДИ'}
+            </Button>
+          </div>
         </div>
 
         {generatedDIs.length === 0 ? (
