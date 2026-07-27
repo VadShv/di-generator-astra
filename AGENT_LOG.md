@@ -2099,5 +2099,72 @@ parse→preview→save. Весь функционал должен быть «у
 - sandbox блокирует сеть → curl/psql/db:push только с require_escalated.
   Использовать 127.0.0.1, не localhost (IPv6 hang).
 - Git push требует GitHub-токен (credential helper не настроен). Токен передаётся
-  в URL: `git push https://<token>@github.com/VadShv/di-generator-astra.git main`.
-  НЕ коммитить токен в файлы/логи.
+
+## 34. БЫСТРЫЙ ЗАПУСК ПРИ НОВОЙ СЕССИИ
+
+Полная инструкция для развёртывания сервиса с нуля за ~30 секунд.
+Все детали — в разделах выше; здесь только копипаст-команды.
+
+### 34.1 Что уже сохранено между сессиями (в проекте, в git)
+- Кластер данных PostgreSQL: `./.pgdata` (данные БД сохраняются).
+- Portable-бинари PG распакованы в `/tmp/pgroot` (могут быть очищены —
+  переустанавливаются автоматически из `vendor/pg-debs/` при `start.sh start`).
+- Сохранённые .deb: `vendor/pg-debs/` (libicu70, pgclient16, pgsql16) — в git.
+- Код, схема Prisma, next.config (transpilePackages) — в git, коммит `5de5e40`.
+
+### 34.2 Единая команда запуска
+```bash
+bash scripts/start.sh start
+```
+Что делает (idempotent):
+1. Переустанавливает portable-бинари PG из vendor/pg-debs если /tmp/pgroot пуст.
+2. Запускает PostgreSQL (setsid-демон) на 127.0.0.1:5432, кластер ./.pgdata.
+3. Запускает Next.js dev (Turbopack) на 0.0.0.0:3000 через setsid-демон.
+
+В среде AstraCode запускать с эскалацией (sandbox блокирует сокеты localhost):
+```bash
+# из PTY с require_escalated:
+bash scripts/start.sh start
+```
+
+### 34.3 Проверка после запуска (с require_escalated — сеть в sandbox)
+```bash
+# порты слушают
+ss -tlnp | grep -E ":3000|:5432"
+# БД-роуты отдают 200 (использовать 127.0.0.1, НЕ localhost — IPv6 hang)
+curl -sS -m 12 -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/api/dashboard/stats
+curl -sS -m 12 -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/api/companies
+```
+Ожидается: 5432 и 3000 слушают, оба curl → 200, dashboard/stats возвращает
+`{"departments":1,"positions":1,"archiveDIs":1,"templates":1,...}`.
+
+### 34.4 Управление сервисами
+```bash
+bash scripts/start.sh status   # статус postgres + next
+bash scripts/start.sh stop     # остановить оба
+```
+
+### 34.5 Если что-то сломалось
+- **next не стартует, «EADDRINUSE»**: прошлый инстанс висит на :3000.
+  `bash scripts/start.sh stop`, затем `start`. Не запускать второй инстанс.
+- **БД-роуты 500 под Turbopack**: проверить, что в next.config.ts на месте
+  `transpilePackages: ["@prisma/client", ".prisma/client"]` (см. §31).
+- **/tmp/pgroot очищен**: `start.sh start` переустановит из vendor/pg-debs
+  автоматически. Если и vendor/pg-debs пропал — см. §1 (скачать .deb).
+- **Данные пропали?** Данные БД в `./.pgdata` (в проекте). Если кластер
+  повреждён: бэкапы в `./backups/` (pg_dump), рестор через `start.sh` или
+  см. §28 (перенос кластера в проект).
+
+### 34.6 КРИТИЧНЫЕ ПРАВИЛА (не наступать на грабли)
+- НЕ возвращать `--webpack` (медленнее в 30-40x; Prisma чинится transpilePackages).
+- НЕ использовать `value=""` в `<SelectItem>` (Radix forbid → runtime-ошибка,
+  см. §33.3). Использовать sentinel-константы.
+- Запуск процессов через `setsid` (демоны) — иначе AstraCode убивает при
+  переключении PTY-сессии.
+- Эскалация (`require_escalated`) обязательна для: curl к localhost, psql,
+  `bun run db:push`, `git push` — sandbox делает `bwrap --unshare-net`.
+- Использовать `127.0.0.1`, не `localhost` (резолвится в IPv6 ::1 → hang).
+- Первый запрос к каждому API-роуту 7-30s под webpack (не актуально для
+  Turbopack — там 0.05-0.1s).
+- Git push: credential helper не настроен, нужен GitHub-токен в URL.
+  Токен НЕ коммитить в файлы/логи.
