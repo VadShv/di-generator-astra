@@ -1,8 +1,9 @@
-// Fallback-провайдер на базе встроенного z-ai-web-dev-sdk (Фаза 2)
+// Fallback-провайдер на базе встроенного z-ai-web-dev-sdk (Фаза 2 + Фаза 4)
 // Используется, когда в БД нет настроенного AIProvider или выбран тип 'zai'.
 // Сохраняет обратную совместимость с существующими ИИ-роутами.
 // ВАЖНО: исправляет баг старых роутов — role: 'assistant' для system-сообщения
 // заменено на корректную роль 'system'.
+// Фаза 4: вызов SDK обёрнут в withRetry для устойчивости к сбоям.
 
 import type {
   AIProviderClient,
@@ -11,6 +12,8 @@ import type {
   GenerateResponse,
   TestConnectionResult,
 } from '../types'
+import { AIProviderError } from '../errors'
+import { withRetry } from '../retry'
 
 // Тип модуля z-ai-web-dev-sdk (упрощённое описание нужного API).
 interface ZAICompletion {
@@ -55,25 +58,32 @@ export class ZaiProvider implements AIProviderClient {
     }
     const ZAI = imported.default ?? (imported as unknown as ZAIModule)
     if (typeof ZAI.create !== 'function') {
-      throw new Error(
-        'z-ai-web-dev-sdk: create() недоступен. Проверьте установку пакета и .z-ai-config.'
+      throw new AIProviderError(
+        'z-ai-web-dev-sdk: create() недоступен. Проверьте установку пакета и .z-ai-config.',
+        'bad_request',
+        undefined,
+        false
       )
     }
     return ZAI.create()
   }
 
   async generate(request: GenerateRequest): Promise<GenerateResponse> {
+    // Создаём клиент один раз; retry применяется только к вызову completion.
     const zai = await this.getZai()
-    // z-ai-web-dev-sdk использует свою сигнатуру. thinking отключаем для скорости.
-    const completion = await zai.chat.completions.create({
+
+    const completion = await withRetry(async () => {
+      // z-ai-web-dev-sdk использует свою сигнатуру. thinking отключаем для скорости.
       // Используем корректную роль 'system' (раньше в коде был баг с 'assistant').
-      messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
-      thinking: { type: 'disabled' },
+      return zai.chat.completions.create({
+        messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
+        thinking: { type: 'disabled' },
+      })
     })
 
     const content = completion.choices?.[0]?.message?.content ?? ''
     if (!content) {
-      throw new Error('z-ai-web-dev-sdk: пустой ответ')
+      throw new AIProviderError('z-ai-web-dev-sdk: пустой ответ', 'empty_response', undefined, false)
     }
     return {
       content: content.trim(),

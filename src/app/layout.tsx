@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { Providers } from "@/components/providers";
+import { getMessages, setRequestLocale } from "next-intl/server";
+import { defaultLocale } from "@/i18n/request";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,17 +24,21 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  setRequestLocale(defaultLocale);
+  const messages = await getMessages();
   return (
     <html lang="ru" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        {children}
+        <Providers locale={defaultLocale} messages={messages as Record<string, unknown>}>
+          {children}
+        </Providers>
         <Toaster />
       </body>
     </html>

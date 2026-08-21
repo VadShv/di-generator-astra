@@ -1,50 +1,42 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
- import { getProviderClient } from '@/lib/ai-connector'
- import { resolveMasterPrompt, renderPrompt, buildContextFromPosition, incrementPromptUsage } from '@/lib/master-prompt'
+import { getProviderClient } from '@/lib/ai-connector'
+import { resolveMasterPrompt, renderPrompt, buildContextFromPosition, incrementPromptUsage } from '@/lib/master-prompt'
+import { withErrorHandler, parseBody } from '@/lib/api-utils'
+import { aiImproveSchema } from '@/lib/validation/schemas'
+import { createLogger } from '@/lib/logger'
+import { buildPositionContext } from '@/lib/di/prompts'
+
+const log = createLogger('generate-di/ai-improve')
 
 // POST /api/generate-di/ai-improve - Improve existing section content with AI
-export async function POST(request: Request) {
-  try {
-    const body = await request.json()
-    const { sectionId, instruction } = body
+export const POST = withErrorHandler(async (request: Request) => {
+  const body = await parseBody(request, aiImproveSchema)
+  const { sectionId, instruction } = body
 
-    if (!sectionId || typeof sectionId !== 'string') {
-      return NextResponse.json({ error: 'ID секции обязателен' }, { status: 400 })
-    }
-
-    if (!instruction || typeof instruction !== 'string' || instruction.trim() === '') {
-      return NextResponse.json({ error: 'Инструкция для улучшения обязательна' }, { status: 400 })
-    }
-
-    // Get the section
-    const section = await db.generatedDISection.findUnique({
-      where: { id: sectionId },
-      include: {
-        generatedDI: {
-         include: {
-           position: { include: { department: { include: { company: true } }, businessFunction: true, project: true } },
-         },
+  // Get the section
+  const section = await db.generatedDISection.findUnique({
+    where: { id: sectionId },
+    include: {
+      generatedDI: {
+        include: {
+          position: { include: { department: { include: { company: true } }, businessFunction: true, project: true } },
         },
       },
-    })
+    },
+  })
 
-    if (!section) {
-      return NextResponse.json({ error: 'Секция не найдена' }, { status: 404 })
-    }
+  if (!section) {
+    return NextResponse.json({ error: 'Секция не найдена' }, { status: 404 })
+  }
+  if (!section.sectionContent || section.sectionContent.trim() === '') {
+    return NextResponse.json({ error: 'Секция пуста, улучшение невозможно' }, { status: 400 })
+  }
 
-    if (!section.sectionContent || section.sectionContent.trim() === '') {
-      return NextResponse.json({ error: 'Секция пуста, улучшение невозможно' }, { status: 400 })
-    }
+  const positionContext = buildPositionContext(section.generatedDI.position)
 
-    const positionContext = `Должность: ${section.generatedDI.position.title}
-Подразделение: ${section.generatedDI.position.department.name}
-Грейд: ${section.generatedDI.position.grade || 'Не указан'}
-Бизнес-функция: ${section.generatedDI.position.businessFunction?.name || 'Не указана'}
-Проект: ${section.generatedDI.position.project?.name || 'Не указан'}`
-
-    const systemPrompt = `Ты — эксперт по созданию и улучшению должностных инструкций для компании Группа Астра.
-Ты работаетешь с существующим текстом секции должностной инструкции и улучшаешь его по указанию пользователя.
+  const systemPrompt = `Ты — эксперт по созданию и улучшению должностных инструкций для компании Группа Астра.
+Ты работаешь с существующим текстом секции должностной инструкции и улучшаешь его по указанию пользователя.
 
 КОНТЕКСТ:
 ${positionContext}
@@ -57,19 +49,17 @@ ${positionContext}
 - Не добавляй заголовок секции в начало текста
 - Возвращай только улучшенный текст без пояснений`
 
-    // Резолвим промпт категории "improvement" (если есть) и рендерим переменные.
-    const improvePrompt = await resolveMasterPrompt('improvement', {
-      departmentId: section.generatedDI.position.departmentId,
-      businessFunctionId: section.generatedDI.position.businessFunctionId,
-      grade: section.generatedDI.position.grade,
-    })
-    const renderedImprovePrompt = improvePrompt
-      ? renderPrompt(improvePrompt.content, buildContextFromPosition(section.generatedDI.position))
-      : null
-    // Фаза 21: учитываем применение промпта в метриках.
-    if (improvePrompt) await incrementPromptUsage(improvePrompt.id)
+  const improvePrompt = await resolveMasterPrompt('improvement', {
+    departmentId: section.generatedDI.position.departmentId,
+    businessFunctionId: section.generatedDI.position.businessFunctionId,
+    grade: section.generatedDI.position.grade,
+  })
+  const renderedImprovePrompt = improvePrompt
+    ? renderPrompt(improvePrompt.content, buildContextFromPosition(section.generatedDI.position))
+    : null
+  if (improvePrompt) await incrementPromptUsage(improvePrompt.id)
 
-    const userPrompt = `Текущий текст секции "${section.sectionTitle}":
+  const userPrompt = `Текущий текст секции "${section.sectionTitle}":
 
 ${section.sectionContent}
 
@@ -77,29 +67,24 @@ ${section.sectionContent}
 
 Верни улучшенный текст секции.`
 
-    // Вызов ИИ через универсальный коннектор. Промпт "improvement" добавляется к system.
-    const client = await getProviderClient()
-    const result = await client.generate({
-      messages: [
-        { role: 'system', content: renderedImprovePrompt ? `${systemPrompt}\n\nПРОМПТ УЛУЧШЕНИЯ:\n${renderedImprovePrompt}` : systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    })
+  const client = await getProviderClient()
+  const result = await client.generate({
+    messages: [
+      { role: 'system', content: renderedImprovePrompt ? `${systemPrompt}\n\nПРОМПТ УЛУЧШЕНИЯ:\n${renderedImprovePrompt}` : systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+  })
 
-    const response = result.content || ''
+  const response = result.content || ''
 
-    // Update the section in the database
-    const updatedSection = await db.generatedDISection.update({
-      where: { id: sectionId },
-      data: {
-        sectionContent: response.trim(),
-        editedBy: 'ai-improve',
-      },
-    })
+  const updatedSection = await db.generatedDISection.update({
+    where: { id: sectionId },
+    data: {
+      sectionContent: response.trim(),
+      editedBy: 'ai-improve',
+    },
+  })
 
-    return NextResponse.json(updatedSection)
-  } catch (error) {
-    console.error('AI Improve error:', error)
-    return NextResponse.json({ error: 'Ошибка AI-улучшения секции' }, { status: 500 })
-  }
-}
+  log.info('Section improved', { sectionId })
+  return NextResponse.json(updatedSection)
+}, 'generate-di/ai-improve')

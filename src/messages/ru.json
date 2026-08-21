@@ -1,0 +1,64 @@
+{
+  "common": {
+    "appName": "Генератор ДИ — Группа Астра",
+    "appDescription": "Система генерации должностных инструкций для Группы Астра",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "create": "Создать",
+    "search": "Поиск",
+    "loading": "Загрузка...",
+    "error": "Ошибка",
+    "confirm": "Подтвердить",
+    "close": "Закрыть",
+    "export": "Экспорт",
+    "download": "Скачать",
+    "upload": "Загрузить",
+    "refresh": "Обновить",
+    "yes": "Да",
+    "no": "Нет",
+    "all": "Все",
+    "none": "Нет"
+  },
+  "nav": {
+    "dashboard": "Дашборд",
+    "staffSchedule": "Штатное расписание",
+    "archive": "Архив ДИ",
+    "templates": "Шаблоны",
+    "masterPrompts": "Мастер-промпты",
+    "generation": "Генерация",
+    "tracking": "Отслеживание",
+    "dictionaries": "Справочники",
+    "aiProviders": "ИИ-провайдеры",
+    "massGeneration": "Массовая генерация",
+    "aiAudit": "ИИ-аудит",
+    "diVersions": "Версии ДИ",
+    "instructions": "Инструкции",
+    "techStack": "Технологии"
+  },
+  "auth": {
+    "login": "Вход в систему",
+    "loginDescription": "Генератор должностных инструкций — Группа Астра",
+    "email": "Email",
+    "password": "Пароль",
+    "signIn": "Войти",
+    "signingIn": "Вход...",
+    "invalidCredentials": "Неверный email или пароль",
+    "networkError": "Сетевая ошибка при входе",
+    "loginFailed": "Не удалось войти. Проверьте настройки аутентификации."
+  },
+  "di": {
+    "statusDraft": "Черновик",
+    "statusReview": "На рассмотрении",
+    "statusApproved": "Утверждена",
+    "statusExported": "Экспортирована",
+    "statusImported": "Импортирована"
+  },
+  "errors": {
+    "authRequired": "Требуется аутентификация",
+    "notFound": "Не найдено",
+    "serverError": "Внутренняя ошибка сервера",
+    "networkError": "Сетевая ошибка"
+  }
+}

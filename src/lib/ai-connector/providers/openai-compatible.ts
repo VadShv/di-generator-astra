@@ -1,6 +1,8 @@
-// Универсальный OpenAI-совместимый провайдер ИИ (Фаза 2)
+// Универсальный OpenAI-совместимый провайдер ИИ (Фаза 2 + Фаза 4).
 // Покрывает: OpenAI, Cloud.ru, Ollama, vLLM, LiteLLM и любые API,
 // реализующие стандартный формат /v1/chat/completions.
+// Фаза 4: добавлены retry с экспоненциальным backoff, rate-limit (семафор),
+// структурированные ошибки AIProviderError.
 
 import type {
   AIProviderClient,
@@ -9,23 +11,25 @@ import type {
   GenerateRequest,
   GenerateResponse,
   TestConnectionResult,
-  ChatMessage,
 } from '../types'
+import { classifyError, isRetryable, AIProviderError } from '../errors'
+import { Semaphore, getDefaultConcurrency } from '../semaphore'
 
-/**
- * Нормализует baseUrl: убирает trailing slash и суффиксы /chat/completions,
- * чтобы корректно склеить путь. Для zai/Ollama без /v1 — добавляем.
- */
+/** Конфигурация retry. */
+const MAX_RETRIES = 3
+const INITIAL_BACKOFF_MS = 1000
+const BACKOFF_MULTIPLIER = 2
+const BACKOFF_MAX_MS = 8000
+
+/** Нормализует baseUrl. */
 function normalizeBaseUrl(baseUrl: string): string {
   let url = baseUrl.trim().replace(/\/+$/, '')
-  // Убираем суффиксы путей, если пользователь вставил полный endpoint.
   url = url.replace(/\/v1\/chat\/completions\/?$/i, '')
   url = url.replace(/\/chat\/completions\/?$/i, '')
   url = url.replace(/\/v1\/?$/i, '')
   return url
 }
 
-/** Склеивает baseUrl с /v1/chat/completions. */
 function buildEndpoint(baseUrl: string): string {
   return `${normalizeBaseUrl(baseUrl)}/v1/chat/completions`
 }
@@ -46,20 +50,27 @@ interface OpenAIResponse {
   error?: { message?: string; type?: string; code?: string }
 }
 
+/** Сон на N мс. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export class OpenAICompatibleProvider implements AIProviderClient {
   readonly name: string
   readonly type: AIProviderType
   protected config: AIProviderConfig
+  private readonly semaphore: Semaphore
 
   constructor(config: AIProviderConfig) {
     this.name = config.name
     this.config = config
     this.type = config.type
+    this.semaphore = new Semaphore(getDefaultConcurrency())
   }
 
   protected get endpoint(): string {
     if (!this.config.baseUrl) {
-      throw new Error(`Провайдер "${this.name}" не имеет baseUrl`)
+      throw new AIProviderError(`Провайдер "${this.name}" не имеет baseUrl`, 'bad_request')
     }
     return buildEndpoint(this.config.baseUrl)
   }
@@ -85,32 +96,77 @@ export class OpenAICompatibleProvider implements AIProviderClient {
     }
   }
 
+  /**
+   * Выполнить HTTP-запрос с retry и экспоненциальным backoff.
+   * Ретраит только ретряемые ошибки (timeout, 429, 5xx, network).
+   */
   protected async doFetch(body: Record<string, unknown>, timeoutMs: number): Promise<OpenAIResponse> {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      const res = await fetch(this.endpoint, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
-      const text = await res.text()
-      if (!res.ok) {
-        // Пытаемся распарсить ошибку в формате OpenAI, иначе отдаём сырой текст.
-        let detail = text
+    return this.semaphore.run(async () => {
+      let lastError: unknown = null
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), timeoutMs)
         try {
-          const parsed = JSON.parse(text) as OpenAIResponse
-          if (parsed.error?.message) detail = parsed.error.message
-        } catch {
-          // оставляем сырой текст
+          const res = await fetch(this.endpoint, {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          })
+          const text = await res.text()
+          if (!res.ok) {
+            let detail = text
+            try {
+              const parsed = JSON.parse(text) as OpenAIResponse
+              if (parsed.error?.message) detail = parsed.error.message
+            } catch {
+              // оставляем сырой текст
+            }
+            const code = classifyError(res.status)
+            if (isRetryable(code) && attempt < MAX_RETRIES) {
+              lastError = new AIProviderError(`HTTP ${res.status}: ${detail}`, code, res.status, true)
+              await sleep(Math.min(INITIAL_BACKOFF_MS * BACKOFF_MULTIPLIER ** attempt, BACKOFF_MAX_MS))
+              continue
+            }
+            throw new AIProviderError(`HTTP ${res.status}: ${detail}`, code, res.status, false)
+          }
+          return JSON.parse(text) as OpenAIResponse
+        } catch (e) {
+          clearTimeout(timer)
+          const isAbort = e instanceof Error && e.name === 'AbortError'
+          const isNetwork = e instanceof TypeError // fetch бросает TypeError на сетевых сбоях
+          if (e instanceof AIProviderError && !e.retryable) throw e
+          const code = classifyError(undefined, isAbort, isNetwork)
+          if (isRetryable(code) && attempt < MAX_RETRIES) {
+            lastError = new AIProviderError(
+              isAbort ? `Таймаут запроса (${timeoutMs}мс)` : e instanceof Error ? e.message : String(e),
+              code,
+              undefined,
+              true
+            )
+            await sleep(Math.min(INITIAL_BACKOFF_MS * BACKOFF_MULTIPLIER ** attempt, BACKOFF_MAX_MS))
+            continue
+          }
+          if (isAbort) {
+            throw new AIProviderError(`Таймаут запроса (${timeoutMs}мс)`, 'timeout', undefined, false)
+          }
+          if (isNetwork) {
+            throw new AIProviderError(
+              e instanceof Error ? `Сетевая ошибка: ${e.message}` : 'Сетевая ошибка',
+              'network',
+              undefined,
+              false
+            )
+          }
+          throw e
+        } finally {
+          clearTimeout(timer)
         }
-        throw new Error(`HTTP ${res.status}: ${detail}`)
       }
-      return JSON.parse(text) as OpenAIResponse
-    } finally {
-      clearTimeout(timer)
-    }
+      // Исчерпаны попытки.
+      if (lastError instanceof AIProviderError) throw lastError
+      throw new AIProviderError('Не удалось выполнить запрос после всех попыток', 'unknown', undefined, false)
+    })
   }
 
   async generate(request: GenerateRequest): Promise<GenerateResponse> {
@@ -119,7 +175,7 @@ export class OpenAICompatibleProvider implements AIProviderClient {
 
     const content = data.choices?.[0]?.message?.content ?? ''
     if (!content) {
-      throw new Error('Пустой ответ от модели (нет content в choices[0])')
+      throw new AIProviderError('Пустой ответ от модели (нет content в choices[0])', 'empty_response', undefined, false)
     }
 
     return {
@@ -165,7 +221,7 @@ export class OpenAICompatibleProvider implements AIProviderClient {
   }
 }
 
-/** Специализация для Ollama (OpenAI-совместимый endpoint /v1/chat/completions, ключ не нужен). */
+/** Специализация для Ollama (OpenAI-совместимый endpoint, ключ не нужен). */
 export class OllamaProvider extends OpenAICompatibleProvider {}
 
 /** Специализация для Cloud.ru (OpenAI-совместимый, ключ обязателен). */

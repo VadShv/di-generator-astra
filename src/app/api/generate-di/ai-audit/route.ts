@@ -1,62 +1,54 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
- import { getProviderClient } from '@/lib/ai-connector'
- import { resolveMasterPrompt, renderPrompt, buildContextFromPosition } from '@/lib/master-prompt'
+import { getProviderClient } from '@/lib/ai-connector'
+import { resolveMasterPrompt, renderPrompt, buildContextFromPosition } from '@/lib/master-prompt'
+import { withErrorHandler, parseBody } from '@/lib/api-utils'
+import { aiAuditSchema } from '@/lib/validation/schemas'
+import { createLogger } from '@/lib/logger'
+import { parseJsonOr } from '@/lib/json-safe'
+import { buildPositionContext } from '@/lib/di/prompts'
+
+const log = createLogger('generate-di/ai-audit')
 
 // POST /api/generate-di/ai-audit - AI audit of existing DI with 5 legal error classes
-export async function POST(request: Request) {
-  try {
-    const body = await request.json()
-    const { generatedDIId, auditType } = body
+export const POST = withErrorHandler(async (request: Request) => {
+  const body = await parseBody(request, aiAuditSchema)
+  const { generatedDIId, auditType } = body
+  const type = auditType
 
-    if (!generatedDIId || typeof generatedDIId !== 'string') {
-      return NextResponse.json({ error: 'ID ДИ обязателен' }, { status: 400 })
-    }
-
-    const type = auditType || 'full'
-    const validTypes = ['full', 'legal', 'consistency']
-    if (!validTypes.includes(type)) {
-      return NextResponse.json({ error: 'Недопустимый тип аудита. Используйте: full, legal, consistency' }, { status: 400 })
-    }
-
-    // Get the DI with full content
-    const di = await db.generatedDI.findUnique({
-      where: { id: generatedDIId },
+  // Get the DI with full content
+  const di = await db.generatedDI.findUnique({
+    where: { id: generatedDIId },
     include: {
       position: { include: { department: { include: { company: true } }, businessFunction: true, project: true } },
-     sections: { orderBy: { order: 'asc' } },
-      },
-    })
+      sections: { orderBy: { order: 'asc' } },
+    },
+  })
 
-    if (!di) {
-      return NextResponse.json({ error: 'ДИ не найдена' }, { status: 404 })
-    }
+  if (!di) {
+    return NextResponse.json({ error: 'ДИ не найдена' }, { status: 404 })
+  }
 
-    // Build the full DI text for audit
-    const diText = di.sections.map(s => `## ${s.sectionTitle}\n${s.sectionContent}`).join('\n\n')
-    const positionContext = `Должность: ${di.position.title}
-Подразделение: ${di.position.department?.name || 'Не указано'}
-Грейд: ${di.position.grade || 'Не указан'}
-Бизнес-функция: ${di.position.businessFunction?.name || 'Не указана'}
-Проект: ${di.position.project?.name || 'Не указан'}`
+  // Build the full DI text for audit
+  const diText = di.sections.map((s) => `## ${s.sectionTitle}\n${s.sectionContent}`).join('\n\n')
+  const positionContext = buildPositionContext(di.position)
 
-    // Получаем клиент ИИ-провайдера.
-    const client = await getProviderClient()
+  const client = await getProviderClient()
 
-    // Резолвим промпт категории "audit" (если есть) и рендерим переменные.
-    const auditPrompt = await resolveMasterPrompt('audit', {
-      departmentId: di.position.departmentId,
-      businessFunctionId: di.position.businessFunctionId,
-      grade: di.position.grade,
-    })
-    const renderedAuditPrompt = auditPrompt
-      ? renderPrompt(auditPrompt.content, buildContextFromPosition(di.position))
-      : null
+  // Резолвим промпт категории "audit" (если есть) и рендерим переменные.
+  const auditPrompt = await resolveMasterPrompt('audit', {
+    departmentId: di.position.departmentId,
+    businessFunctionId: di.position.businessFunctionId,
+    grade: di.position.grade,
+  })
+  const renderedAuditPrompt = auditPrompt
+    ? renderPrompt(auditPrompt.content, buildContextFromPosition(di.position))
+    : null
 
-    // ─────────────────────────────────────────────────
-    // ПРАВОВОЕ ЯДРО — 5 классов реальных ошибок
-    // ─────────────────────────────────────────────────
-    const fiveClassesPrompt = `
+  // ─────────────────────────────────────────────────
+  // ПРАВОВОЕ ЯДРО — 5 классов реальных ошибок
+  // ─────────────────────────────────────────────────
+  const fiveClassesPrompt = `
 ПРАВОВОЕ ЯДРО АУДИТА — 5 КЛАССОВ ОШИБОК:
 
 1. ДУБЛИРОВАНИЕ НОРМ ТК РФ
@@ -97,14 +89,14 @@ export async function POST(request: Request) {
    — Проверь наличие каждого раздела и его содержательность (не просто заголовок, но реальное содержание).
 `
 
-    // Type-specific focus
-    const focusMap: Record<string, string> = {
-      full: 'Анализируй ВСЕ 5 классов ошибок. Это полный аудит — проверь каждую категорию детально.',
-      legal: 'ФОКУС на классах 1 (Дублирование ТК), 3 (Противоречия законодательству) и 5 (Неполнота разделов). Это юридический аудит — главное найти нарушения закона и дублирование норм ТК РФ.',
-      consistency: 'ФОКУС на классах 2 (Расплывчатые формулировки) и 4 (Завышенные требования). Это аудит согласованности — главное найти неясные обязанности и нереалистичные показатели.',
-    }
+  // Type-specific focus
+  const focusMap: Record<string, string> = {
+    full: 'Анализируй ВСЕ 5 классов ошибок. Это полный аудит — проверь каждую категорию детально.',
+    legal: 'ФОКУС на классах 1 (Дублирование ТК), 3 (Противоречия законодательству) и 5 (Неполнота разделов). Это юридический аудит — главное найти нарушения закона и дублирование норм ТК РФ.',
+    consistency: 'ФОКУС на классах 2 (Расплывчатые формулировки) и 4 (Завышенные требования). Это аудит согласованности — главное найти неясные обязанности и нереалистичные показатели.',
+  }
 
-    const systemPrompt = `Ты — эксперт-юрист и HR-аналитик, специализирующийся на должностных инструкциях в Российской Федерации. Ты проводишь профессиональный аудит ДИ на основе правового ядра из 5 классов реальных ошибок, встречающихся в 80% инструкций.
+  const systemPrompt = `Ты — эксперт-юрист и HR-аналитик, специализирующийся на должностных инструкциях в Российской Федерации. Ты проводишь профессиональный аудит ДИ на основе правового ядра из 5 классов реальных ошибок, встречающихся в 80% инструкций.
 
 ИНФОРМАЦИЯ О ДОЛЖНОСТИ:
 ${positionContext}
@@ -121,7 +113,7 @@ ${fiveClassesPrompt}
 
 ${focusMap[type]}`
 
-    const userPrompt = `ТЕКСТ ДОЛЖНОСТНОЙ ИНСТРУКЦИИ:
+  const userPrompt = `ТЕКСТ ДОЛЖНОСТНОЙ ИНСТРУКЦИИ:
 ${diText}
 
 Важно: ответ должен быть строго в формате JSON со следующей структурой:
@@ -143,87 +135,70 @@ ${diText}
   "summary": "общее текстовое резюме аудита (2-3 предложения)"
 }`
 
-    const result = await client.generate({
-      messages: [
-        { role: 'system', content: renderedAuditPrompt ? `${systemPrompt}\n\nПРОМПТ АУДИТА:\n${renderedAuditPrompt}` : systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    })
+  const result = await client.generate({
+    messages: [
+      { role: 'system', content: renderedAuditPrompt ? `${systemPrompt}\n\nПРОМПТ АУДИТА:\n${renderedAuditPrompt}` : systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+  })
 
-    const aiResponse = result.content || ''
+  const aiResponse = result.content || ''
 
-    // Parse AI response - try to extract JSON
-    let auditData: Record<string, unknown>
-    try {
-      auditData = JSON.parse(aiResponse)
-    } catch {
-      const jsonMatch = aiResponse.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-      if (jsonMatch) {
-        try {
-          auditData = JSON.parse(jsonMatch[1])
-        } catch {
-          auditData = {
-            overallScore: 50,
-            categoryScores: { duplicatedTk: 50, vagueFormulations: 50, legislativeConflicts: 50, unrealisticRequirements: 50, incompleteSections: 50 },
-            duplicatedTkItems: [], vagueFormulationItems: [], legislativeConflictItems: [], unrealisticRequirementItems: [], incompleteSectionItems: [],
-            outdatedItems: [], contradictoryItems: [], riskyItems: [],
-            recommendations: [], summary: aiResponse,
-          }
-        }
-      } else {
-        auditData = {
-          overallScore: 50,
-          categoryScores: { duplicatedTk: 50, vagueFormulations: 50, legislativeConflicts: 50, unrealisticRequirements: 50, incompleteSections: 50 },
-          duplicatedTkItems: [], vagueFormulationItems: [], legislativeConflictItems: [], unrealisticRequirementItems: [], incompleteSectionItems: [],
-          outdatedItems: [], contradictoryItems: [], riskyItems: [],
-          recommendations: [], summary: aiResponse,
-        }
-      }
-    }
-
-    // Compute legacy fields from new 5-class data for backward compatibility
-    const legacyOutdated = [...(auditData.duplicatedTkItems as unknown[] || [])]
-    const legacyContradictory = [...(auditData.legislativeConflictItems as unknown[] || []), ...(auditData.vagueFormulationItems as unknown[] || [])]
-    const legacyRisky = [...(auditData.legislativeConflictItems as unknown[] || []), ...(auditData.unrealisticRequirementItems as unknown[] || [])]
-
-    // Save audit result to database
-    const auditResult = await db.dIAuditResult.create({
-      data: {
-        generatedDIId,
-        auditType: type,
-        overallScore: Number(auditData.overallScore) || 0,
-        duplicatedTkItems: JSON.stringify(auditData.duplicatedTkItems || []),
-        vagueFormulationItems: JSON.stringify(auditData.vagueFormulationItems || []),
-        legislativeConflictItems: JSON.stringify(auditData.legislativeConflictItems || []),
-        unrealisticRequirementItems: JSON.stringify(auditData.unrealisticRequirementItems || []),
-        incompleteSectionItems: JSON.stringify(auditData.incompleteSectionItems || []),
-        outdatedItems: JSON.stringify(legacyOutdated),
-        contradictoryItems: JSON.stringify(legacyContradictory),
-        riskyItems: JSON.stringify(legacyRisky),
-        recommendations: JSON.stringify(auditData.recommendations || []),
-        summary: (auditData.summary as string) || null,
-        auditedBy: 'ai-system',
-      },
-    })
-
-    return NextResponse.json({
-      ...auditResult,
-      categoryScores: auditData.categoryScores || { duplicatedTk: 50, vagueFormulations: 50, legislativeConflicts: 50, unrealisticRequirements: 50, incompleteSections: 50 },
-      duplicatedTkItems: JSON.parse(auditResult.duplicatedTkItems),
-      vagueFormulationItems: JSON.parse(auditResult.vagueFormulationItems),
-      legislativeConflictItems: JSON.parse(auditResult.legislativeConflictItems),
-      unrealisticRequirementItems: JSON.parse(auditResult.unrealisticRequirementItems),
-      incompleteSectionItems: JSON.parse(auditResult.incompleteSectionItems),
-      outdatedItems: JSON.parse(auditResult.outdatedItems),
-      contradictoryItems: JSON.parse(auditResult.contradictoryItems),
-      riskyItems: JSON.parse(auditResult.riskyItems),
-      recommendations: JSON.parse(auditResult.recommendations),
-    })
-  } catch (error) {
-    console.error('AI Audit error:', error)
-    return NextResponse.json({ error: 'Ошибка AI-аудита ДИ' }, { status: 500 })
+  // Безопасный парсинг JSON ответа ИИ (Фаза 1: json-safe.ts).
+  const fallbackAudit = {
+    overallScore: 50,
+    categoryScores: { duplicatedTk: 50, vagueFormulations: 50, legislativeConflicts: 50, unrealisticRequirements: 50, incompleteSections: 50 },
+    duplicatedTkItems: [],
+    vagueFormulationItems: [],
+    legislativeConflictItems: [],
+    unrealisticRequirementItems: [],
+    incompleteSectionItems: [],
+    recommendations: [],
+    summary: aiResponse,
   }
-}
+  const auditData = parseJsonOr<Record<string, unknown>>(aiResponse, fallbackAudit as unknown as Record<string, unknown>)
+
+  // Compute legacy fields from new 5-class data for backward compatibility
+  const legacyOutdated = [...((auditData.duplicatedTkItems as unknown[]) || [])]
+  const legacyContradictory = [...((auditData.legislativeConflictItems as unknown[]) || []), ...((auditData.vagueFormulationItems as unknown[]) || [])]
+  const legacyRisky = [...((auditData.legislativeConflictItems as unknown[]) || []), ...((auditData.unrealisticRequirementItems as unknown[]) || [])]
+
+  // Save audit result to database
+  const auditResult = await db.dIAuditResult.create({
+    data: {
+      generatedDIId,
+      auditType: type,
+      overallScore: Number(auditData.overallScore) || 0,
+      duplicatedTkItems: JSON.stringify(auditData.duplicatedTkItems || []),
+      vagueFormulationItems: JSON.stringify(auditData.vagueFormulationItems || []),
+      legislativeConflictItems: JSON.stringify(auditData.legislativeConflictItems || []),
+      unrealisticRequirementItems: JSON.stringify(auditData.unrealisticRequirementItems || []),
+      incompleteSectionItems: JSON.stringify(auditData.incompleteSectionItems || []),
+      outdatedItems: JSON.stringify(legacyOutdated),
+      contradictoryItems: JSON.stringify(legacyContradictory),
+      riskyItems: JSON.stringify(legacyRisky),
+      recommendations: JSON.stringify(auditData.recommendations || []),
+      summary: (auditData.summary as string) || null,
+      auditedBy: 'ai-system',
+    },
+  })
+
+  log.info('Audit completed', { generatedDIId, score: auditResult.overallScore })
+
+  return NextResponse.json({
+    ...auditResult,
+    categoryScores: auditData.categoryScores || { duplicatedTk: 50, vagueFormulations: 50, legislativeConflicts: 50, unrealisticRequirements: 50, incompleteSections: 50 },
+    duplicatedTkItems: JSON.parse(auditResult.duplicatedTkItems),
+    vagueFormulationItems: JSON.parse(auditResult.vagueFormulationItems),
+    legislativeConflictItems: JSON.parse(auditResult.legislativeConflictItems),
+    unrealisticRequirementItems: JSON.parse(auditResult.unrealisticRequirementItems),
+    incompleteSectionItems: JSON.parse(auditResult.incompleteSectionItems),
+    outdatedItems: JSON.parse(auditResult.outdatedItems),
+    contradictoryItems: JSON.parse(auditResult.contradictoryItems),
+    riskyItems: JSON.parse(auditResult.riskyItems),
+    recommendations: JSON.parse(auditResult.recommendations),
+  })
+}, 'generate-di/ai-audit')
 
 // GET /api/generate-di/ai-audit - List audit results for a DI
 export async function GET(request: Request) {
@@ -241,7 +216,7 @@ export async function GET(request: Request) {
     })
 
     // Parse JSON fields for each result
-    const parsed = auditResults.map(r => ({
+    const parsed = auditResults.map((r) => ({
       ...r,
       duplicatedTkItems: JSON.parse(r.duplicatedTkItems),
       vagueFormulationItems: JSON.parse(r.vagueFormulationItems),
@@ -256,7 +231,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(parsed)
   } catch (error) {
-    console.error('AI Audit GET error:', error)
+    log.error('Audit GET error', { message: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Ошибка загрузки результатов аудита' }, { status: 500 })
   }
 }

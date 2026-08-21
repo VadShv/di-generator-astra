@@ -25,6 +25,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { Brain, Plus, Eye, Pencil, Trash2, GitBranch, Copy, CheckCircle2, XCircle, Sparkles, FlaskConical, Play, Link2, History, Download, Upload, Tag } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { extractVariables, estimateTokens, PROMPT_CATEGORIES } from '@/lib/master-prompt'
 import {
   type Department, type BusinessFunctionItem, type CompanyItem, type AIProviderItem,
@@ -103,7 +104,8 @@ export function MasterPromptsModule() {
   const [chainRunLoading, setChainRunLoading] = useState(false)
   const [resolverPositionId, setResolverPositionId] = useState('')
   const [resolverResult, setResolverResult] = useState<{ prompt: MasterPrompt | null; resolution: { score: number; matchDetails: string[] } | null } | null>(null)
-  const [resolverLoading, setResolverLoading] = useState(false)
+ const [resolverLoading, setResolverLoading] = useState(false)
+  const [conflicts, setConflicts] = useState<Array<{ category: string; criteria: Record<string, unknown>; prompts: Array<{ id: string; name: string; version: number }> }>>([])
 
   const fetchPrompts = useCallback(async () => {
     try {
@@ -148,10 +150,13 @@ export function MasterPromptsModule() {
     try { const res = await fetch('/api/positions'); if (res.ok) setPositions(await res.json()) } catch { /* silent */ }
   }, [])
 
-  useEffect(() => { fetchPrompts() }, [fetchPrompts])
-  useEffect(() => { fetchDepartments(); fetchBusinessFunctions(); fetchPositions(); fetchCompanies(); fetchProviders(); fetchChains() }, [fetchDepartments, fetchBusinessFunctions, fetchPositions, fetchCompanies, fetchProviders, fetchChains])
+ useEffect(() => { fetchPrompts() }, [fetchPrompts])
+ useEffect(() => { fetchDepartments(); fetchBusinessFunctions(); fetchPositions(); fetchCompanies(); fetchProviders(); fetchChains() }, [fetchDepartments, fetchBusinessFunctions, fetchPositions, fetchCompanies, fetchProviders, fetchChains])
+  useEffect(() => {
+    fetch('/api/master-prompts/conflicts').then(r => r.ok ? r.json() : null).then(d => { if (d?.conflicts) setConflicts(d.conflicts) }).catch(() => {})
+  }, [prompts])
 
-  const groupedPrompts = useMemo(() => {
+ const groupedPrompts = useMemo(() => {
     const groups: Record<string, MasterPrompt[]> = {}
     for (const p of prompts) { if (!groups[p.name]) groups[p.name] = []; groups[p.name].push(p) }
     return Object.entries(groups).map(([name, list]) => ({
@@ -438,7 +443,27 @@ export function MasterPromptsModule() {
           <TabsTrigger value="chains"><Link2 className="h-4 w-4 mr-1" /> Цепочки</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="prompts" className="space-y-4">
+       <TabsContent value="prompts" className="space-y-4">
+          {conflicts.length > 0 && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div className="text-sm">
+                <p className="font-medium text-amber-900 dark:text-amber-200">
+                  Обнаружены конфликты активных промптов ({conflicts.length})
+                </p>
+                <p className="mt-0.5 text-amber-700 dark:text-amber-300">
+                  Несколько активных промптов с одинаковыми критериями применимости могут приводить к непредсказуемому выбору при генерации.
+                </p>
+                <ul className="mt-1.5 space-y-0.5 text-xs text-amber-700 dark:text-amber-400">
+                  {conflicts.slice(0, 5).map((c, i) => (
+                    <li key={i}>
+                      {c.category}: {c.prompts.map(p => `${p.name} v${p.version}`).join(', ')}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
           <Card><CardContent className="p-4">
             <div className="flex flex-wrap gap-2">
               <Input placeholder="Поиск по названию..." value={filterName} onChange={e => setFilterName(e.target.value)} className="max-w-xs" />

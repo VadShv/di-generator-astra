@@ -542,3 +542,23 @@ model GenerationJob {
   @@index([masterPromptId])
   @@index([status])
 }
+
+// ==========================================
+// Users (Phase 5: Auth & production prep)
+// Credentials-based auth via next-auth (JWT session strategy).
+// Password hash uses Node crypto.scrypt (no extra bcrypt dependency).
+// ==========================================
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  role         String   @default("user") // admin | user
+  passwordHash String
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([email])
+  @@index([role])
+}

@@ -20,5 +20,8 @@ export {
   getZaiFallbackClient,
 } from './ai-provider-factory'
 export { OpenAICompatibleProvider, OllamaProvider, CloudRuProvider, KladProvider } from './providers/openai-compatible'
+export { AIProviderError, classifyError, isRetryable, type AIErrorCode } from './errors'
+export { Semaphore, getDefaultConcurrency } from './semaphore'
+export { withRetry, type RetryOptions } from './retry'
 export { YandexCloudProvider } from './providers/yandex-cloud'
 export { ZaiProvider } from './providers/zai'
