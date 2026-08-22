@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
         project: true,
         generatedDIs: { select: { id: true, status: true, signedByEmployee: true } },
         archiveDIs: { select: { id: true } },
+        attributes: true,
       },
       orderBy: { title: 'asc' }
     })
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuth()
     const body = await request.json()
-    const { title, code, departmentId, grade, businessFunctionId, projectId, headcount, functions } = body
+    const { title, code, departmentId, grade, businessFunctionId, projectId, headcount, functions, attributeIds } = body
 
     if (!title || !code || !departmentId) {
       return NextResponse.json({ error: 'Название, код и подразделение обязательны' }, { status: 400 })
@@ -93,6 +94,9 @@ export async function POST(request: NextRequest) {
         projectId: projectId || null,
         headcount: headcount || 1,
         functions: functions || null,
+        ...(attributeIds && attributeIds.length > 0 && {
+          attributes: { connect: attributeIds.map((id: string) => ({ id })) }
+        }),
       },
       include: {
         department: { include: { company: true } },
@@ -100,6 +104,7 @@ export async function POST(request: NextRequest) {
         project: true,
         generatedDIs: { select: { id: true, status: true, signedByEmployee: true } },
         archiveDIs: { select: { id: true } },
+        attributes: true,
       }
     })
 
@@ -115,7 +120,7 @@ export async function PUT(request: NextRequest) {
   try {
     await requireAuth()
     const body = await request.json()
-    const { id, title, code, departmentId, grade, businessFunctionId, projectId, headcount, functions } = body
+    const { id, title, code, departmentId, grade, businessFunctionId, projectId, headcount, functions, attributeIds } = body
 
     if (!id) {
       return NextResponse.json({ error: 'ID обязателен' }, { status: 400 })
@@ -174,6 +179,9 @@ export async function PUT(request: NextRequest) {
         ...(projectId !== undefined && { projectId: projectId || null }),
         ...(headcount !== undefined && { headcount }),
         ...(functions !== undefined && { functions: functions || null }),
+        ...(attributeIds !== undefined && {
+          attributes: { set: attributeIds.map((aid: string) => ({ id: aid })) }
+        }),
       },
       include: {
         department: { include: { company: true } },
@@ -181,6 +189,7 @@ export async function PUT(request: NextRequest) {
         project: true,
         generatedDIs: { select: { id: true, status: true, signedByEmployee: true } },
         archiveDIs: { select: { id: true } },
+        attributes: true,
       }
     })
 

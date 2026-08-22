@@ -78,6 +78,7 @@ export function buildContextFromPosition(position: {
   functions?: string | null
   department?: { name: string; company?: { name: string } | null } | null
   businessFunction?: { name: string } | null
+  attributes?: { name: string }[]
 }): PromptContext {
   return {
     position: position.title,
@@ -87,6 +88,7 @@ export function buildContextFromPosition(position: {
     квалификация: position.grade || null,
     код_должности: position.code,
     бизнес_функция: position.businessFunction?.name || null,
+    признаки: position.attributes?.map(a => a.name).join(', ') || null,
   }
 }
 

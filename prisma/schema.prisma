@@ -88,6 +88,27 @@ model Project {
 }
 
 // ==========================================
+// Справочник — Признаки должности
+// Дополнительные обязанности (мат. ответственность, обработка ПДн и др.)
+// promptAddition инъектируется в системный промпт при генерации ДИ.
+// ==========================================
+model PositionAttribute {
+  id             String   @id @default(cuid())
+  name           String   // "Товарно-материальная ответственность"
+  code           String   @unique // "material_responsibility"
+  description    String?  // Пояснение для админа
+  promptAddition String   // Текст-инструкция для ИИ (что добавить в ДИ)
+  category       String?  // Группировка: "responsibility" | "compliance" | "access"
+  isActive       Boolean  @default(true)
+  positions      Position[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([category])
+}
+
+// ==========================================
 // Штатное расписание (строки ШР)
 // Новая модель Фазы 1: связывает должность, подразделение и кол-во ставок
 // ==========================================
@@ -135,6 +156,7 @@ model Position {
  uploadedDocuments   UploadedDocument[]
  masterPrompts      MasterPrompt[] // Промпты, привязанные к конкретной должности (Фаза 21)
  trackings          DITracking[] // Отслеживание ДИ по должности (Фаза 22)
+ attributes         PositionAttribute[] // Признаки должности (мат. ответственность, ПДн и др.)
  createdAt           DateTime @default(now())
  updatedAt           DateTime @updatedAt
 

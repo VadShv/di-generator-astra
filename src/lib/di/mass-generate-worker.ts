@@ -103,7 +103,7 @@ async function processJob(jobId: string): Promise<void> {
   const where = buildPositionWhere(scope)
   const positions = await db.position.findMany({
     where,
-    include: { department: true, businessFunction: true, project: true },
+    include: { department: true, businessFunction: true, project: true, attributes: true },
   })
 
   if (positions.length === 0) {

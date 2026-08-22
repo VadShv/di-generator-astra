@@ -90,10 +90,11 @@ export function StaffScheduleModule() {
   // Pos dialog
   const [posDialogOpen, setPosDialogOpen] = useState(false)
   const [posDialogMode, setPosDialogMode] = useState<'create' | 'edit'>('create')
-  const [posForm, setPosForm] = useState({ id: '', title: '', code: '', departmentId: '', grade: '', businessFunctionId: '', projectId: '', headcount: 1, functions: '' })
+  const [posForm, setPosForm] = useState({ id: '', title: '', code: '', departmentId: '', grade: '', businessFunctionId: '', projectId: '', headcount: 1, functions: '', attributeIds: [] as string[] })
   const [posSubmitting, setPosSubmitting] = useState(false)
   const [posDeleteOpen, setPosDeleteOpen] = useState(false)
   const [posToDelete, setPosToDelete] = useState<Position | null>(null)
+  const [positionAttributes, setPositionAttributes] = useState<{ id: string; name: string; code: string; isActive: boolean }[]>([])
 
   // Bulk / file upload
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
@@ -143,13 +144,17 @@ export function StaffScheduleModule() {
     try { const res = await fetch('/api/projects'); if (res.ok) setProjects(await res.json()) } catch { /* silent */ }
   }, [])
 
+  const fetchPositionAttributes = useCallback(async () => {
+    try { const res = await fetch('/api/position-attributes?isActive=true'); if (res.ok) setPositionAttributes(await res.json()) } catch { /* silent */ }
+  }, [])
+
   useEffect(() => {
     (async () => {
       setLoading(true)
-      await Promise.all([fetchCompanies(), fetchDepartments(), fetchPositions(), fetchBusinessFunctions(), fetchProjects()])
+      await Promise.all([fetchCompanies(), fetchDepartments(), fetchPositions(), fetchBusinessFunctions(), fetchProjects(), fetchPositionAttributes()])
       setLoading(false)
     })()
-  }, [fetchCompanies, fetchDepartments, fetchPositions, fetchBusinessFunctions, fetchProjects])
+  }, [fetchCompanies, fetchDepartments, fetchPositions, fetchBusinessFunctions, fetchProjects, fetchPositionAttributes])
 
   // ============ Tree helpers ============
   const toggleExpand = (id: string) => setExpandedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
@@ -300,7 +305,7 @@ export function StaffScheduleModule() {
   // ============ Position handlers ============
   const openCreatePos = (departmentId?: string) => {
     setPosDialogMode('create')
-    setPosForm({ id: '', title: '', code: '', departmentId: departmentId || selectedDeptId || '', grade: '', businessFunctionId: '', projectId: '', headcount: 1, functions: '' })
+    setPosForm({ id: '', title: '', code: '', departmentId: departmentId || selectedDeptId || '', grade: '', businessFunctionId: '', projectId: '', headcount: 1, functions: '', attributeIds: [] })
     setPosDialogOpen(true)
   }
   const openEditPos = (p: Position) => {
@@ -308,7 +313,8 @@ export function StaffScheduleModule() {
     setPosForm({
       id: p.id, title: p.title, code: p.code, departmentId: p.departmentId,
       grade: p.grade || '', businessFunctionId: p.businessFunctionId || '', projectId: p.projectId || '',
-      headcount: p.headcount, functions: p.functions || ''
+      headcount: p.headcount, functions: p.functions || '',
+      attributeIds: (p as Position & { attributes?: { id: string }[] }).attributes?.map(a => a.id) || []
     })
     setPosDialogOpen(true)
   }
@@ -324,7 +330,8 @@ export function StaffScheduleModule() {
         grade: posForm.grade || null,
         businessFunctionId: posForm.businessFunctionId || null,
         projectId: posForm.projectId || null,
-        headcount: posForm.headcount || 1, functions: posForm.functions || null
+        headcount: posForm.headcount || 1, functions: posForm.functions || null,
+        attributeIds: posForm.attributeIds
       }
       if (posDialogMode === 'edit') body.id = posForm.id
       const res = await fetch('/api/positions', {
@@ -576,6 +583,7 @@ export function StaffScheduleModule() {
       .map(d => getAllDescendantDeptIds(d.id, departments))
       .flat()
     const companyPositions = positions.filter(p => allCompanyDeptIds.includes(p.departmentId))
+    const companyHeadcount = companyPositions.reduce((sum, p) => sum + (p.headcount || 1), 0)
     const approvedCount = companyPositions.filter(p => p.generatedDIs.some(d => d.status === 'approved')).length
     const companyCoverage = companyPositions.length > 0 ? Math.round((approvedCount / companyPositions.length) * 100) : 0
 
@@ -603,9 +611,15 @@ export function StaffScheduleModule() {
             {company.type && <Badge variant="outline" className="ml-1.5 text-xs h-5 border-emerald-300 text-emerald-700">{company.type}</Badge>}
           </div>
 
-          {/* Company position count */}
+          {/* Company summary badges */}
+          <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-teal-50 text-teal-700 border-teal-200">
+            {allCompanyDeptIds.length} подр.
+          </Badge>
           <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-emerald-50 text-emerald-700 border-emerald-200">
             {companyPositions.length} должн.
+          </Badge>
+          <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-sky-50 text-sky-700 border-sky-200">
+            {companyHeadcount} ставок
           </Badge>
 
           {/* Company coverage */}
@@ -1182,6 +1196,38 @@ export function StaffScheduleModule() {
             </div>
             <div><Label>Штатных единиц</Label><Input type="number" min={1} value={posForm.headcount} onChange={e => setPosForm(p => ({ ...p, headcount: parseInt(e.target.value) || 1 }))} /></div>
             <div><Label>Функции</Label><Textarea value={posForm.functions} onChange={e => setPosForm(p => ({ ...p, functions: e.target.value }))} className="min-h-[60px]" placeholder="Управление отделом, планирование..." /></div>
+            {positionAttributes.length > 0 && (
+              <div className="col-span-2">
+                <Label className="mb-2 block">Признаки должности</Label>
+                <div className="flex flex-wrap gap-2">
+                  {positionAttributes.map(attr => {
+                    const selected = posForm.attributeIds.includes(attr.id)
+                    return (
+                      <button
+                        key={attr.id}
+                        type="button"
+                        onClick={() => setPosForm(p => ({
+                          ...p,
+                          attributeIds: selected
+                            ? p.attributeIds.filter(id => id !== attr.id)
+                            : [...p.attributeIds, attr.id]
+                        }))}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                          selected
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                            : 'bg-muted/30 border-muted text-muted-foreground hover:bg-muted/50'
+                        }`}
+                      >
+                        {attr.name}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Выбранные признаки добавят дополнительные обязанности в генерируемую ДИ
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPosDialogOpen(false)}>Отмена</Button>

@@ -12,6 +12,7 @@ export interface PositionForContext {
   department?: { name: string; code?: string; company?: { name: string } | null } | null
   businessFunction?: { name: string } | null
   project?: { name: string } | null
+  attributes?: { name: string; promptAddition: string }[]
 }
 
 /** Построить текстовый контекст должности для промпта. */
@@ -29,6 +30,12 @@ export function buildPositionContext(position: PositionForContext): string {
   }
   if (position.functions) {
     lines.push(`Выполняемые функции: ${position.functions}`)
+  }
+  if (position.attributes && position.attributes.length > 0) {
+    lines.push('ДОПОЛНИТЕЛЬНЫЕ ОБЯЗАННОСТИ (обязательно включить в ДИ):')
+    for (const attr of position.attributes) {
+      lines.push(`— ${attr.name}: ${attr.promptAddition}`)
+    }
   }
   return lines.join('\n')
 }

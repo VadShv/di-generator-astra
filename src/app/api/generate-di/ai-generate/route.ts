@@ -23,7 +23,7 @@ export const POST = withErrorHandler(async (request: Request) => {
   // a) Get the position info (with department, business function, project)
   const position = await db.position.findUnique({
     where: { id: positionId },
-    include: { department: { include: { company: true } }, businessFunction: true, project: true },
+    include: { department: { include: { company: true } }, businessFunction: true, project: true, attributes: true },
   })
   if (!position) {
     return NextResponse.json({ error: 'Должность не найдена' }, { status: 404 })

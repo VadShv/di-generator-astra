@@ -19,7 +19,7 @@ import {
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Briefcase, FolderOpen, Plus, Pencil, Trash2, Search, Loader2 } from 'lucide-react'
+import { Briefcase, FolderOpen, Plus, Pencil, Trash2, Search, Loader2, ShieldCheck } from 'lucide-react'
 
 // ==========================================
 // Types
@@ -34,6 +34,8 @@ interface DictionaryItem {
   createdAt: string
   updatedAt: string
   _count?: { positions: number }
+  promptAddition?: string
+  category?: string | null
 }
 
 interface FormData {
@@ -41,15 +43,19 @@ interface FormData {
   code: string
   description: string
   isActive: boolean
+  promptAddition: string
+  category: string
 }
 
-type DictionaryType = 'business-functions' | 'projects'
+type DictionaryType = 'business-functions' | 'projects' | 'position-attributes'
 
 const EMPTY_FORM: FormData = {
   name: '',
   code: '',
   description: '',
   isActive: true,
+  promptAddition: '',
+  category: '',
 }
 
 // ==========================================
@@ -62,12 +68,15 @@ export function DictionariesModule() {
   // --- Data state ---
   const [businessFunctions, setBusinessFunctions] = useState<DictionaryItem[]>([])
   const [projects, setProjects] = useState<DictionaryItem[]>([])
+  const [positionAttributes, setPositionAttributes] = useState<DictionaryItem[]>([])
   const [loadingBf, setLoadingBf] = useState(true)
   const [loadingPr, setLoadingPr] = useState(true)
+  const [loadingPa, setLoadingPa] = useState(true)
 
   // --- Search ---
   const [searchBf, setSearchBf] = useState('')
   const [searchPr, setSearchPr] = useState('')
+  const [searchPa, setSearchPa] = useState('')
 
   // --- Dialog state ---
   const [formDialogOpen, setFormDialogOpen] = useState(false)
@@ -114,8 +123,25 @@ export function DictionariesModule() {
     }
   }, [toast])
 
+  const fetchPositionAttributes = useCallback(async () => {
+    try {
+      setLoadingPa(true)
+      const res = await fetch('/api/position-attributes')
+      if (res.ok) setPositionAttributes(await res.json())
+      else {
+        const d = await res.json()
+        toast({ title: 'Ошибка', description: d.error || 'Не удалось загрузить признаки должности', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Ошибка', description: 'Ошибка сети при загрузке признаков', variant: 'destructive' })
+    } finally {
+      setLoadingPa(false)
+    }
+  }, [toast])
+
   useEffect(() => { fetchBusinessFunctions() }, [fetchBusinessFunctions])
   useEffect(() => { fetchProjects() }, [fetchProjects])
+  useEffect(() => { fetchPositionAttributes() }, [fetchPositionAttributes])
 
   // ==========================================
   // CRUD handlers
@@ -136,6 +162,8 @@ export function DictionariesModule() {
       code: item.code || '',
       description: item.description || '',
       isActive: item.isActive,
+      promptAddition: (item as DictionaryItem).promptAddition || '',
+      category: (item as DictionaryItem).category || '',
     })
     setFormDialogOpen(true)
   }
@@ -154,12 +182,29 @@ export function DictionariesModule() {
 
     setSaving(true)
     try {
+      const isAttr = activeDictionary === 'position-attributes'
+      const basePayload: Record<string, unknown> = {
+        name: form.name.trim(),
+        code: form.code.trim() || null,
+        description: form.description.trim() || null,
+        isActive: form.isActive,
+      }
+      if (isAttr) {
+        basePayload.promptAddition = form.promptAddition.trim()
+        basePayload.category = form.category.trim() || null
+      }
       const payload = editingItem
-        ? { id: editingItem.id, name: form.name.trim(), code: form.code.trim() || null, description: form.description.trim() || null, isActive: form.isActive }
-        : { name: form.name.trim(), code: form.code.trim() || null, description: form.description.trim() || null, isActive: form.isActive }
+        ? { id: editingItem.id, ...basePayload }
+        : basePayload
 
       const method = editingItem ? 'PUT' : 'POST'
-      const url = activeDictionary === 'business-functions' ? '/api/business-functions' : '/api/projects'
+      const url = activeDictionary === 'business-functions'
+        ? '/api/business-functions'
+        : activeDictionary === 'projects'
+        ? '/api/projects'
+        : editingItem
+        ? `/api/position-attributes/${editingItem.id}`
+        : '/api/position-attributes'
 
       const res = await fetch(url, {
         method,
@@ -168,10 +213,16 @@ export function DictionariesModule() {
       })
 
       if (res.ok) {
-        toast({ title: editingItem ? 'Обновлено' : 'Создано', description: activeDictionary === 'business-functions' ? 'Бизнес-функция сохранена' : 'Проект сохранён' })
+        const labels: Record<DictionaryType, string> = {
+          'business-functions': 'Бизнес-функция сохранена',
+          'projects': 'Проект сохранён',
+          'position-attributes': 'Признак сохранён',
+        }
+        toast({ title: editingItem ? 'Обновлено' : 'Создано', description: labels[activeDictionary] })
         setFormDialogOpen(false)
         if (activeDictionary === 'business-functions') fetchBusinessFunctions()
-        else fetchProjects()
+        else if (activeDictionary === 'projects') fetchProjects()
+        else fetchPositionAttributes()
       } else {
         const d = await res.json()
         toast({ title: 'Ошибка', description: d.error || 'Ошибка сохранения', variant: 'destructive' })
@@ -187,19 +238,29 @@ export function DictionariesModule() {
     if (!itemToDelete) return
 
     try {
-      const url = activeDictionary === 'business-functions' ? '/api/business-functions' : '/api/projects'
+      const url = activeDictionary === 'business-functions'
+        ? '/api/business-functions'
+        : activeDictionary === 'projects'
+        ? '/api/projects'
+        : `/api/position-attributes/${itemToDelete.id}`
       const res = await fetch(url, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: itemToDelete.id }),
+        body: activeDictionary === 'position-attributes' ? undefined : JSON.stringify({ id: itemToDelete.id }),
       })
 
       if (res.ok) {
-        toast({ title: 'Удалено', description: activeDictionary === 'business-functions' ? 'Бизнес-функция удалена' : 'Проект удалён' })
+        const labels: Record<DictionaryType, string> = {
+          'business-functions': 'Бизнес-функция удалена',
+          'projects': 'Проект удалён',
+          'position-attributes': 'Признак удалён',
+        }
+        toast({ title: 'Удалено', description: labels[activeDictionary] })
         setDeleteDialogOpen(false)
         setItemToDelete(null)
         if (activeDictionary === 'business-functions') fetchBusinessFunctions()
-        else fetchProjects()
+        else if (activeDictionary === 'projects') fetchProjects()
+        else fetchPositionAttributes()
       } else {
         const d = await res.json()
         toast({ title: 'Ошибка', description: d.error || 'Ошибка удаления', variant: 'destructive' })
@@ -218,17 +279,22 @@ export function DictionariesModule() {
 
   const handleToggleActive = async (dictType: DictionaryType, item: DictionaryItem) => {
     try {
-      const url = dictType === 'business-functions' ? '/api/business-functions' : '/api/projects'
+      const url = dictType === 'business-functions'
+        ? '/api/business-functions'
+        : dictType === 'projects'
+        ? '/api/projects'
+        : `/api/position-attributes/${item.id}`
       const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: item.id, isActive: !item.isActive }),
+        body: JSON.stringify(dictType === 'position-attributes' ? { isActive: !item.isActive } : { id: item.id, isActive: !item.isActive }),
       })
 
       if (res.ok) {
         toast({ title: item.isActive ? 'Отключено' : 'Включено', description: `${item.name} — ${item.isActive ? 'неактивна' : 'активна'}` })
         if (dictType === 'business-functions') fetchBusinessFunctions()
-        else fetchProjects()
+        else if (dictType === 'projects') fetchProjects()
+        else fetchPositionAttributes()
       } else {
         const d = await res.json()
         toast({ title: 'Ошибка', description: d.error || 'Ошибка', variant: 'destructive' })
@@ -254,6 +320,12 @@ export function DictionariesModule() {
     (pr.description && pr.description.toLowerCase().includes(searchPr.toLowerCase()))
   )
 
+  const filteredPa = positionAttributes.filter(pa =>
+    pa.name.toLowerCase().includes(searchPa.toLowerCase()) ||
+    (pa.code && pa.code.toLowerCase().includes(searchPa.toLowerCase())) ||
+    (pa.description && pa.description.toLowerCase().includes(searchPa.toLowerCase()))
+  )
+
   // ==========================================
   // Stats
   // ==========================================
@@ -268,21 +340,26 @@ export function DictionariesModule() {
     active: projects.filter(pr => pr.isActive).length,
   }
 
+  const paStats = {
+    total: positionAttributes.length,
+    active: positionAttributes.filter(pa => pa.isActive).length,
+  }
+
   // ==========================================
   // Dictionary label helpers
   // ==========================================
 
   const dictLabel = (dictType: DictionaryType) =>
-    dictType === 'business-functions' ? 'Бизнес-функция' : 'Проект'
+    dictType === 'business-functions' ? 'Бизнес-функция' : dictType === 'projects' ? 'Проект' : 'Признак должности'
 
   const dictNewLabel = (dictType: DictionaryType) =>
-    dictType === 'business-functions' ? 'Новая бизнес-функция' : 'Новый проект'
+    dictType === 'business-functions' ? 'Новая бизнес-функция' : dictType === 'projects' ? 'Новый проект' : 'Новый признак должности'
 
   const dictEditLabel = (dictType: DictionaryType) =>
-    dictType === 'business-functions' ? 'Редактировать бизнес-функцию' : 'Редактировать проект'
+    dictType === 'business-functions' ? 'Редактировать бизнес-функцию' : dictType === 'projects' ? 'Редактировать проект' : 'Редактировать признак'
 
   const dictIcon = (dictType: DictionaryType) =>
-    dictType === 'business-functions' ? Briefcase : FolderOpen
+    dictType === 'business-functions' ? Briefcase : dictType === 'projects' ? FolderOpen : ShieldCheck
 
   // ==========================================
   // Render card for a dictionary item
@@ -348,7 +425,7 @@ export function DictionariesModule() {
   // ==========================================
 
   const renderStats = (dictType: DictionaryType) => {
-    const stats = dictType === 'business-functions' ? bfStats : prStats
+    const stats = dictType === 'business-functions' ? bfStats : dictType === 'projects' ? prStats : paStats
     return (
       <div className="flex items-center gap-3 text-sm text-muted-foreground">
         <span>Всего: <span className="font-medium text-foreground">{stats.total}</span></span>
@@ -367,7 +444,7 @@ export function DictionariesModule() {
   const renderEmpty = (dictType: DictionaryType) => {
     const Icon = dictIcon(dictType)
     const label = dictLabel(dictType)
-    const addLabel = dictType === 'business-functions' ? 'бизнес-функцию' : 'проект'
+    const addLabel = dictType === 'business-functions' ? 'бизнес-функцию' : dictType === 'projects' ? 'проект' : 'признак'
     return (
       <Card>
         <CardContent className="p-8 text-center text-muted-foreground">
@@ -395,7 +472,7 @@ export function DictionariesModule() {
             <Briefcase className="h-6 w-6" /> Справочники
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Управление справочниками бизнес-функций и проектов
+            Управление справочниками бизнес-функций, проектов и признаков должности
           </p>
         </div>
       </div>
@@ -408,6 +485,9 @@ export function DictionariesModule() {
           </TabsTrigger>
           <TabsTrigger value="projects" className="gap-1.5">
             <FolderOpen className="h-4 w-4" /> Проекты
+          </TabsTrigger>
+          <TabsTrigger value="position-attributes" className="gap-1.5">
+            <ShieldCheck className="h-4 w-4" /> Признаки должности
           </TabsTrigger>
         </TabsList>
 
@@ -496,6 +576,49 @@ export function DictionariesModule() {
             </div>
           )}
         </TabsContent>
+
+        {/* Position Attributes Tab */}
+        <TabsContent value="position-attributes" className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            {renderStats('position-attributes')}
+            <div className="flex gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Поиск..."
+                  value={searchPa}
+                  onChange={e => setSearchPa(e.target.value)}
+                  className="pl-9 w-[200px]"
+                />
+              </div>
+              <Button onClick={() => openAddDialog('position-attributes')}>
+                <Plus className="h-4 w-4 mr-1.5" /> Добавить
+              </Button>
+            </div>
+          </div>
+
+          {loadingPa ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredPa.length === 0 ? (
+            searchPa ? (
+              <Card>
+                <CardContent className="p-8 text-center text-muted-foreground">
+                  <Search className="h-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>Ничего не найдено по запросу «{searchPa}»</p>
+                  <Button variant="outline" className="mt-2" onClick={() => setSearchPa('')}>
+                    Сбросить поиск
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : renderEmpty('position-attributes')
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredPa.map(pa => renderItemCard('position-attributes', pa))}
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
 
       {/* ==========================================
@@ -550,6 +673,34 @@ export function DictionariesModule() {
               />
             </div>
 
+            {activeDictionary === 'position-attributes' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="dict-promptAddition">Инструкция для ИИ *</Label>
+                  <Textarea
+                    id="dict-promptAddition"
+                    value={form.promptAddition}
+                    onChange={e => setForm(prev => ({ ...prev, promptAddition: e.target.value }))}
+                    placeholder="Текст, который будет добавлен в промпт при генерации ДИ. Например: «Включи раздел о материальной ответственности: договор о полной индивидуальной материальной ответственности...»"
+                    className="min-h-[120px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Этот текст автоматически инъектируется в системный промпт при генерации ДИ для должностей с этим признаком.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dict-category">Категория</Label>
+                  <Input
+                    id="dict-category"
+                    value={form.category}
+                    onChange={e => setForm(prev => ({ ...prev, category: e.target.value }))}
+                    placeholder="responsibility | compliance | access (необязательно)"
+                  />
+                </div>
+              </>
+            )}
+
             <Separator />
 
             <div className="flex items-center gap-3">
@@ -571,7 +722,7 @@ export function DictionariesModule() {
             <Button variant="outline" onClick={() => setFormDialogOpen(false)}>
               Отмена
             </Button>
-            <Button onClick={handleSave} disabled={saving || !form.name.trim()}>
+            <Button onClick={handleSave} disabled={saving || !form.name.trim() || (activeDictionary === 'position-attributes' && !form.promptAddition.trim())}>
               {saving ? (
                 <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Сохранение...</>
               ) : editingItem ? (
