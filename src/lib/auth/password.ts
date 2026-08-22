@@ -11,8 +11,8 @@ const scrypt = promisify(scryptCb) as (
   options: { N: number; r: number; p: number }
 ) => Promise<Buffer>
 
-// Параметры scrypt. N=2^15 (32768) — разумный баланс безопасности/скорости.
-const DEFAULT_N = 1 << 15
+// Параметры scrypt. N=2^14 (16384) — баланс безопасности/скорости, совместимый с Bun.
+const DEFAULT_N = 1 << 14
 const DEFAULT_R = 8
 const DEFAULT_P = 1
 const KEYLEN = 64

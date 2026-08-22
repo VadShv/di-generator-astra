@@ -16,21 +16,19 @@ import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { DashboardModule } from '@/components/modules/dashboard'
 
-const lazyOpts = { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> } as const
-
-const StaffScheduleModule = dynamic(() => import('@/components/modules/staff-schedule').then(m => m.StaffScheduleModule), lazyOpts)
-const ArchiveModule = dynamic(() => import('@/components/modules/archive').then(m => m.ArchiveModule), lazyOpts)
-const TemplatesModule = dynamic(() => import('@/components/modules/templates').then(m => m.TemplatesModule), lazyOpts)
-const MasterPromptsModule = dynamic(() => import('@/components/modules/master-prompts').then(m => m.MasterPromptsModule), lazyOpts)
-const GenerationModule = dynamic(() => import('@/components/modules/generation').then(m => m.GenerationModule), lazyOpts)
-const TrackingModule = dynamic(() => import('@/components/modules/tracking').then(m => m.TrackingModule), lazyOpts)
-const DictionariesModule = dynamic(() => import('@/components/modules/dictionaries').then(m => m.DictionariesModule), lazyOpts)
-const MassGenerationModule = dynamic(() => import('@/components/modules/mass-generation').then(m => m.MassGenerationModule), lazyOpts)
-const AiAuditModule = dynamic(() => import('@/components/modules/ai-audit').then(m => m.AiAuditModule), lazyOpts)
-const InstructionsModule = dynamic(() => import('@/components/modules/instructions').then(m => m.InstructionsModule), lazyOpts)
-const TechStackModule = dynamic(() => import('@/components/modules/tech-stack').then(m => m.TechStackModule), lazyOpts)
-const AiProvidersModule = dynamic(() => import('@/components/modules/ai-providers').then(m => m.AiProvidersModule), lazyOpts)
-const DIVersionsModule = dynamic(() => import('@/components/modules/di-versions').then(m => m.DIVersionsModule), lazyOpts)
+const StaffScheduleModule = dynamic(() => import('@/components/modules/staff-schedule').then(m => m.StaffScheduleModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const ArchiveModule = dynamic(() => import('@/components/modules/archive').then(m => m.ArchiveModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const TemplatesModule = dynamic(() => import('@/components/modules/templates').then(m => m.TemplatesModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const MasterPromptsModule = dynamic(() => import('@/components/modules/master-prompts').then(m => m.MasterPromptsModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const GenerationModule = dynamic(() => import('@/components/modules/generation').then(m => m.GenerationModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const TrackingModule = dynamic(() => import('@/components/modules/tracking').then(m => m.TrackingModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const DictionariesModule = dynamic(() => import('@/components/modules/dictionaries').then(m => m.DictionariesModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const MassGenerationModule = dynamic(() => import('@/components/modules/mass-generation').then(m => m.MassGenerationModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const AiAuditModule = dynamic(() => import('@/components/modules/ai-audit').then(m => m.AiAuditModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const InstructionsModule = dynamic(() => import('@/components/modules/instructions').then(m => m.InstructionsModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const TechStackModule = dynamic(() => import('@/components/modules/tech-stack').then(m => m.TechStackModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const AiProvidersModule = dynamic(() => import('@/components/modules/ai-providers').then(m => m.AiProvidersModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const DIVersionsModule = dynamic(() => import('@/components/modules/di-versions').then(m => m.DIVersionsModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
 
 const navItems: { id: ActiveSection; label: string; icon: React.ElementType; iconBg: string; iconColor: string; group: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: LayoutDashboard, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', group: 'Обзор' },
