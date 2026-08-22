@@ -7,8 +7,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { detectPromptConflicts, PROMPT_CATEGORIES, type PromptCategory } from '@/lib/master-prompt'
 import { withErrorHandler } from '@/lib/api-utils'
+import { requireAuth } from '@/lib/auth/session'
 
 export const GET = withErrorHandler(async (request: NextRequest, scope) => {
+  await requireAuth()
   const { searchParams } = new URL(request.url)
   const category = searchParams.get('category')
 

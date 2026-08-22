@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET — List all projects, optionally filtered by isActive, ordered by name
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const isActiveParam = searchParams.get('isActive')
 
@@ -23,6 +26,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(projects)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error fetching projects:', error)
     return NextResponse.json(
       { error: 'Failed to fetch projects' },
@@ -34,6 +38,7 @@ export async function GET(request: NextRequest) {
 // POST — Create a new project
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { name, code, description, isActive } = body
 
@@ -69,6 +74,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(project, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error creating project:', error)
     return NextResponse.json(
       { error: 'Failed to create project' },
@@ -80,6 +86,7 @@ export async function POST(request: NextRequest) {
 // PUT — Update a project
 export async function PUT(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id, name, code, description, isActive } = body
 
@@ -126,6 +133,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(project)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error updating project:', error)
     return NextResponse.json(
       { error: 'Failed to update project' },
@@ -137,6 +145,7 @@ export async function PUT(request: NextRequest) {
 // DELETE — Delete a project by id, checking for referenced positions
 export async function DELETE(request: NextRequest) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -170,6 +179,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error deleting project:', error)
     return NextResponse.json(
       { error: 'Failed to delete project' },

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 const VALID_GRADES = ['линейная', 'руководитель']
 
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const departmentId = searchParams.get('departmentId')
     const grade = searchParams.get('grade')
@@ -31,6 +34,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(positions)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error fetching positions:', error)
     return NextResponse.json({ error: 'Ошибка при получении должностей' }, { status: 500 })
   }
@@ -38,6 +42,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { title, code, departmentId, grade, businessFunctionId, projectId, headcount, functions } = body
 
@@ -100,6 +105,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(position, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error creating position:', error)
     return NextResponse.json({ error: 'Ошибка при создании должности' }, { status: 500 })
   }
@@ -107,6 +113,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id, title, code, departmentId, grade, businessFunctionId, projectId, headcount, functions } = body
 
@@ -179,6 +186,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(position)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error updating position:', error)
     return NextResponse.json({ error: 'Ошибка при обновлении должности' }, { status: 500 })
   }
@@ -186,6 +194,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -213,6 +222,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error deleting position:', error)
     return NextResponse.json({ error: 'Ошибка при удалении должности' }, { status: 500 })
   }

@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // POST /api/compare/auto-save-original - Auto-save original generated DI as version
 export async function POST(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { generatedDIId } = body
 
@@ -114,6 +117,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(version, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Auto-save-original POST error:', error)
     return NextResponse.json({ error: 'Ошибка автосохранения оригинала' }, { status: 500 })
   }

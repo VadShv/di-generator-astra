@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/templates - List all templates with sections
 export async function GET() {
   try {
+    await requireAuth()
     const templates = await db.dITemplate.findMany({
       include: {
         sections: {
@@ -14,6 +17,7 @@ export async function GET() {
     })
     return NextResponse.json(templates)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Templates GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки шаблонов' }, { status: 500 })
   }
@@ -22,6 +26,7 @@ export async function GET() {
 // POST /api/templates - Create template with sections
 export async function POST(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { name, description, sections, isPrimary } = body
 
@@ -63,6 +68,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(template, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Templates POST error:', error)
     return NextResponse.json({ error: 'Ошибка создания шаблона' }, { status: 500 })
   }
@@ -71,6 +77,7 @@ export async function POST(request: Request) {
 // PUT /api/templates - Update template (including isPrimary)
 export async function PUT(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id, name, description, isActive, isPrimary, sections } = body
 
@@ -141,6 +148,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(updated)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Templates PUT error:', error)
     return NextResponse.json({ error: 'Ошибка обновления шаблона' }, { status: 500 })
   }
@@ -149,6 +157,7 @@ export async function PUT(request: Request) {
 // DELETE /api/templates - Delete template
 export async function DELETE(request: Request) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -165,6 +174,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Templates DELETE error:', error)
     return NextResponse.json({ error: 'Ошибка удаления шаблона' }, { status: 500 })
   }

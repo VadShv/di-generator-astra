@@ -7,11 +7,15 @@ import { aiAuditSchema } from '@/lib/validation/schemas'
 import { createLogger } from '@/lib/logger'
 import { parseJsonOr } from '@/lib/json-safe'
 import { buildPositionContext } from '@/lib/di/prompts'
+import { requireAuth } from '@/lib/auth/session'
+import { checkRateLimit } from '@/lib/rate-limit'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 const log = createLogger('generate-di/ai-audit')
 
 // POST /api/generate-di/ai-audit - AI audit of existing DI with 5 legal error classes
 export const POST = withErrorHandler(async (request: Request) => {
+  await requireAuth()
   const body = await parseBody(request, aiAuditSchema)
   const { generatedDIId, auditType } = body
   const type = auditType
@@ -203,6 +207,8 @@ ${diText}
 // GET /api/generate-di/ai-audit - List audit results for a DI
 export async function GET(request: Request) {
   try {
+  await requireAuth()
+  checkRateLimit(request, 'ai-audit', 20)
     const { searchParams } = new URL(request.url)
     const generatedDIId = searchParams.get('generatedDIId')
 
@@ -231,6 +237,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(parsed)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     log.error('Audit GET error', { message: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Ошибка загрузки результатов аудита' }, { status: 500 })
   }

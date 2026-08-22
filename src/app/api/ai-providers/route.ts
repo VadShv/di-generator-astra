@@ -4,6 +4,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { encryptApiKey, maskApiKey } from '@/lib/ai-connector'
+import { requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 /** Преобразовать запись БД в безопасный DTO (без расшифрованного ключа). */
 function toDto(row: {
@@ -47,11 +49,13 @@ function toDto(row: {
 // GET — список всех провайдеров
 export async function GET() {
   try {
+    await requireRole('admin')
     const providers = await db.aIProvider.findMany({
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
     })
     return NextResponse.json(providers.map(toDto))
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('GET /api/ai-providers error:', error)
     return NextResponse.json({ error: 'Ошибка получения списка провайдеров' }, { status: 500 })
   }
@@ -60,6 +64,7 @@ export async function GET() {
 // POST — создать провайдера
 export async function POST(request: Request) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { name, type, baseUrl, apiKey, modelName, folderId, isActive, isDefault, config } = body
 
@@ -117,6 +122,7 @@ export async function POST(request: Request) {
     })
     return NextResponse.json(toDto(created), { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('POST /api/ai-providers error:', error)
     return NextResponse.json({ error: 'Ошибка создания провайдера' }, { status: 500 })
   }

@@ -4,6 +4,9 @@ import { withErrorHandler, parseBody } from '@/lib/api-utils'
 import { massGenerateSchema } from '@/lib/validation/schemas'
 import { createLogger } from '@/lib/logger'
 import { scheduleJob } from '@/lib/di/mass-generate-worker'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 const log = createLogger('generate-di/mass-generate')
 
@@ -11,6 +14,7 @@ const log = createLogger('generate-di/mass-generate')
 // Создаёт запись GenerationJob и запускает фоновую обработку.
 // Возвращает 202 с { jobId } — клиент опрашивает статус через GET ?jobId=.
 export const POST = withErrorHandler(async (request: Request) => {
+  await requireAuth()
   const body = await parseBody(request, massGenerateSchema)
   const { departmentIds, companyIds, positionIds, templateId, masterPromptId, providerId } = body
 
@@ -40,6 +44,7 @@ export const POST = withErrorHandler(async (request: Request) => {
 // GET /api/generate-di/mass-generate?jobId=... - Статус массовой генерации
 export async function GET(request: Request) {
   try {
+  await requireAuth()
     const { searchParams } = new URL(request.url)
     const jobId = searchParams.get('jobId')
     if (!jobId) {
@@ -69,6 +74,7 @@ export async function GET(request: Request) {
       finishedAt: job.finishedAt,
     })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     log.error('Mass generate GET error', { message: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Ошибка получения статуса задачи' }, { status: 500 })
   }

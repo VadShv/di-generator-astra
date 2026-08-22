@@ -6,6 +6,8 @@ import {
   extractVariables,
   PROMPT_CATEGORIES,
 } from '@/lib/master-prompt'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // Допустимые категории промптов (соответствуют PROMPT_CATEGORIES в src/lib/master-prompt.ts).
 const VALID_CATEGORIES = new Set<string>(Object.keys(PROMPT_CATEGORIES))
@@ -70,6 +72,7 @@ function normalizeVariables(value: unknown): string {
 // Резолв промпта по критериям выполняется отдельным POST /api/master-prompts/resolve.
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const activeOnly = searchParams.get('active') === 'true'
     const departmentId = searchParams.get('departmentId')
@@ -113,6 +116,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(prompts)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('MasterPrompts GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки мастер-промптов' }, { status: 500 })
   }
@@ -122,6 +126,7 @@ export async function GET(request: NextRequest) {
 // Принимает расширенный набор полей (Фаза 21): tags, companyId, positionId, estimatedTokens.
 export async function POST(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const {
       name,
@@ -199,6 +204,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(prompt, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('MasterPrompts POST error:', error)
     return NextResponse.json({ error: 'Ошибка создания мастер-промпта' }, { status: 500 })
   }
@@ -209,6 +215,7 @@ export async function POST(request: Request) {
 // Принимает расширенный набор полей (Фаза 21).
 export async function PUT(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const {
       id,
@@ -297,6 +304,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(prompt)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('MasterPrompts PUT error:', error)
     return NextResponse.json({ error: 'Ошибка обновления мастер-промпта' }, { status: 500 })
   }
@@ -305,6 +313,7 @@ export async function PUT(request: Request) {
 // DELETE /api/master-prompts — удаление мастер-промпта.
 export async function DELETE(request: Request) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -321,6 +330,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('MasterPrompts DELETE error:', error)
     return NextResponse.json({ error: 'Ошибка удаления мастер-промпта' }, { status: 500 })
   }

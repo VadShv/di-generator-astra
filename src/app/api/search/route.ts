@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // Глобальный поиск по должностям, подразделениям и должностным инструкциям
 // (сгенерированным и архивным). GET /api/search?q=<текст>&limit=<число>
 // Возвращает сгруппированные результаты с контекстом для перехода.
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const q = searchParams.get('q')?.trim() ?? ''
     const limit = Math.min(Number(searchParams.get('limit')) || 10, 25)
@@ -114,6 +117,7 @@ export async function GET(request: NextRequest) {
       })),
     })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Search error:', error)
     return NextResponse.json({ error: 'Ошибка поиска' }, { status: 500 })
   }

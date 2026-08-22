@@ -17,6 +17,8 @@ import {
 } from 'docx'
 import { db } from '@/lib/db'
 import { createLogger } from '@/lib/logger'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 const logger = createLogger('export-docx')
 
@@ -42,6 +44,7 @@ function contentToParagraphs(content: string): Paragraph[] {
 
 export async function GET(request: Request) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -163,6 +166,7 @@ export async function GET(request: Request) {
       },
     })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     logger.error('Экспорт DOCX', error)
     return NextResponse.json({ error: 'Ошибка экспорта' }, { status: 500 })
   }

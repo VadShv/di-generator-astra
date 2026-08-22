@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/tracking - List all tracking entries with DI and position info
 export async function GET(request: Request) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const assignee = searchParams.get('assignee')
@@ -41,6 +44,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(trackings)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Tracking GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки отслеживаний' }, { status: 500 })
   }
@@ -49,6 +53,7 @@ export async function GET(request: Request) {
 // POST /api/tracking - Create tracking entry
 export async function POST(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { generatedDIId, status, assignee, notes } = body
 
@@ -93,6 +98,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(tracking, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Tracking POST error:', error)
     return NextResponse.json({ error: 'Ошибка создания записи отслеживания' }, { status: 500 })
   }
@@ -101,6 +107,7 @@ export async function POST(request: Request) {
 // PUT /api/tracking - Update tracking entry
 export async function PUT(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id, status, assignee, notes } = body
 
@@ -143,6 +150,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(updated)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Tracking PUT error:', error)
     return NextResponse.json({ error: 'Ошибка обновления записи отслеживания' }, { status: 500 })
   }
@@ -151,6 +159,7 @@ export async function PUT(request: Request) {
 // DELETE /api/tracking - Delete tracking entry
 export async function DELETE(request: Request) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -174,6 +183,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Tracking DELETE error:', error)
     return NextResponse.json({ error: 'Ошибка удаления записи отслеживания' }, { status: 500 })
   }

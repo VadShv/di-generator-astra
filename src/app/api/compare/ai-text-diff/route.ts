@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getProviderClient } from '@/lib/ai-connector'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // POST /api/compare/ai-text-diff — универсальное ИИ-сравнение двух произвольных
 // текстов должностных инструкций (архивная, сгенерированная версия, согласованная и т.д.).
@@ -9,6 +11,7 @@ import { getProviderClient } from '@/lib/ai-connector'
 // сравнивать разные типы ДИ и разные версии между собой.
 export async function POST(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { text1, text2, title1, title2, context } = body as {
       text1?: string
@@ -86,6 +89,7 @@ ${norm2}
       label2,
     })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('ai-text-diff error:', error)
     return NextResponse.json(
       { error: 'Ошибка ИИ-сравнения текстов' },

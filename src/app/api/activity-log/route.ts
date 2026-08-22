@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/activity-log — ручные записи журнала.
 // Фильтры: entityType, entityId, tagId, generatedDIId.
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const entityType = searchParams.get('entityType')
     const entityId = searchParams.get('entityId')
@@ -27,6 +30,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(logs)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('ActivityLog GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки журнала' }, { status: 500 })
   }
@@ -35,6 +39,7 @@ export async function GET(request: NextRequest) {
 // POST /api/activity-log — добавить запись в журнал.
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { actionType, entityType, entityId, tagId, title, description, author, generatedDIId } = body
 
@@ -58,6 +63,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(log, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('ActivityLog POST error:', error)
     return NextResponse.json({ error: 'Ошибка добавления записи' }, { status: 500 })
   }
@@ -66,6 +72,7 @@ export async function POST(request: NextRequest) {
 // DELETE /api/activity-log — удалить запись.
 export async function DELETE(request: NextRequest) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -81,6 +88,7 @@ export async function DELETE(request: NextRequest) {
     await db.activityLog.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('ActivityLog DELETE error:', error)
     return NextResponse.json({ error: 'Ошибка удаления записи' }, { status: 500 })
   }

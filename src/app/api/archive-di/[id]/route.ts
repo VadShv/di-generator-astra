@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/archive-di/[id] - Get single archive DI with full content
 export async function GET(
@@ -7,6 +9,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireAuth()
     const { id } = await params
 
     const archiveDI = await db.archiveDI.findUnique({
@@ -29,6 +32,7 @@ export async function GET(
 
     return NextResponse.json(archiveDI)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('ArchiveDI GET [id] error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки архивной ДИ' }, { status: 500 })
   }
@@ -40,6 +44,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireRole('admin')
     const { id } = await params
 
     const existing = await db.archiveDI.findUnique({ where: { id } })
@@ -51,6 +56,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('ArchiveDI DELETE [id] error:', error)
     return NextResponse.json({ error: 'Ошибка удаления архивной ДИ' }, { status: 500 })
   }

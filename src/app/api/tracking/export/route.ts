@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import * as XLSX from 'xlsx'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/tracking/export — экспорт отчёта покрытия ДИ в Excel (.xlsx).
 // Параметры те же, что у /api/tracking/dashboard (companyId, departmentId).
 // Возвращает бинарный .xlsx-файл.
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
     const departmentId = searchParams.get('departmentId')
@@ -100,6 +103,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Tracking export error:', error)
     return NextResponse.json({ error: 'Ошибка экспорта отчёта' }, { status: 500 })
   }

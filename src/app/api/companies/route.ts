@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 export async function GET() {
   try {
+    await requireAuth()
     const companies = await db.company.findMany({
       include: {
         _count: {
@@ -13,6 +16,7 @@ export async function GET() {
     })
     return NextResponse.json(companies)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error fetching companies:', error)
     return NextResponse.json({ error: 'Ошибка при получении компаний' }, { status: 500 })
   }
@@ -20,6 +24,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
    const { name, shortName, code, type, director, description } = body
     const { inn, ogrn, kpp, legalAddress, actualAddress } = body
@@ -56,6 +61,7 @@ export async function POST(request: NextRequest) {
 
    return NextResponse.json(company, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error creating company:', error)
     return NextResponse.json({ error: 'Ошибка при создании компании' }, { status: 500 })
   }
@@ -63,6 +69,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
    const { id, name, shortName, code, type, director, description } = body
     const { inn, ogrn, kpp, legalAddress, actualAddress } = body
@@ -108,6 +115,7 @@ export async function PUT(request: NextRequest) {
 
    return NextResponse.json(company)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error updating company:', error)
     return NextResponse.json({ error: 'Ошибка при обновлении компании' }, { status: 500 })
   }
@@ -115,6 +123,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -139,6 +148,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error deleting company:', error)
     return NextResponse.json({ error: 'Ошибка при удалении компании' }, { status: 500 })
   }

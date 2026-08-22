@@ -8,25 +8,29 @@ import {
 Menu, ChevronLeft, Zap, Shield, History, BookOpenIcon,
 Cpu,
 } from 'lucide-react'
-import { Boxes, MessageCircle } from 'lucide-react'
+import { Boxes, MessageCircle, Loader2 } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { DashboardModule } from '@/components/modules/dashboard'
-import { StaffScheduleModule } from '@/components/modules/staff-schedule'
-import { ArchiveModule } from '@/components/modules/archive'
-import { TemplatesModule } from '@/components/modules/templates'
-import { MasterPromptsModule } from '@/components/modules/master-prompts'
-import { GenerationModule } from '@/components/modules/generation'
-import { TrackingModule } from '@/components/modules/tracking'
-import { DictionariesModule } from '@/components/modules/dictionaries'
-import { MassGenerationModule } from '@/components/modules/mass-generation'
-import { AiAuditModule } from '@/components/modules/ai-audit'
-import { InstructionsModule } from '@/components/modules/instructions'
-import { TechStackModule } from '@/components/modules/tech-stack'
-import { AiProvidersModule } from '@/components/modules/ai-providers'
-import { DIVersionsModule } from '@/components/modules/di-versions'
+
+const lazyOpts = { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> } as const
+
+const StaffScheduleModule = dynamic(() => import('@/components/modules/staff-schedule').then(m => m.StaffScheduleModule), lazyOpts)
+const ArchiveModule = dynamic(() => import('@/components/modules/archive').then(m => m.ArchiveModule), lazyOpts)
+const TemplatesModule = dynamic(() => import('@/components/modules/templates').then(m => m.TemplatesModule), lazyOpts)
+const MasterPromptsModule = dynamic(() => import('@/components/modules/master-prompts').then(m => m.MasterPromptsModule), lazyOpts)
+const GenerationModule = dynamic(() => import('@/components/modules/generation').then(m => m.GenerationModule), lazyOpts)
+const TrackingModule = dynamic(() => import('@/components/modules/tracking').then(m => m.TrackingModule), lazyOpts)
+const DictionariesModule = dynamic(() => import('@/components/modules/dictionaries').then(m => m.DictionariesModule), lazyOpts)
+const MassGenerationModule = dynamic(() => import('@/components/modules/mass-generation').then(m => m.MassGenerationModule), lazyOpts)
+const AiAuditModule = dynamic(() => import('@/components/modules/ai-audit').then(m => m.AiAuditModule), lazyOpts)
+const InstructionsModule = dynamic(() => import('@/components/modules/instructions').then(m => m.InstructionsModule), lazyOpts)
+const TechStackModule = dynamic(() => import('@/components/modules/tech-stack').then(m => m.TechStackModule), lazyOpts)
+const AiProvidersModule = dynamic(() => import('@/components/modules/ai-providers').then(m => m.AiProvidersModule), lazyOpts)
+const DIVersionsModule = dynamic(() => import('@/components/modules/di-versions').then(m => m.DIVersionsModule), lazyOpts)
 
 const navItems: { id: ActiveSection; label: string; icon: React.ElementType; iconBg: string; iconColor: string; group: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: LayoutDashboard, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', group: 'Обзор' },

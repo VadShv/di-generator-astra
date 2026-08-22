@@ -6,11 +6,15 @@ import { withErrorHandler, parseBody } from '@/lib/api-utils'
 import { aiImproveSchema } from '@/lib/validation/schemas'
 import { createLogger } from '@/lib/logger'
 import { buildPositionContext } from '@/lib/di/prompts'
+import { requireAuth } from '@/lib/auth/session'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 const log = createLogger('generate-di/ai-improve')
 
 // POST /api/generate-di/ai-improve - Improve existing section content with AI
 export const POST = withErrorHandler(async (request: Request) => {
+  await requireAuth()
+  checkRateLimit(request, 'ai-improve', 20)
   const body = await parseBody(request, aiImproveSchema)
   const { sectionId, instruction } = body
 

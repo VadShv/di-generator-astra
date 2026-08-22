@@ -6,6 +6,8 @@ import { withErrorHandler, parseBody, ApiError } from '@/lib/api-utils'
 import { aiSectionSchema } from '@/lib/validation/schemas'
 import { createLogger } from '@/lib/logger'
 import { buildGenerationSystemPrompt, buildSectionUserPrompt, buildArchiveContext, type ArchiveDIRef } from '@/lib/di/prompts'
+import { requireAuth } from '@/lib/auth/session'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 const log = createLogger('generate-di/ai-section')
 
@@ -14,6 +16,8 @@ const log = createLogger('generate-di/ai-section')
 // 1. Existing DI: { generatedDIId, sectionOrder, customPrompt }
 // 2. Manual mode: { positionId, sectionTitle, sectionOrder, promptGuidance, manualMode: true }
 export const POST = withErrorHandler(async (request: Request) => {
+  await requireAuth()
+  checkRateLimit(request, 'ai-section', 20)
   const body = await parseBody(request, aiSectionSchema)
   const { generatedDIId, sectionOrder, customPrompt, manualMode, positionId, sectionTitle, promptGuidance } = body
 

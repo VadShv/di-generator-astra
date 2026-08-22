@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 export async function GET() {
   try {
+    await requireAuth()
     const departments = await db.department.findMany({
       include: {
         parent: true,
@@ -16,6 +19,7 @@ export async function GET() {
     })
     return NextResponse.json(departments)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error fetching departments:', error)
     return NextResponse.json({ error: 'Ошибка при получении подразделений' }, { status: 500 })
   }
@@ -23,6 +27,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { name, code, parentId, companyId } = body
 
@@ -63,6 +68,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(department, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error creating department:', error)
     return NextResponse.json({ error: 'Ошибка при создании подразделения' }, { status: 500 })
   }
@@ -70,6 +76,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id, name, code, parentId, companyId } = body
 
@@ -115,6 +122,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(department)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error updating department:', error)
     return NextResponse.json({ error: 'Ошибка при обновлении подразделения' }, { status: 500 })
   }
@@ -122,6 +130,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -153,6 +162,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error deleting department:', error)
     return NextResponse.json({ error: 'Ошибка при удалении подразделения' }, { status: 500 })
   }

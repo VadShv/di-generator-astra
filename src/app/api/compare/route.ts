@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/compare - List all DI versions (with DI info)
 export async function GET(request: Request) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const generatedDIId = searchParams.get('generatedDIId')
 
@@ -30,6 +33,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(versions)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Compare GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки версий' }, { status: 500 })
   }
@@ -38,6 +42,7 @@ export async function GET(request: Request) {
 // POST /api/compare - Upload new version
 export async function POST(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { generatedDIId, content, uploadedBy, fileName, isOriginal } = body
 
@@ -93,6 +98,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(version, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Compare POST error:', error)
     return NextResponse.json({ error: 'Ошибка создания версии' }, { status: 500 })
   }

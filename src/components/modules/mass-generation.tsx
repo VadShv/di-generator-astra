@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -72,6 +72,7 @@ export function MassGenerationModule() {
   const [progress, setProgress] = useState(0)
   const [results, setResults] = useState<MassGenerateResult[] | null>(null)
   const [resultDialogOpen, setResultDialogOpen] = useState(false)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Пакетные операции над результатами генерации
   const [batchAuditLoading, setBatchAuditLoading] = useState(false)
   const [batchAuditOpen, setBatchAuditOpen] = useState(false)
@@ -170,18 +171,23 @@ export function MassGenerationModule() {
     setProgress(0)
     setResults(null)
 
+    const stopPolling = () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+    }
+
     try {
       const res = await fetch('/api/generate-di/mass-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({
-          // Каскадный приоритет: должности → подразделения → компании.
-          // API применяет только один, наиболее специфичный фильтр.
+        body: JSON.stringify({
           positionIds: selectedPositionIds.length > 0 ? selectedPositionIds : undefined,
           departmentIds: selectedPositionIds.length === 0 && selectedDepartmentIds.length > 0 ? selectedDepartmentIds : undefined,
           companyIds: selectedPositionIds.length === 0 && selectedDepartmentIds.length === 0 && selectedCompanyIds.length > 0 ? selectedCompanyIds : undefined,
-         templateId: selectedTemplateId,
-       }),
+          templateId: selectedTemplateId,
+        }),
       })
 
       if (!res.ok) {
@@ -189,38 +195,76 @@ export function MassGenerationModule() {
         throw new Error(err.error || 'Ошибка массовой генерации')
       }
 
-      const data = await res.json()
-      setResults(data.results)
-      setProgress(100)
+      const { jobId } = await res.json()
+      if (!jobId) throw new Error('Сервер не вернул jobId')
 
+      const pollDeadline = Date.now() + 10 * 60 * 1000
+      let finalResults: MassGenerateResult[] = []
+
+      await new Promise<void>((resolve, reject) => {
+        const poll = async () => {
+          if (Date.now() > pollDeadline) {
+            stopPolling()
+            reject(new Error('Превышен таймаут ожидания генерации (10 мин)'))
+            return
+          }
+          try {
+            const statusRes = await fetch(`/api/generate-di/mass-generate?jobId=${jobId}`)
+            if (!statusRes.ok) {
+              stopPolling()
+              reject(new Error('Ошибка получения статуса задачи'))
+              return
+            }
+            const job = await statusRes.json()
+            if (job.total > 0) {
+              setProgress(Math.round((job.completed / job.total) * 100))
+            }
+            if (job.status === 'completed' || job.status === 'failed') {
+              stopPolling()
+              const mapped: MassGenerateResult[] = (job.results || []).map((r: { positionId: string; positionTitle: string; diId: string; title: string; status: string; message?: string }) => ({
+                positionId: r.positionId,
+                positionTitle: r.positionTitle,
+                diId: r.diId,
+                title: r.title,
+                success: r.status === 'success',
+                error: r.message,
+              }))
+              finalResults = mapped
+              setResults(mapped)
+              setProgress(100)
+              resolve()
+            }
+          } catch {
+            // Сетевая ошибка опроса — продолжаем пытаться до таймаута
+          }
+        }
+        poll()
+        pollingRef.current = setInterval(poll, 2000)
+      })
+
+      const successCount = finalResults.filter(r => r.success).length
+      const failCount = finalResults.filter(r => !r.success).length
       toast({
         title: 'Генерация завершена',
-        description: `Создано ${data.successCount} ДИ из ${data.total}. Ошибок: ${data.failCount}`,
+        description: `Создано ${successCount} ДИ. Ошибок: ${failCount}`,
       })
       setResultDialogOpen(true)
     } catch (error) {
+      stopPolling()
       const msg = error instanceof Error ? error.message : 'Неизвестная ошибка'
       toast({ title: 'Ошибка', description: msg, variant: 'destructive' })
     } finally {
+      stopPolling()
       setGenerating(false)
     }
   }
 
-  // Индикатор выполнения: пока идёт массовая генерация (единый синхронный запрос),
-  // плавно «пульсируем» значением прогресса, чтобы пользователь видел живой отклик.
+  // Очистка опроса при размонтировании
   useEffect(() => {
-    if (!generating) {
-      return
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current)
     }
-    let value = 5
-    setProgress(value)
-    const timer = setInterval(() => {
-      // Медленный рост до 90, без достижения 100 до реального завершения
-      value = value >= 90 ? 90 : value + Math.max(1, Math.round((90 - value) * 0.05))
-      setProgress(value)
-    }, 600)
-    return () => clearInterval(timer)
-  }, [generating])
+  }, [])
 
   // Список ID успешно созданных ДИ для пакетных операций
   const successDiIds = results

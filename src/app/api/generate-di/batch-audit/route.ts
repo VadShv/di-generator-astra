@@ -7,12 +7,14 @@ import { batchAuditSchema } from '@/lib/validation/schemas'
 import { createLogger } from '@/lib/logger'
 import { parseJsonOr } from '@/lib/json-safe'
 import { buildPositionContext } from '@/lib/di/prompts'
+import { requireAuth } from '@/lib/auth/session'
 
 const log = createLogger('generate-di/batch-audit')
 
 // POST /api/generate-di/batch-audit — пакетный аудит сгенерированных ДИ.
 // Тело: { diIds: string[] } — список ID GeneratedDI для аудита.
 export const POST = withErrorHandler(async (request: Request) => {
+  await requireAuth()
   const body = await parseBody(request, batchAuditSchema)
   const { diIds } = body
 

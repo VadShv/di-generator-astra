@@ -259,6 +259,21 @@ export function scheduleJob(jobId: string): void {
 export function startQueuePoller(): void {
   if (pollTimer) return
   const tick = async () => {
+    // Recovery: помечаем зависшие running-задачи (> 30 мин) как failed.
+    await db.generationJob
+      .updateMany({
+        where: {
+          status: 'running',
+          startedAt: { lt: new Date(Date.now() - 30 * 60 * 1000) },
+        },
+        data: {
+          status: 'failed',
+          finishedAt: new Date(),
+          results: JSON.stringify([{ status: 'error', message: 'Таймаут задачи (превышен лимит 30 мин)' }]),
+        },
+      })
+      .catch(() => {})
+
     if (activeJobs < MAX_CONCURRENT_JOBS) {
       try {
         const next = await db.generationJob.findFirst({

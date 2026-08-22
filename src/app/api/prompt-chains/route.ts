@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/prompt-chains — список цепочек промптов.
 // ?active=true — только активные.
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const activeOnly = searchParams.get('active') === 'true'
 
@@ -24,6 +27,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('PromptChains GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки цепочек промптов' }, { status: 500 })
   }
@@ -33,6 +37,7 @@ export async function GET(request: NextRequest) {
 // Тело: { name, description?, steps?: Array<{category, order, stopOnError}>, isActive? }
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { name, description, steps, isActive } = body
 
@@ -58,6 +63,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ...chain, steps: safeParseSteps(chain.steps) }, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('PromptChains POST error:', error)
     return NextResponse.json({ error: 'Ошибка создания цепочки промптов' }, { status: 500 })
   }
@@ -67,6 +73,7 @@ export async function POST(request: NextRequest) {
 // Тело: { id, name?, description?, steps?, isActive? }
 export async function PUT(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id, name, description, steps, isActive } = body
 
@@ -94,6 +101,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ ...chain, steps: safeParseSteps(chain.steps) })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('PromptChains PUT error:', error)
     return NextResponse.json({ error: 'Ошибка обновления цепочки промптов' }, { status: 500 })
   }
@@ -103,6 +111,7 @@ export async function PUT(request: NextRequest) {
 // Тело: { id }
 export async function DELETE(request: NextRequest) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -119,6 +128,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('PromptChains DELETE error:', error)
     return NextResponse.json({ error: 'Ошибка удаления цепочки промптов' }, { status: 500 })
   }

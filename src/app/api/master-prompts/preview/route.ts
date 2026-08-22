@@ -7,6 +7,8 @@ import {
   buildContextFromPosition,
   type PromptContext,
 } from '@/lib/master-prompt'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // POST /api/master-prompts/preview — предпросмотр рендера промпта с подставленными
 // переменными без обращения к ИИ-модели (Фаза 4/5).
@@ -15,6 +17,7 @@ import {
 // (для live-предпросмотра в редакторе).
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { masterPromptId, content, positionId, variables } = body
 
@@ -70,6 +73,7 @@ export async function POST(request: NextRequest) {
       context,
     })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('MasterPrompts preview error:', error)
     return NextResponse.json({ error: 'Ошибка предпросмотра промпта' }, { status: 500 })
   }

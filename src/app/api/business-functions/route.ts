@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET: List all business functions, optionally filtered by isActive
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const isActiveFilter = searchParams.get('isActive')
 
@@ -23,6 +26,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(businessFunctions)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error fetching business functions:', error)
     return NextResponse.json(
       { error: 'Ошибка при получении бизнес-функций' },
@@ -34,6 +38,7 @@ export async function GET(request: NextRequest) {
 // POST: Create a new business function
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { name, code, description, isActive } = body
 
@@ -69,6 +74,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(businessFunction, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error creating business function:', error)
     return NextResponse.json(
       { error: 'Ошибка при создании бизнес-функции' },
@@ -80,6 +86,7 @@ export async function POST(request: NextRequest) {
 // PUT: Update a business function
 export async function PUT(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id, name, code, description, isActive } = body
 
@@ -126,6 +133,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(businessFunction)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error updating business function:', error)
     return NextResponse.json(
       { error: 'Ошибка при обновлении бизнес-функции' },
@@ -137,6 +145,7 @@ export async function PUT(request: NextRequest) {
 // DELETE: Delete a business function by id, checking for referencing positions
 export async function DELETE(request: NextRequest) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -170,6 +179,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Error deleting business function:', error)
     return NextResponse.json(
       { error: 'Ошибка при удалении бизнес-функции' },

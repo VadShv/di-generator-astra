@@ -5,6 +5,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { encryptApiKey, maskApiKey } from '@/lib/ai-connector'
+import { requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 function toDto(row: {
   id: string
@@ -48,6 +50,7 @@ type Params = { params: Promise<{ id: string }> }
 // GET — получить одного провайдера
 export async function GET(_request: Request, { params }: Params) {
   try {
+    await requireRole('admin')
     const { id } = await params
     const provider = await db.aIProvider.findUnique({ where: { id } })
     if (!provider) {
@@ -55,6 +58,7 @@ export async function GET(_request: Request, { params }: Params) {
     }
     return NextResponse.json(toDto(provider))
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('GET /api/ai-providers/[id] error:', error)
     return NextResponse.json({ error: 'Ошибка получения провайдера' }, { status: 500 })
   }
@@ -63,6 +67,7 @@ export async function GET(_request: Request, { params }: Params) {
 // PATCH — обновить провайдера
 export async function PATCH(request: Request, { params }: Params) {
   try {
+    await requireRole('admin')
     const { id } = await params
     const body = await request.json()
     const { name, type, baseUrl, apiKey, modelName, folderId, isActive, isDefault, config } = body
@@ -115,6 +120,7 @@ export async function PATCH(request: Request, { params }: Params) {
     })
     return NextResponse.json(toDto(updated))
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('PATCH /api/ai-providers/[id] error:', error)
     return NextResponse.json({ error: 'Ошибка обновления провайдера' }, { status: 500 })
   }
@@ -123,6 +129,7 @@ export async function PATCH(request: Request, { params }: Params) {
 // DELETE — удалить провайдера
 export async function DELETE(_request: Request, { params }: Params) {
   try {
+    await requireRole('admin')
     const { id } = await params
     const existing = await db.aIProvider.findUnique({ where: { id } })
     if (!existing) {
@@ -131,6 +138,7 @@ export async function DELETE(_request: Request, { params }: Params) {
     await db.aIProvider.delete({ where: { id } })
     return NextResponse.json({ ok: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('DELETE /api/ai-providers/[id] error:', error)
     return NextResponse.json({ error: 'Ошибка удаления провайдера' }, { status: 500 })
   }

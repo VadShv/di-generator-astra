@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/compare/[id] - Get single version detail
 export async function GET(
@@ -7,6 +9,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireAuth()
     const { id } = await params
 
     const version = await db.dIVersion.findUnique({
@@ -33,6 +36,7 @@ export async function GET(
 
     return NextResponse.json(version)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Compare GET [id] error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки версии' }, { status: 500 })
   }

@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 export async function GET() {
   try {
+    await requireAuth()
     const [
       departments,
       positions,
@@ -34,6 +37,7 @@ export async function GET() {
       pendingComparison,
     })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Dashboard stats error:', error)
     return NextResponse.json(
       {

@@ -52,6 +52,28 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // CSRF-защита: блокируем cross-origin мутации (POST/PUT/PATCH/DELETE).
+  const MUTATION_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE']
+  if (pathname.startsWith('/api/') && MUTATION_METHODS.includes(request.method)) {
+    const fetchSite = request.headers.get('sec-fetch-site')
+    if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') {
+      return NextResponse.json({ error: 'Cross-origin request blocked' }, { status: 403 })
+    }
+    const origin = request.headers.get('origin')
+    const host = request.headers.get('host')
+    if (origin && host) {
+      let originHost: string
+      try {
+        originHost = new URL(origin).host
+      } catch {
+        return NextResponse.json({ error: 'Invalid origin' }, { status: 403 })
+      }
+      if (originHost !== host) {
+        return NextResponse.json({ error: 'Invalid origin' }, { status: 403 })
+      }
+    }
+  }
+
   // Залогинен?
   if (hasSessionToken(request)) return NextResponse.next()
 

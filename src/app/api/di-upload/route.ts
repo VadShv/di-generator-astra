@@ -4,10 +4,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { extractDI } from '@/lib/di-parser'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 МБ
 
 // POST — обработка запроса (parse или save)
 export async function POST(request: NextRequest) {
   try {
+    await requireRole('admin')
     const url = new URL(request.url)
     const mode = url.searchParams.get('mode') || 'parse'
     const contentType = request.headers.get('content-type') || ''
@@ -30,6 +35,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { error: 'Поддерживаются только файлы .pdf и .docx' },
           { status: 400 }
+        )
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        return NextResponse.json(
+          { error: `Файл слишком большой (${(file.size / 1024 / 1024).toFixed(1)} МБ). Максимум 10 МБ.` },
+          { status: 413 }
         )
       }
 
@@ -114,6 +125,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: `Неизвестный режим: ${mode}` }, { status: 400 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('POST /api/di-upload error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Ошибка обработки файла' },
@@ -125,6 +137,7 @@ export async function POST(request: NextRequest) {
 // GET — список загруженных документов (для UI)
 export async function GET() {
   try {
+    await requireAuth()
     const docs = await db.uploadedDocument.findMany({
       include: {
         position: { select: { id: true, title: true, department: { select: { name: true } } } },
@@ -151,6 +164,7 @@ export async function GET() {
       }))
     )
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('GET /api/di-upload error:', error)
     return NextResponse.json({ error: 'Ошибка получения списка документов' }, { status: 500 })
   }

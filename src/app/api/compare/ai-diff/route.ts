@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
  import { getProviderClient } from '@/lib/ai-connector'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // POST /api/compare/ai-diff - AI-powered comparison of two versions
 export async function POST(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { version1Id, version2Id } = body
 
@@ -132,6 +135,7 @@ ${text2}
       },
     })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('AI-diff POST error:', error)
     return NextResponse.json({ error: 'Ошибка ИИ-сравнения версий' }, { status: 500 })
   }

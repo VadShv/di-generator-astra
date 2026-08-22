@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/generate-di - List all generated DIs with position and section count
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const positionId = searchParams.get('positionId')
     const status = searchParams.get('status')
@@ -33,6 +36,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(generatedDIs)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('GenerateDI GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки сгенерированных ДИ' }, { status: 500 })
   }
@@ -41,6 +45,7 @@ export async function GET(request: NextRequest) {
 // POST /api/generate-di - Create new DI manually
 export async function POST(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { positionId, templateId, title, sections } = body
 
@@ -113,6 +118,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(generatedDI, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('GenerateDI POST error:', error)
     return NextResponse.json({ error: 'Ошибка создания ДИ' }, { status: 500 })
   }
@@ -121,6 +127,7 @@ export async function POST(request: Request) {
 // PUT /api/generate-di - Update generated DI with auto-versioning
 export async function PUT(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id, title, status, sections, signedByEmployee, changeDescription } = body
 
@@ -259,6 +266,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(finalDI)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('GenerateDI PUT error:', error)
     return NextResponse.json({ error: 'Ошибка обновления ДИ' }, { status: 500 })
   }
@@ -267,6 +275,7 @@ export async function PUT(request: Request) {
 // DELETE /api/generate-di - Delete generated DI
 export async function DELETE(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id } = body
 
@@ -283,6 +292,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('GenerateDI DELETE error:', error)
     return NextResponse.json({ error: 'Ошибка удаления ДИ' }, { status: 500 })
   }

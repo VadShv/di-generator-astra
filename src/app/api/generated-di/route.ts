@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/generated-di - List all generated DIs with position info
 export async function GET(request: Request) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
 
@@ -39,6 +42,7 @@ export async function GET(request: Request) {
     }))
     return NextResponse.json(withType)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('GeneratedDI GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки сгенерированных ДИ' }, { status: 500 })
   }

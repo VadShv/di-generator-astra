@@ -8,11 +8,15 @@ import { createLogger } from '@/lib/logger'
 import { generateSectionsForPosition, generateAiCultureSection } from '@/lib/di/generate-core'
 import { createInitialVersion } from '@/lib/di/version'
 import { buildArchiveContext, type ArchiveDIRef } from '@/lib/di/prompts'
+import { requireAuth } from '@/lib/auth/session'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 const log = createLogger('generate-di/ai-generate')
 
 // POST /api/generate-di/ai-generate - Full AI generation of DI
 export const POST = withErrorHandler(async (request: Request) => {
+  await requireAuth()
+  checkRateLimit(request, 'ai-generate', 20)
   const body = await parseBody(request, aiGenerateSchema)
   const { positionId, templateId, masterPromptId, archiveDIId, useArchiveAsReference } = body
 

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/activity-feed — единая лента событий Журнала действий.
 //
@@ -39,6 +41,7 @@ interface FeedEvent {
 
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const entityType = searchParams.get('entityType') // company | department | position
     const entityId = searchParams.get('entityId')
@@ -320,6 +323,7 @@ export async function GET(request: NextRequest) {
       filters: { entityType, entityId, tagId, limit },
     })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Activity feed error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки ленты действий' }, { status: 500 })
   }

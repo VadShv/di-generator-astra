@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/tracking/dashboard — агрегированный обзор покрытия ДИ.
 // Возвращает дерево: юр. лицо → подразделения → должности с расчётным статусом ДИ.
@@ -16,6 +18,7 @@ import { db } from '@/lib/db'
 //   audit     — ДИ на аудите (есть DIAuditResult без признака «ок» или статус review)
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
     const departmentId = searchParams.get('departmentId')
@@ -124,6 +127,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ overall, departments: filtered })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('Tracking dashboard error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки дашборда отслеживания' }, { status: 500 })
   }

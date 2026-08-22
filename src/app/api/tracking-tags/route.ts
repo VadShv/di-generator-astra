@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/tracking-tags — список меток.
 // Фильтры: entityType, entityId, isResolved, assignee.
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const entityType = searchParams.get('entityType')
     const entityId = searchParams.get('entityId')
@@ -26,6 +29,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(tags)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('TrackingTag GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки меток' }, { status: 500 })
   }
@@ -34,6 +38,7 @@ export async function GET(request: NextRequest) {
 // POST /api/tracking-tags — создать метку.
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { entityType, entityId, label, kind, color, assignee, dueDate, note, createdBy } = body
 
@@ -61,6 +66,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(tag, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('TrackingTag POST error:', error)
     return NextResponse.json({ error: 'Ошибка создания метки' }, { status: 500 })
   }
@@ -69,6 +75,7 @@ export async function POST(request: NextRequest) {
 // PUT /api/tracking-tags — обновить метку.
 export async function PUT(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id, label, kind, color, assignee, dueDate, note, isResolved } = body
 
@@ -98,6 +105,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(updated)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('TrackingTag PUT error:', error)
     return NextResponse.json({ error: 'Ошибка обновления метки' }, { status: 500 })
   }
@@ -106,6 +114,7 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/tracking-tags — удалить метку.
 export async function DELETE(request: NextRequest) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -121,6 +130,7 @@ export async function DELETE(request: NextRequest) {
     await db.trackingTag.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('TrackingTag DELETE error:', error)
     return NextResponse.json({ error: 'Ошибка удаления метки' }, { status: 500 })
   }

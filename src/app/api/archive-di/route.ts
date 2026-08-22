@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // Общий include для архивных ДИ: должность → подразделение → компания (для селектора)
 const ARCHIVE_INCLUDE = {
@@ -19,6 +21,7 @@ const ARCHIVE_INCLUDE = {
 //   linkStatus — unlinked | linked | all (статус привязки к должности)
 export async function GET(request: Request) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const positionId = searchParams.get('positionId')
     const search = searchParams.get('search')
@@ -61,6 +64,7 @@ export async function GET(request: Request) {
     }))
     return NextResponse.json(withType)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('ArchiveDI GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки архива ДИ' }, { status: 500 })
   }
@@ -70,6 +74,7 @@ export async function GET(request: Request) {
 // positionId опционален: ДИ можно загрузить без привязки и привязать позже
 export async function POST(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { title, content, positionId, fileName } = body
 
@@ -106,6 +111,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(archiveDI, { status: 201 })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('ArchiveDI POST error:', error)
     return NextResponse.json({ error: 'Ошибка создания архивной ДИ' }, { status: 500 })
   }
@@ -115,6 +121,7 @@ export async function POST(request: Request) {
 // positionId может быть null (отвязка) или string (привязка/перепривязка)
 export async function PUT(request: Request) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id, title, content, positionId, fileName } = body
 
@@ -162,6 +169,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(updated)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('ArchiveDI PUT error:', error)
     return NextResponse.json({ error: 'Ошибка обновления архивной ДИ' }, { status: 500 })
   }
@@ -170,6 +178,7 @@ export async function PUT(request: Request) {
 // DELETE /api/archive-di - Удаление архивной ДИ
 export async function DELETE(request: Request) {
   try {
+    await requireRole('admin')
     const body = await request.json()
     const { id } = body
 
@@ -193,6 +202,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('ArchiveDI DELETE error:', error)
     return NextResponse.json({ error: 'Ошибка удаления архивной ДИ' }, { status: 500 })
   }

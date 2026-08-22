@@ -15,11 +15,14 @@ const IV_LENGTH = 12 // 96 бит — рекомендация для GCM
 function getKey(): Buffer {
   const raw = process.env.AI_PROVIDER_ENCRYPTION_KEY
   if (!raw || raw.length === 0) {
-    // В dev-окружении fallback на стандартный ключ (с предупреждением).
-    // Это позволяет работать без .env, но НЕ безопасно для прода.
     if (process.env.NODE_ENV === 'production') {
       throw new Error(
         'AI_PROVIDER_ENCRYPTION_KEY не задан. Установите переменную окружения для production.'
+      )
+    }
+    if (process.env.AI_PROVIDER_ALLOW_DEV_KEY !== 'true') {
+      throw new Error(
+        'AI_PROVIDER_ENCRYPTION_KEY не задан. Установите его в .env, или задайте AI_PROVIDER_ALLOW_DEV_KEY=true для dev.'
       )
     }
     console.warn(
@@ -47,6 +50,9 @@ export function decryptApiKey(encrypted: string | null | undefined): string | nu
   // Обратная совместимость: если ключ хранится в открытом виде (без префикса v1:),
   // возвращаем как есть. Это позволяет мигрировать старые данные.
   if (!encrypted.startsWith('v1:')) {
+    console.warn(
+      '[ai-connector] Найден API-ключ без шифрования (legacy). Запустите scripts/migrate-api-keys.ts для шифрования.'
+    )
     return encrypted
   }
   const parts = encrypted.split(':')

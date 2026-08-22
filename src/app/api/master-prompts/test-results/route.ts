@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAuth } from '@/lib/auth/session'
+import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/master-prompts/test-results — история тестов промпта.
 // ?masterPromptId=... — фильтр по промпту.
 // ?limit=20 — ограничение количества.
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth()
     const { searchParams } = new URL(request.url)
     const masterPromptId = searchParams.get('masterPromptId')
     const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10) || 20, 100)
@@ -21,6 +24,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(results)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('TestResults GET error:', error)
     return NextResponse.json({ error: 'Ошибка загрузки результатов тестов' }, { status: 500 })
   }
@@ -30,6 +34,7 @@ export async function GET(request: NextRequest) {
 // Тело: { id, rating }  rating: 1-5
 export async function PUT(request: NextRequest) {
   try {
+    await requireAuth()
     const body = await request.json()
     const { id, rating } = body
 
@@ -54,6 +59,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(updated)
   } catch (error) {
+    if (error instanceof ApiError) return errorResponse(error)
     console.error('TestResults PUT error:', error)
     return NextResponse.json({ error: 'Ошибка обновления оценки' }, { status: 500 })
   }
