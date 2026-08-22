@@ -142,7 +142,7 @@ export function GenerationModule() {
       try {
         const res = await fetch(`/api/archive-di?positionId=${selPositionId}`)
         if (res.ok) {
-          const data = await res.json()
+          const data = (await res.json()).items
           setArchiveDIs(Array.isArray(data) ? data.map((a: { id: string; title: string; uploadedAt: string }) => ({ id: a.id, title: a.title, uploadedAt: a.uploadedAt })) : [])
         }
       } catch { /* silent */ }

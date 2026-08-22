@@ -162,6 +162,7 @@ model ArchiveDI {
   updatedAt   DateTime @updatedAt
 
   @@index([positionId])
+  @@index([uploadedAt])
 }
 
 // ==========================================
@@ -251,6 +252,7 @@ model GeneratedDI {
   @@index([status])
   @@index([templateId])
   @@index([sourceArchiveId])
+  @@index([createdAt])
 }
 
 model GeneratedDISection {
@@ -364,6 +366,7 @@ model DIVersion {
   createdAt         DateTime @default(now())
 
   @@index([generatedDIId])
+  @@index([createdAt])
 }
 
 // ==========================================

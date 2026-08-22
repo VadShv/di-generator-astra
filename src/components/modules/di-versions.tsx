@@ -245,7 +245,7 @@ export function DIVersionsModule() {
       ])
       if (!genRes.ok || !archRes.ok) throw new Error()
       setGeneratedDIs(await genRes.json())
-      setArchiveDIs(await archRes.json())
+      setArchiveDIs((await archRes.json()).items)
     } catch {
       toast({ title: 'Ошибка', description: 'Не удалось загрузить ДИ', variant: 'destructive' })
     } finally {
@@ -258,7 +258,7 @@ export function DIVersionsModule() {
     try {
       const res = await fetch(`/api/compare?generatedDIId=${diId}`)
       if (!res.ok) throw new Error()
-      const vers: DIVersion[] = await res.json()
+      const vers: DIVersion[] = (await res.json()).items
       setVersionsByDI(prev => ({ ...prev, [diId]: vers }))
     } catch {
       toast({ title: 'Ошибка', description: 'Не удалось загрузить версии', variant: 'destructive' })

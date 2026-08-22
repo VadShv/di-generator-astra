@@ -25,7 +25,9 @@ const log = createLogger('mass-generate-worker')
 /** Интервал опроса очереди (мс). */
 const POLL_INTERVAL_MS = 2000
 /** Максимум одновременных обрабатываемых job'ов. */
-const MAX_CONCURRENT_JOBS = 1
+const MAX_CONCURRENT_JOBS = 3
+/** Размер пакета должностей для параллельной обработки. */
+const BATCH_SIZE = 5
 
 let activeJobs = 0
 let pollTimer: ReturnType<typeof setTimeout> | null = null
@@ -127,7 +129,8 @@ async function processJob(jobId: string): Promise<void> {
   let completed = 0
   let failed = 0
 
-  for (const position of positions) {
+  // Обработка одной должности (вынесена для параллельного вызова).
+  const processPosition = async (position: typeof positions[0]): Promise<{ positionId: string; positionTitle: string; diId: string; title: string; status: string; message?: string }> => {
     try {
       const masterPrompt = await resolveMasterPrompt('generation', {
         departmentId: position.departmentId,
@@ -187,16 +190,31 @@ async function processJob(jobId: string): Promise<void> {
         'Начальная AI-генерация (массовая)'
       )
 
-      results.push({ positionId: position.id, positionTitle: position.title, diId: generatedDI.id, title: generatedDI.title, status: 'success' })
-      completed++
+      return { positionId: position.id, positionTitle: position.title, diId: generatedDI.id, title: generatedDI.title, status: 'success' }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Ошибка генерации'
-      results.push({ positionId: position.id, positionTitle: position.title, diId: '', title: '', status: 'error', message })
-      failed++
       log.error(`Job ${jobId}: position ${position.id} failed`, { message })
+      return { positionId: position.id, positionTitle: position.title, diId: '', title: '', status: 'error', message }
+    }
+  }
+
+  // Пакетная параллельная обработка: BATCH_SIZE должностей одновременно.
+  for (let i = 0; i < positions.length; i += BATCH_SIZE) {
+    const batch = positions.slice(i, i + BATCH_SIZE)
+    const batchResults = await Promise.allSettled(batch.map((p) => processPosition(p)))
+
+    for (const r of batchResults) {
+      if (r.status === 'fulfilled') {
+        results.push(r.value)
+        if (r.value.status === 'success') completed++
+        else failed++
+      } else {
+        // allSettled reject — не должно случиться (processPosition ловит ошибки)
+        failed++
+      }
     }
 
-    // Обновляем прогресс после каждой должности.
+    // Обновляем прогресс после каждого пакета (меньше DB-запросов).
     await db.generationJob.update({
       where: { id: jobId },
       data: { completed, failed, results: JSON.stringify(results) },

@@ -124,7 +124,7 @@ export function ArchiveModule() {
       params.set('linkStatus', linkStatus)
       if (searchText) params.set('search', searchText)
       const res = await fetch(`/api/archive-di?${params.toString()}`)
-      if (res.ok) setArchiveDIs(await res.json())
+      if (res.ok) setArchiveDIs((await res.json()).items)
     } catch { /* silent */ }
   }, [linkStatus, searchText])
 

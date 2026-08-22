@@ -231,7 +231,7 @@ export function AiAuditModule() {
       setLoading(true)
       const res = await fetch('/api/generated-di')
       if (!res.ok) throw new Error()
-      setGeneratedDIs(await res.json())
+      setGeneratedDIs((await res.json()).items)
     } catch {
       toast({ title: 'Ошибка', description: 'Не удалось загрузить ДИ', variant: 'destructive' })
     } finally {

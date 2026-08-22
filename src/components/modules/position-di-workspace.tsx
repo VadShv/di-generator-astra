@@ -175,11 +175,11 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
        fetch('/api/generated-di'),
        fetch('/api/templates'),
      ])
-     if (archRes.ok) setArchiveDIs((await archRes.json()) as ArchiveDIRow[])
-     if (genRes.ok) {
-       const all = (await genRes.json()) as GeneratedDIRow[]
-       setGeneratedDIs(all.filter(d => d.positionId === position.id))
-     }
+      if (archRes.ok) setArchiveDIs((await archRes.json()).items as ArchiveDIRow[])
+      if (genRes.ok) {
+        const all = (await genRes.json()).items as GeneratedDIRow[]
+        setGeneratedDIs(all.filter(d => d.positionId === position.id))
+      }
      if (tmplRes.ok) setTemplates((await tmplRes.json()) as TemplateRow[])
       // Мастер-промпты для выбора при генерации (только активные, категория generation)
       const mpRes = await fetch('/api/master-prompts?active=true')
@@ -347,7 +347,7 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
     try {
       const res = await fetch(`/api/compare?generatedDIId=${diId}`)
       if (res.ok) {
-        setVersions((await res.json()) as VersionRow[])
+        setVersions((await res.json()).items as VersionRow[])
       }
     } catch {
       setVersions([])

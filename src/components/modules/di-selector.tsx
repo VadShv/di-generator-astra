@@ -88,10 +88,10 @@ export function DISelector({
           fetch('/api/generated-di'),
           fetch(`/api/archive-di?positionId=${selPositionId}`),
         ])
-        const genAll: GeneratedDIRow[] = genRes.ok ? await genRes.json() : []
+        const genAll: GeneratedDIRow[] = genRes.ok ? (await genRes.json()).items : []
         // Фильтруем по выбранной должности.
         setGeneratedDIs(genAll.filter(g => g.position?.id === selPositionId))
-        setArchiveDIs(archRes.ok ? await archRes.json() : [])
+        setArchiveDIs(archRes.ok ? (await archRes.json()).items : [])
       } catch {
         // silent
       } finally {

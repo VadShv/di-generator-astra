@@ -14,18 +14,26 @@ const ARCHIVE_INCLUDE = {
   },
 } as const
 
-// GET /api/archive-di - Список архивных ДИ с фильтрами
+// GET /api/archive-di - Paginated list of archive DIs with filters
 // Параметры:
 //   positionId — фильтр по конкретной должности
 //   search     — поиск по title/content/fileName
 //   linkStatus — unlinked | linked | all (статус привязки к должности)
+//   page, pageSize — пагинация
+// Возвращает: { items, total, page, pageSize }
+// Внимание: content НЕ загружается в списке — только при запросе конкретной ДИ (GET /api/archive-di/[id])
+const DEFAULT_PAGE_SIZE = 50
+const MAX_PAGE_SIZE = 200
+
 export async function GET(request: Request) {
   try {
     await requireAuth()
     const { searchParams } = new URL(request.url)
     const positionId = searchParams.get('positionId')
     const search = searchParams.get('search')
-    const linkStatus = searchParams.get('linkStatus') // unlinked | linked | all
+    const linkStatus = searchParams.get('linkStatus')
+    const page = Math.max(1, Number(searchParams.get('page')) || 1)
+    const pageSize = Math.min(MAX_PAGE_SIZE, Number(searchParams.get('pageSize')) || DEFAULT_PAGE_SIZE)
 
     const where: Record<string, unknown> = {}
 
@@ -36,33 +44,47 @@ export async function GET(request: Request) {
     } else if (linkStatus === 'linked') {
       where.positionId = { not: null }
     }
-    // linkStatus === 'all' или не передан — без фильтра по привязке
 
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
-        { content: { contains: search, mode: 'insensitive' } },
         { fileName: { contains: search, mode: 'insensitive' } },
       ]
     }
 
-    const archiveDIs = await db.archiveDI.findMany({
-      where,
-      include: {
-        ...ARCHIVE_INCLUDE,
-        // Фаза 23: производные сгенерированные ДИ (для бейджа «на базе»).
-        _count: { select: { derivedGeneratedDIs: true } },
-      },
-      orderBy: { uploadedAt: 'desc' },
-    })
+    const [items, total] = await Promise.all([
+      db.archiveDI.findMany({
+        where,
+        select: {
+          id: true,
+          title: true,
+          fileName: true,
+          uploadedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          positionId: true,
+          position: {
+            select: {
+              id: true,
+              title: true,
+              department: { select: { id: true, name: true, company: { select: { id: true, name: true } } } },
+            },
+          },
+          _count: { select: { derivedGeneratedDIs: true } },
+        },
+        orderBy: { uploadedAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      db.archiveDI.count({ where }),
+    ])
 
-    // Фаза 23: добавляем type = 'archive' и кол-во производных ДИ.
-    const withType = archiveDIs.map((di) => ({
+    const withType = items.map((di) => ({
       ...di,
       type: 'archive' as const,
       derivedCount: di._count?.derivedGeneratedDIs ?? 0,
     }))
-    return NextResponse.json(withType)
+    return NextResponse.json({ items: withType, total, page, pageSize })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
     console.error('ArchiveDI GET error:', error)

@@ -60,24 +60,31 @@ export async function GET(request: NextRequest) {
         },
         orderBy: { updatedAt: 'desc' },
       }),
-      db.archiveDI.findMany({
-        where: {
-          OR: [
-            { title: { contains: q, mode: 'insensitive' } },
-            { fileName: { contains: q, mode: 'insensitive' } },
-            { content: { contains: q, mode: 'insensitive' } },
-          ],
-        },
-        take: limit,
-        select: {
-          id: true,
-          title: true,
-          uploadedAt: true,
-          fileName: true,
-          position: { select: { id: true, title: true, department: { select: { id: true, name: true, company: { select: { name: true } } } } } },
-        },
-        orderBy: { uploadedAt: 'desc' },
-      }),
+      // ArchiveDI: полнотекстовый поиск по content через to_tsvector (GIN-индекс),
+      // триграммный поиск по title/fileName (pg_trgm GIN-индекс).
+      db.$queryRaw<Array<{
+        id: string
+        title: string
+        uploadedAt: Date
+        fileName: string | null
+        positionId: string | null
+        positionTitle: string | null
+        departmentName: string | null
+        companyName: string | null
+      }>>`
+        SELECT a.id, a.title, a."uploadedAt", a."fileName",
+               p.id AS "positionId", p.title AS "positionTitle",
+               d.name AS "departmentName", c.name AS "companyName"
+        FROM "ArchiveDI" a
+        LEFT JOIN "Position" p ON a."positionId" = p.id
+        LEFT JOIN "Department" d ON p."departmentId" = d.id
+        LEFT JOIN "Company" c ON d."companyId" = c.id
+        WHERE a.title ILIKE '%' || ${q} || '%'
+           OR a."fileName" ILIKE '%' || ${q} || '%'
+           OR to_tsvector('russian', a.content) @@ plainto_tsquery('russian', ${q})
+        ORDER BY a."uploadedAt" DESC
+        LIMIT ${limit}
+      `,
     ])
 
     return NextResponse.json({
@@ -110,10 +117,10 @@ export async function GET(request: NextRequest) {
         type: 'archive' as const,
         uploadedAt: a.uploadedAt,
         fileName: a.fileName ?? null,
-        positionTitle: a.position?.title ?? null,
-        departmentName: a.position?.department?.name ?? null,
-        companyName: a.position?.department?.company?.name ?? null,
-        linked: Boolean(a.position),
+        positionTitle: a.positionTitle ?? null,
+        departmentName: a.departmentName ?? null,
+        companyName: a.companyName ?? null,
+        linked: Boolean(a.positionId),
       })),
     })
   } catch (error) {
