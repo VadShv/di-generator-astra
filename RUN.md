@@ -73,7 +73,7 @@ bun run db:push   (sandbox_permissions=require_escalated)
 
 ### 3. Next.js dev — Turbopack (БЫСТРО, по умолчанию)
 ```
-cd /home/astra/di-generator-astra && bun next dev -p 3000 -H 0.0.0.0
+cd /home/astra/di-generator-astra && bun next dev -p 3001 -H 0.0.0.0
 ```
 (или `bun run dev` — запускается через `scripts/start.sh start`).
 Turbopack включён по умолчанию (Next 16). Работает БЛАГОДАРЯ фиксу в next.config.ts:

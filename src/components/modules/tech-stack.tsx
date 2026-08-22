@@ -186,7 +186,7 @@ interface CommandItem {
 const runCommands: CommandItem[] = [
   { command: 'bash scripts/start-postgres.sh start', description: 'Запуск portable PostgreSQL (127.0.0.1:5432)', escalation: true },
   { command: 'bun run db:push', description: 'Применить схему Prisma к БД', escalation: true },
-  { command: 'bun run dev', description: 'Dev-сервер Next.js (Turbopack, :3000)', escalation: true },
+  { command: 'bun run dev', description: 'Dev-сервер Next.js (Turbopack, :3001)', escalation: true },
   { command: 'bun next dev -p 3000 -H 0.0.0.0', description: 'Альтернативный запуск dev-сервера' },
   { command: 'bun run build', description: 'Production-сборка (standalone)' },
   { command: 'bun run start', description: 'Запуск production-сервера' },

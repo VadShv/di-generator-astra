@@ -1,6 +1,6 @@
 :81 {
 	handle {
-		reverse_proxy [::1]:3000 {
+		reverse_proxy [::1]:3001 {
 			header_up Host {host}
 			header_up X-Forwarded-For {remote_host}
 			header_up X-Forwarded-Proto {scheme}

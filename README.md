@@ -84,7 +84,7 @@ bun run db:generate
 bun run dev
 ```
 
-Приложение откроется по адресу http://localhost:3000
+Приложение откроется по адресу http://localhost:3001
 
 ### 5. (Опционально) Сборка и прод-запуск
 
@@ -177,7 +177,7 @@ prisma/
 
 | Команда | Действие |
 | --- | --- |
-| `bun run dev` | Запуск дев-сервера (http://localhost:3000) |
+| `bun run dev` | Запуск дев-сервера (http://localhost:3001) |
 | `bun run build` | Сборка прод-версии |
 | `bun run start` | Запуск прод-сервера |
 | `bun run lint` | Проверка ESLint |

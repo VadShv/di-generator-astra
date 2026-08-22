@@ -21,7 +21,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PGROOT="${PGROOT:-/tmp/pgroot}"
 PGLIB="$PGROOT/usr/lib/x86_64-linux-gnu"
 PGDATA="${PGDATA:-$PROJECT_DIR/.pgdata}"
-NEXT_PORT="${NEXT_PORT:-3000}"
+NEXT_PORT="${NEXT_PORT:-3001}"
 CLEAN_ENV="env -i PATH=/usr/bin:/bin HOME=/tmp LD_LIBRARY_PATH=$PGLIB"
 
 cd "$PROJECT_DIR"
