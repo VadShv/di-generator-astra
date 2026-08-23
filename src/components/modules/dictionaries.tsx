@@ -389,6 +389,12 @@ export function DictionariesModule() {
           {item.description && (
             <p className="text-sm text-muted-foreground line-clamp-2">{item.description}</p>
           )}
+          {item.promptAddition && (
+            <div className="bg-amber-50/50 border border-amber-200/50 rounded-md p-2">
+              <p className="text-xs font-medium text-amber-700 mb-0.5">Инструкция для ИИ:</p>
+              <p className="text-xs text-muted-foreground line-clamp-3">{item.promptAddition}</p>
+            </div>
+          )}
           {item._count && item._count.positions > 0 && (
             <p className="text-xs text-muted-foreground">
               Привязана к {item._count.positions} должности(-ям)

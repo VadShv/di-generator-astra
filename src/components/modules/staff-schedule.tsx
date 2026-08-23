@@ -314,7 +314,7 @@ export function StaffScheduleModule() {
       id: p.id, title: p.title, code: p.code, departmentId: p.departmentId,
       grade: p.grade || '', businessFunctionId: p.businessFunctionId || '', projectId: p.projectId || '',
       headcount: p.headcount, functions: p.functions || '',
-      attributeIds: (p as Position & { attributes?: { id: string }[] }).attributes?.map(a => a.id) || []
+      attributeIds: p.attributes?.map(a => a.id) || []
     })
     setPosDialogOpen(true)
   }
@@ -613,7 +613,7 @@ export function StaffScheduleModule() {
 
           {/* Company summary badges */}
           <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-teal-50 text-teal-700 border-teal-200">
-            {allCompanyDeptIds.length} подр.
+            {new Set(allCompanyDeptIds).size} подр.
           </Badge>
           <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-emerald-50 text-emerald-700 border-emerald-200">
             {companyPositions.length} должн.
@@ -1197,7 +1197,7 @@ export function StaffScheduleModule() {
             <div><Label>Штатных единиц</Label><Input type="number" min={1} value={posForm.headcount} onChange={e => setPosForm(p => ({ ...p, headcount: parseInt(e.target.value) || 1 }))} /></div>
             <div><Label>Функции</Label><Textarea value={posForm.functions} onChange={e => setPosForm(p => ({ ...p, functions: e.target.value }))} className="min-h-[60px]" placeholder="Управление отделом, планирование..." /></div>
             {positionAttributes.length > 0 && (
-              <div className="col-span-2">
+              <div>
                 <Label className="mb-2 block">Признаки должности</Label>
                 <div className="flex flex-wrap gap-2">
                   {positionAttributes.map(attr => {

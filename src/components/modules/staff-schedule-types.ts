@@ -76,6 +76,7 @@ export interface Position {
   functions: string | null
   generatedDIs: GDI[]
   archiveDIs: { id: string }[]
+  attributes?: { id: string; name: string; code: string }[]
   createdAt: string
   updatedAt: string
 }
