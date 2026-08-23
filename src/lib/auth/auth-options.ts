@@ -10,6 +10,7 @@ import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { db } from '@/lib/db'
 import { verifyPassword } from '@/lib/auth/password'
+import { parsePermissions, type Permissions } from '@/lib/auth/permissions'
 
 function getAuthSecret(): string {
   const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET
@@ -49,7 +50,7 @@ export const authOptions: NextAuthOptions = {
 
         const user = await db.user.findUnique({
           where: { email },
-          select: { id: true, email: true, name: true, role: true, passwordHash: true, isActive: true },
+          select: { id: true, email: true, name: true, role: true, passwordHash: true, isActive: true, permissions: true },
         })
         if (!user || !user.isActive) return null
 
@@ -61,12 +62,15 @@ export const authOptions: NextAuthOptions = {
           .update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
           .catch(() => undefined)
 
+        const permissions = parsePermissions(user.role, user.permissions)
+
         return {
           id: user.id,
           email: user.email,
           name: user.name ?? undefined,
           role: user.role,
-        } as unknown as { id: string; email: string; name?: string | null; role: string }
+          permissions,
+        } as unknown as { id: string; email: string; name?: string | null; role: string; permissions: Permissions }
       },
     }),
   ],
@@ -75,6 +79,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = (user as unknown as { id: string }).id
         token.role = (user as unknown as { role: string }).role
+        token.permissions = (user as unknown as { permissions: Permissions }).permissions
       }
       return token
     },
@@ -82,6 +87,7 @@ export const authOptions: NextAuthOptions = {
       if (token && session.user) {
         ;(session.user as { id?: string }).id = token.id as string
         ;(session.user as { role?: string }).role = token.role as string
+        ;(session.user as { permissions?: Permissions }).permissions = token.permissions as Permissions
       }
       return session
     },

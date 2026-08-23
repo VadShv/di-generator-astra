@@ -1,192 +1,216 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useAppStore } from '@/lib/store'
+import { useToast } from '@/hooks/use-toast'
 import {
-  CommandDialog, CommandInput, CommandList, CommandEmpty,
-  CommandGroup, CommandItem,
-} from '@/components/ui/command'
-import { Users, Building2, FileText, Search, Archive } from 'lucide-react'
-import { useAppStore, type ActiveSection } from '@/lib/store'
+  Dialog, DialogContent,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Search, Loader2, Building2, FolderTree, Briefcase, FileText, CornerDownLeft } from 'lucide-react'
 
-type PositionResult = {
-  id: string
-  title: string
-  grade: string | null
-  departmentName: string | null
-  companyName: string | null
-}
-type DepartmentResult = {
-  id: string
-  name: string
-  code: string
-  companyName: string | null
-}
-type InstructionResult = {
-  id: string
-  title: string
-  status: string
-  updatedAt: string
-  positionTitle: string | null
-}
-type ArchiveDIResult = {
-  id: string
-  title: string
-  uploadedAt: string
-  fileName: string | null
-  positionTitle: string | null
-  departmentName: string | null
-  companyName: string | null
-  linked: boolean
-}
-type SearchResponse = {
-  positions: PositionResult[]
-  departments: DepartmentResult[]
-  instructions: InstructionResult[]
-  archiveDIs?: ArchiveDIResult[]
+interface SearchResult {
+  positions: Array<{ id: string; title: string; grade: string | null; department: { name: string; company: { name: string } } }>
+  departments: Array<{ id: string; name: string; code: string | null; company: { name: string } }>
+  instructions: Array<{ id: string; title: string; status: string; position: { title: string; department: { name: string } } }>
+  archiveDIs: Array<{ id: string; title: string; positionTitle: string | null; departmentName: string | null; companyName: string | null }>
 }
 
-// Глобальный поиск с дебаунсом: должности / подразделения / должностные инструкции.
-// Открывается по клику на триггер или хоткею Cmd/Ctrl+K.
 export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const setActiveSection = useAppStore(s => s.setActiveSection)
+  const { setActiveSection } = useAppStore()
+  const { toast } = useToast()
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<SearchResponse>({ positions: [], departments: [], instructions: [], archiveDIs: [] })
   const [loading, setLoading] = useState(false)
+  const [results, setResults] = useState<SearchResult | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const runSearch = useCallback(async (q: string) => {
+  useEffect(() => {
+    if (open) {
+      setQuery('')
+      setResults(null)
+      setTimeout(() => inputRef.current?.focus(), 100)
+    }
+  }, [open])
+
+  const doSearch = useCallback(async (q: string) => {
     if (q.trim().length < 2) {
-      setResults({ positions: [], departments: [], instructions: [] })
+      setResults(null)
       return
     }
     setLoading(true)
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=10`)
-      const data = await res.json()
-      if (res.ok) setResults(data)
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q.trim())}&limit=10`)
+      if (res.ok) {
+        setResults(await res.json())
+      }
     } catch {
-      // Тихо игнорируем сетевые ошибки — поиск вспомогательный
+      // silent
     } finally {
       setLoading(false)
     }
   }, [])
 
-  // Дебаунс 300 мс
-  useEffect(() => {
-    const timer = setTimeout(() => runSearch(query), 300)
-    return () => clearTimeout(timer)
-  }, [query, runSearch])
-
-  const hasResults =
-    results.positions.length > 0 ||
-    results.departments.length > 0 ||
-    results.instructions.length > 0
-    || (results.archiveDIs?.length ?? 0) > 0
-
-  const goTo = (section: ActiveSection) => {
-    setActiveSection(section)
-    onOpenChange(false)
+  const handleQueryChange = (value: string) => {
+    setQuery(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => doSearch(value), 300)
   }
 
-  return (
-    <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Поиск должностей, подразделений, инструкций..." value={query} onValueChange={setQuery} />
-      <CommandList>
-        {loading && <div className="py-6 text-center text-sm text-muted-foreground">Поиск...</div>}
-        {!loading && !hasResults && query.trim().length >= 2 && (
-          <CommandEmpty>Ничего не найдено</CommandEmpty>
-        )}
-        {!loading && query.trim().length < 2 && (
-          <div className="py-6 text-center text-sm text-muted-foreground">
-            Введите минимум 2 символа для поиска
-          </div>
-        )}
+  const handleSelect = (type: 'position' | 'department' | 'instruction' | 'archive', id: string) => {
+    onOpenChange(false)
+    if (type === 'position' || type === 'department') {
+      setActiveSection('staff-schedule')
+    } else if (type === 'instruction') {
+      setActiveSection('version-history')
+    } else if (type === 'archive') {
+      setActiveSection('archive')
+    }
+    toast({ title: 'Переход', description: `Выбран элемент: ${id.slice(-6)}` })
+  }
 
-        {results.positions.length > 0 && (
-          <CommandGroup heading="Должности">
-            {results.positions.map(p => (
-              <CommandItem key={p.id} onSelect={() => goTo('staff-schedule')} className="gap-2">
-                <Users className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm">{p.title}</div>
-                  {(p.departmentName || p.companyName) && (
-                    <div className="truncate text-xs text-muted-foreground">
-                      {[p.departmentName, p.companyName].filter(Boolean).join(' • ')}
-                    </div>
-                  )}
-                </div>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        )}
-
-        {results.departments.length > 0 && (
-          <CommandGroup heading="Подразделения">
-            {results.departments.map(d => (
-              <CommandItem key={d.id} onSelect={() => goTo('dictionaries')} className="gap-2">
-                <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm">{d.name}</div>
-                  <div className="truncate text-xs text-muted-foreground">{d.code}{d.companyName ? ` • ${d.companyName}` : ''}</div>
-                </div>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        )}
-
-        {results.instructions.length > 0 && (
-          <CommandGroup heading="Должностные инструкции">
-            {results.instructions.map(i => (
-              <CommandItem key={i.id} onSelect={() => goTo('archive')} className="gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm">{i.title}</div>
-                 <div className="truncate text-xs text-muted-foreground">
-                   {i.positionTitle ?? 'Без должности'} • {i.status}
-                 </div>
-                  {(i as InstructionResult & { departmentName?: string | null; companyName?: string | null }).companyName && (
-                    <div className="truncate text-xs text-muted-foreground/70">
-                      {(i as InstructionResult & { departmentName?: string | null; companyName?: string | null }).companyName}
-                      {(i as InstructionResult & { departmentName?: string | null; companyName?: string | null }).departmentName ? ` · ${(i as InstructionResult & { departmentName?: string | null }).departmentName}` : ''}
-                    </div>
-                  )}
-               </div>
-             </CommandItem>
-           ))}
-         </CommandGroup>
-       )}
-        {(results.archiveDIs?.length ?? 0) > 0 && (
-          <CommandGroup heading="Архивные ДИ">
-            {(results.archiveDIs ?? []).map(a => (
-              <CommandItem key={a.id} onSelect={() => goTo('archive')} className="gap-2">
-                <Archive className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm">{a.title}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {a.linked ? `${a.companyName ?? ''}${a.departmentName ? ` · ${a.departmentName}` : ''}${a.positionTitle ? ` · ${a.positionTitle}` : ''}` : 'Не привязана к должности'}
-                  </div>
-                </div>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        )}
-     </CommandList>
-    </CommandDialog>
+  const hasResults = results && (
+    (results.positions?.length ?? 0) > 0 ||
+    (results.departments?.length ?? 0) > 0 ||
+    (results.instructions?.length ?? 0) > 0 ||
+    (results.archiveDIs?.length ?? 0) > 0
   )
-}
 
-// Триггер-кнопка поиска для шапки
-export function SearchTrigger({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground w-full max-w-xs"
-    >
-      <Search className="h-4 w-4" />
-      <span className="flex-1 text-left truncate">Поиск...</span>
-      <kbd className="pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">
-        ⌘K
-      </kbd>
-    </button>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
+        <div className="flex items-center border-b px-4">
+          <Search className="h-5 w-5 text-muted-foreground shrink-0" />
+          <Input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => handleQueryChange(e.target.value)}
+            placeholder="Поиск по компаниям, подразделениям, должностям, ДИ..."
+            className="border-0 focus-visible:ring-0 text-base"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') onOpenChange(false)
+            }}
+          />
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />}
+          <kbd className="ml-2 text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">ESC</kbd>
+        </div>
+
+        <div className="max-h-[400px] overflow-y-auto">
+          {!hasResults && query.trim().length >= 2 && !loading && (
+            <div className="py-8 text-center text-muted-foreground">
+              <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">Ничего не найдено по запросу «{query}»</p>
+            </div>
+          )}
+          {!hasResults && query.trim().length < 2 && (
+            <div className="py-8 text-center text-muted-foreground">
+              <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">Начните вводить для поиска</p>
+              <p className="text-xs mt-1">Компании, подразделения, должности, ДИ</p>
+            </div>
+          )}
+
+          {hasResults && (
+            <div className="py-2">
+              {results!.positions?.length > 0 && (
+                <div className="px-2">
+                  <p className="text-xs font-medium text-muted-foreground px-2 py-1 flex items-center gap-1.5">
+                    <Briefcase className="h-3.5 w-3.5" /> Должности
+                  </p>
+                  {results!.positions.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => handleSelect('position', p.id)}
+                      className="w-full text-left px-2 py-2 rounded-lg hover:bg-muted flex items-center gap-2 group"
+                    >
+                      <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{p.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {p.department?.name} · {p.department?.company?.name}
+                        </p>
+                      </div>
+                      <CornerDownLeft className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {results!.departments?.length > 0 && (
+                <div className="px-2 mt-1">
+                  <p className="text-xs font-medium text-muted-foreground px-2 py-1 flex items-center gap-1.5">
+                    <FolderTree className="h-3.5 w-3.5" /> Подразделения
+                  </p>
+                  {results!.departments.map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={() => handleSelect('department', d.id)}
+                      className="w-full text-left px-2 py-2 rounded-lg hover:bg-muted flex items-center gap-2 group"
+                    >
+                      <FolderTree className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{d.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{d.company?.name}</p>
+                      </div>
+                      <CornerDownLeft className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {results!.instructions?.length > 0 && (
+                <div className="px-2 mt-1">
+                  <p className="text-xs font-medium text-muted-foreground px-2 py-1 flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5" /> Сгенерированные ДИ
+                  </p>
+                  {results!.instructions.map((di) => (
+                    <button
+                      key={di.id}
+                      onClick={() => handleSelect('instruction', di.id)}
+                      className="w-full text-left px-2 py-2 rounded-lg hover:bg-muted flex items-center gap-2 group"
+                    >
+                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{di.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {di.position?.title} · {di.position?.department?.name}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-xs shrink-0">{di.status}</Badge>
+                      <CornerDownLeft className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {results!.archiveDIs?.length > 0 && (
+                <div className="px-2 mt-1">
+                  <p className="text-xs font-medium text-muted-foreground px-2 py-1 flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5" /> Архивные ДИ
+                  </p>
+                  {results!.archiveDIs.map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => handleSelect('archive', a.id)}
+                      className="w-full text-left px-2 py-2 rounded-lg hover:bg-muted flex items-center gap-2 group"
+                    >
+                      <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{a.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {[a.positionTitle, a.departmentName, a.companyName].filter(Boolean).join(' · ')}
+                        </p>
+                      </div>
+                      <CornerDownLeft className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

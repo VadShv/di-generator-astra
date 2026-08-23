@@ -4,6 +4,7 @@
 
 import type { AIProviderClient } from '@/lib/ai-connector'
 import { buildGenerationSystemPrompt, buildSectionUserPrompt, buildArchiveContext, type ArchiveDIRef, type PositionForContext } from '@/lib/di/prompts'
+import { db } from '@/lib/db'
 
 /** Секция шаблона (минимальный набор для генерации). */
 export interface TemplateSectionForGen {
@@ -69,6 +70,19 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
           { role: 'user', content: userPrompt },
         ],
       })
+      // Fire-and-forget: сохраняем использование токенов
+      if (result.usage) {
+        db.tokenUsage.create({
+          data: {
+            providerName: result.providerName,
+            modelName: result.modelName,
+            category: 'section',
+            promptTokens: result.usage.promptTokens ?? 0,
+            completionTokens: result.usage.completionTokens ?? 0,
+            totalTokens: result.usage.totalTokens ?? 0,
+          },
+        }).catch(() => {})
+      }
       results.push({
         sectionTitle: section.title,
         sectionContent: (result.content || '').trim(),
@@ -112,6 +126,19 @@ export async function generateAiCultureSection(
         },
       ],
     })
+    // Fire-and-forget: сохраняем использование токенов
+    if (cultureResult.usage) {
+      db.tokenUsage.create({
+        data: {
+          providerName: cultureResult.providerName,
+          modelName: cultureResult.modelName,
+          category: 'culture',
+          promptTokens: cultureResult.usage.promptTokens ?? 0,
+          completionTokens: cultureResult.usage.completionTokens ?? 0,
+          totalTokens: cultureResult.usage.totalTokens ?? 0,
+        },
+      }).catch(() => {})
+    }
     return {
       sectionTitle: 'Взаимодействие с системами ИИ',
       sectionContent: (cultureResult.content || '').trim() || '[Раздел не сгенерирован]',

@@ -1,12 +1,13 @@
 'use client'
 
 import { useAppStore, type ActiveSection } from '@/lib/store'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import {
   LayoutDashboard, Users, BookOpen, Archive, FileText, Brain, Sparkles,
  ClipboardList,
-Menu, ChevronLeft, Zap, Shield, History, BookOpenIcon,
-Cpu,
+ Menu, ChevronLeft, Zap, Shield, History, BookOpenIcon,
+ Cpu, UserCircle, Search,
 } from 'lucide-react'
 import { Boxes, MessageCircle, Loader2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
@@ -14,7 +15,9 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { hasAccess, type Permissions } from '@/lib/auth/permissions'
 import { DashboardModule } from '@/components/modules/dashboard'
+import { GlobalSearch } from '@/components/global-search'
 
 const StaffScheduleModule = dynamic(() => import('@/components/modules/staff-schedule').then(m => m.StaffScheduleModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
 const ArchiveModule = dynamic(() => import('@/components/modules/archive').then(m => m.ArchiveModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
@@ -29,6 +32,7 @@ const InstructionsModule = dynamic(() => import('@/components/modules/instructio
 const TechStackModule = dynamic(() => import('@/components/modules/tech-stack').then(m => m.TechStackModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
 const AiProvidersModule = dynamic(() => import('@/components/modules/ai-providers').then(m => m.AiProvidersModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
 const DIVersionsModule = dynamic(() => import('@/components/modules/di-versions').then(m => m.DIVersionsModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
+const ProfileModule = dynamic(() => import('@/components/modules/profile').then(m => m.ProfileModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
 
 const navItems: { id: ActiveSection; label: string; icon: React.ElementType; iconBg: string; iconColor: string; group: string }[] = [
   { id: 'dashboard', label: 'Дашборд', icon: LayoutDashboard, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', group: 'Обзор' },
@@ -44,7 +48,8 @@ const navItems: { id: ActiveSection; label: string; icon: React.ElementType; ico
   { id: 'version-history', label: 'Версии и сравнение', icon: History, iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600', group: 'Жизненный цикл' },
   { id: 'ai-audit', label: 'AI-аудит', icon: Shield, iconBg: 'bg-red-100', iconColor: 'text-red-600', group: 'Анализ' },
   { id: 'instructions', label: 'Инструкция', icon: BookOpen, iconBg: 'bg-gray-100', iconColor: 'text-gray-600', group: 'Помощь' },
-  { id: 'tech-stack', label: 'Стек технологий', icon: Boxes, iconBg: 'bg-slate-100', iconColor: 'text-slate-600', group: 'Помощь' },
+   { id: 'tech-stack', label: 'Стек технологий', icon: Boxes, iconBg: 'bg-slate-100', iconColor: 'text-slate-600', group: 'Помощь' },
+   { id: 'profile', label: 'Личный кабинет', icon: UserCircle, iconBg: 'bg-blue-100', iconColor: 'text-blue-600', group: 'Профиль' },
 ]
 
 const modules: Record<ActiveSection, React.ReactNode> = {
@@ -61,13 +66,31 @@ const modules: Record<ActiveSection, React.ReactNode> = {
   'version-history': <DIVersionsModule />,
   'ai-audit': <AiAuditModule />,
   'instructions': <InstructionsModule />,
-  'tech-stack': <TechStackModule />,
+   'tech-stack': <TechStackModule />,
+   'profile': <ProfileModule />,
 }
 
 export default function HomePage() {
   const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen } = useAppStore()
+  const { data: session } = useSession()
   const [logoFlipped, setLogoFlipped] = useState(false)
-  const groups = ['Обзор', 'Данные', 'Настройка', 'Генерация', 'Жизненный цикл', 'Анализ', 'Помощь']
+  const [searchOpen, setSearchOpen] = useState(false)
+  const permissions = (session?.user as { permissions?: Permissions } | undefined)?.permissions
+
+  // Ctrl+K / Cmd+K — глобальный поиск
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  const groups = ['Обзор', 'Данные', 'Настройка', 'Генерация', 'Жизненный цикл', 'Анализ', 'Помощь', 'Профиль']
+  const visibleNavItems = navItems.filter((item) => hasAccess(permissions, item.id))
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -127,7 +150,7 @@ export default function HomePage() {
         </div>
         <ScrollArea className="flex-1 min-h-0 py-2">
           {groups.map((group) => {
-            const items = navItems.filter((item) => item.group === group)
+            const items = visibleNavItems.filter((item) => item.group === group)
             if (!items.length) return null
             return (
               <div key={group} className="mb-2">
@@ -152,9 +175,20 @@ export default function HomePage() {
       </aside>
       <main className={cn('flex-1 transition-all duration-300', sidebarOpen ? 'ml-64' : 'ml-16')}>
         <div className="p-6 max-w-[1600px] mx-auto">
-          {modules[activeSection]}
+          <div className="flex justify-end mb-2">
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-muted/30 hover:bg-muted/50 text-sm text-muted-foreground transition-colors"
+            >
+              <Search className="h-4 w-4" />
+              <span className="hidden sm:inline">Поиск ДИ</span>
+              <kbd className="text-xs bg-background px-1.5 py-0.5 rounded border">⌘K</kbd>
+            </button>
+          </div>
+          {modules[activeSection] ?? <DashboardModule />}
         </div>
       </main>
+      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
   )
 }

@@ -19,6 +19,10 @@ import {
 } from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import {
   Plus, Trash2, ClipboardList, Tag, Loader2, Building2, Users, Briefcase,
@@ -71,6 +75,19 @@ interface ActivityLog {
   createdAt: string
   tag?: { id: string; label: string } | null
 }
+interface AuditLogEntry {
+  id: string
+  userId: string | null
+  userEmail: string | null
+  action: string
+  method: string
+  path: string
+  entityType: string | null
+  entityId: string | null
+  metadata: Record<string, unknown> | null
+  ip: string | null
+  createdAt: string
+}
 
 // ============ Конфигурация меток ============
 const TAG_KINDS = [
@@ -114,6 +131,23 @@ function entityMeta(type: string | null) {
   if (type === 'department') return { icon: Users, label: 'Подразделение' }
   if (type === 'position') return { icon: Briefcase, label: 'Должность' }
   return { icon: ClipboardList, label: 'Все' }
+}
+
+function formatAuditDate(iso: string) {
+  const d = new Date(iso)
+  const dateStr = d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const timeStr = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  return `${dateStr} ${timeStr}`
+}
+
+function methodBadgeClass(method: string) {
+  switch (method) {
+    case 'GET': return 'bg-blue-100 text-blue-800'
+    case 'POST': return 'bg-emerald-100 text-emerald-800'
+    case 'PUT': return 'bg-amber-100 text-amber-800'
+    case 'DELETE': return 'bg-red-100 text-red-800'
+    default: return 'bg-slate-100 text-slate-800'
+  }
 }
 
 const ACTION_TYPES = [
@@ -162,6 +196,13 @@ export function TrackingModule() {
   // Удаление.
   const [tagToDelete, setTagToDelete] = useState<TrackingTag | null>(null)
 
+  // Журнал всех действий (audit log).
+  const [auditPage, setAuditPage] = useState(1)
+  const [auditItems, setAuditItems] = useState<AuditLogEntry[]>([])
+  const [auditTotal, setAuditTotal] = useState(0)
+  const [auditLoading, setAuditLoading] = useState(false)
+  const auditPageSize = 50
+
   // ============ Загрузка ============
   const fetchCompanies = useCallback(async () => {
     try { const res = await fetch('/api/companies'); if (res.ok) setCompanies(await res.json()) } catch { /* silent */ }
@@ -201,9 +242,25 @@ export function TrackingModule() {
     }
   }, [feedScope, focus, toast])
 
+  const fetchAuditLog = useCallback(async () => {
+    try {
+      setAuditLoading(true)
+      const res = await fetch(`/api/audit-log?page=${auditPage}&pageSize=${auditPageSize}`)
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setAuditItems(data.items ?? [])
+      setAuditTotal(data.total ?? 0)
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось загрузить журнал действий', variant: 'destructive' })
+    } finally {
+      setAuditLoading(false)
+    }
+  }, [auditPage, toast])
+
   useEffect(() => { fetchCompanies() }, [fetchCompanies])
   useEffect(() => { fetchTags() }, [fetchTags])
   useEffect(() => { fetchFeed() }, [fetchFeed])
+  useEffect(() => { fetchAuditLog() }, [fetchAuditLog])
 
   // ============ Действия с метками ============
   const openCreateTag = () => {
@@ -326,6 +383,12 @@ export function TrackingModule() {
 
   return (
     <div className="space-y-4">
+      <Tabs defaultValue="tracking">
+        <TabsList>
+          <TabsTrigger value="tracking">Отслеживание</TabsTrigger>
+          <TabsTrigger value="audit">Все действия</TabsTrigger>
+        </TabsList>
+        <TabsContent value="tracking" className="space-y-4">
       {/* Шапка */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
@@ -499,6 +562,58 @@ export function TrackingModule() {
           </Card>
         </div>
       </div>
+        </TabsContent>
+
+        <TabsContent value="audit" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Журнал всех действий</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {auditLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : auditItems.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <ClipboardList className="h-10 w-10 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">Записей пока нет</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Дата/Время</TableHead>
+                        <TableHead>Пользователь</TableHead>
+                        <TableHead>Действие</TableHead>
+                        <TableHead>Метод</TableHead>
+                        <TableHead>Путь</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {auditItems.map(item => (
+                        <TableRow key={item.id}>
+                          <TableCell>{formatAuditDate(item.createdAt)}</TableCell>
+                          <TableCell>{item.userEmail || item.userId || '—'}</TableCell>
+                          <TableCell>{item.action}</TableCell>
+                          <TableCell><Badge className={`text-xs border-0 ${methodBadgeClass(item.method)}`}>{item.method}</Badge></TableCell>
+                          <TableCell className="font-mono text-xs">{item.path}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Страница {auditPage} · всего {auditTotal}</p>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" disabled={auditPage <= 1 || auditLoading} onClick={() => setAuditPage(p => Math.max(1, p - 1))}>Назад</Button>
+                      <Button size="sm" variant="outline" disabled={auditPage * auditPageSize >= auditTotal || auditLoading} onClick={() => setAuditPage(p => p + 1)}>Далее</Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Диалог метки */}
       <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>

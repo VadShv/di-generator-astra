@@ -577,7 +577,8 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String?
-  role         String   @default("user") // admin | user
+  role         String   @default("user") // admin | kdp | user
+  permissions  String?  // JSON: {"tab-id": "read"|"write"|"none"} — null = полный доступ (admin)
   passwordHash String
   isActive     Boolean  @default(true)
   lastLoginAt  DateTime?
@@ -586,4 +587,58 @@ model User {
 
   @@index([email])
   @@index([role])
+}
+
+// ==========================================
+// Системные настройки (key-value)
+// ==========================================
+model SystemSettings {
+  id        String   @id @default(cuid())
+  key       String   @unique // massGenLimit | fileUploadLimit
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// Учёт потребления токенов ИИ
+// ==========================================
+model TokenUsage {
+  id               String   @id @default(cuid())
+  providerId       String?
+  providerName     String
+  modelName        String
+  userId           String?
+  userEmail        String?
+  category         String   // generation | audit | improve | section | culture
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  totalTokens      Int      @default(0)
+  generatedDIId    String?
+  createdAt        DateTime @default(now())
+
+  @@index([providerId])
+  @@index([userId])
+  @@index([category])
+  @@index([createdAt])
+}
+
+// ==========================================
+// Аудит действий пользователей
+// ==========================================
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  userEmail  String?
+  action     String   // create | update | delete | generate | login | ...
+  method     String   // GET | POST | PUT | DELETE
+  path       String
+  entityType String?
+  entityId   String?
+  metadata   String?  // JSON
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
 }

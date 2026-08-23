@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
 import type { Session } from 'next-auth'
 import { ApiError } from '@/lib/api-utils'
+import { hasAccess, type AccessLevel, type Permissions } from '@/lib/auth/permissions'
 
 export type AppSession = Session & {
   user?: {
@@ -11,6 +12,7 @@ export type AppSession = Session & {
     name?: string | null
     email?: string | null
     role?: string
+    permissions?: Permissions
   }
 }
 
@@ -45,6 +47,26 @@ export async function requireRole(role: string): Promise<AppSession | null> {
   const session = await requireAuth()
   if (session && session.user?.role !== role) {
     throw new ApiError('Недостаточно прав', 403, 'forbidden')
+  }
+  return session
+}
+
+/**
+ * Проверить доступ к вкладке с указанным уровнем.
+ * @param tab — id вкладки (например, 'ai-providers')
+ * @param level — 'read' или 'write'
+ * @returns сессию если доступ есть; null если auth отключен.
+ * @throws ApiError 401/403 если доступ запрещён.
+ */
+export async function requirePermission(
+  tab: string,
+  level: AccessLevel = 'read'
+): Promise<AppSession | null> {
+  const session = await requireAuth()
+  if (!session) return null // auth отключен — открытый доступ
+  const perms = session.user?.permissions
+  if (!hasAccess(perms, tab, level)) {
+    throw new ApiError('Недостаточно прав для этого действия', 403, 'forbidden')
   }
   return session
 }

@@ -15,8 +15,38 @@ const log = createLogger('generate-di/mass-generate')
 // Возвращает 202 с { jobId } — клиент опрашивает статус через GET ?jobId=.
 export const POST = withErrorHandler(async (request: Request) => {
   await requireAuth()
+  checkRateLimit(request, 'mass-generate', 5)
   const body = await parseBody(request, massGenerateSchema)
   const { departmentIds, companyIds, positionIds, templateId, masterPromptId, providerId } = body
+
+  // Подсчёт должностей ДО создания job — проверка лимита
+  let positionCount = 0
+  if (positionIds?.length) {
+    positionCount = positionIds.length
+  } else if (departmentIds?.length) {
+    positionCount = await db.position.count({
+      where: { departmentId: { in: departmentIds } },
+    })
+  } else if (companyIds?.length) {
+    const deptIds = await db.department.findMany({
+      where: { companyId: { in: companyIds } },
+      select: { id: true },
+    })
+    positionCount = await db.position.count({
+      where: { departmentId: { in: deptIds.map((d) => d.id) } },
+    })
+  }
+
+  // Проверка лимита из SystemSettings (по умолчанию 20)
+  const limitSetting = await db.systemSettings.findUnique({ where: { key: 'massGenLimit' } })
+  const massGenLimit = parseInt(limitSetting?.value || '20', 10)
+  if (positionCount > massGenLimit) {
+    throw new ApiError(
+      `Превышен лимит массовой генерации: ${positionCount} должностей, максимум ${massGenLimit}. Уменьшите выборку.`,
+      400,
+      'limit_exceeded'
+    )
+  }
 
   // Создаём job-запись со scope.
   const job = await db.generationJob.create({

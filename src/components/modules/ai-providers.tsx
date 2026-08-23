@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { Cpu, Plus, Pencil, Trash2, Zap, CheckCircle2, XCircle, Star, Loader2 } from 'lucide-react'
 
@@ -102,6 +103,47 @@ const EMPTY_FORM: FormState = {
   isDefault: false,
 }
 
+// Данные статистики использования токенов (ответ /api/token-usage)
+interface TokenUsageData {
+  total: number
+  totalRequests: number
+  avgPerDI: number
+  byDay: { date: string; tokens: number }[]
+  byProvider: { provider: string; tokens: number }[]
+  byCategory: { category: string; tokens: number }[]
+  recent: {
+    id: string
+    providerName: string
+    modelName: string
+    category: string
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+    createdAt: string
+  }[]
+}
+
+function formatNumber(n: number): string {
+  return n.toLocaleString('ru-RU')
+}
+
+function todayStr(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+function parseProviderConfig(config: string): { temperature: string; maxTokens: string } {
+  try {
+    const parsed = JSON.parse(config)
+    return {
+      temperature: String(parsed.temperature ?? 0.7),
+      maxTokens: String(parsed.maxTokens ?? 2048),
+    }
+  } catch {
+    return { temperature: '0.7', maxTokens: '2048' }
+  }
+}
+
 export function AiProvidersModule() {
   const { toast } = useToast()
   const [providers, setProviders] = useState<AIProviderRow[]>([])
@@ -111,6 +153,10 @@ export function AiProvidersModule() {
   const [saving, setSaving] = useState(false)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [tokenUsage, setTokenUsage] = useState<TokenUsageData | null>(null)
+  const [tokenLoading, setTokenLoading] = useState(false)
+  const [optConfig, setOptConfig] = useState<Record<string, { temperature: string; maxTokens: string }>>({})
+  const [optSaving, setOptSaving] = useState<Record<string, boolean>>({})
 
   // Загрузка списка провайдеров
   const loadProviders = useCallback(async () => {
@@ -136,6 +182,60 @@ export function AiProvidersModule() {
   useEffect(() => {
     loadProviders()
   }, [loadProviders])
+
+  // Загрузка статистики использования токенов
+  useEffect(() => {
+    let cancelled = false
+    setTokenLoading(true)
+    fetch('/api/token-usage')
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('Не удалось загрузить статистику'))))
+      .then((data: TokenUsageData) => {
+        if (!cancelled) setTokenUsage(data)
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          toast({
+            title: 'Ошибка',
+            description: e instanceof Error ? e.message : 'Не удалось загрузить статистику',
+            variant: 'destructive',
+          })
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTokenLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [toast])
+
+  // Сохранение настроек оптимизации (config) для конкретного провайдера
+  const handleSaveConfig = async (p: AIProviderRow) => {
+    const cfg = optConfig[p.id] ?? parseProviderConfig(p.config)
+    setOptSaving((s) => ({ ...s, [p.id]: true }))
+    try {
+      const config = JSON.stringify({
+        temperature: Number(cfg.temperature) || 0.7,
+        maxTokens: Number(cfg.maxTokens) || 2048,
+      })
+      const res = await fetch(`/api/ai-providers/${p.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config }),
+      })
+      if (!res.ok) throw new Error('Не удалось сохранить настройки')
+      toast({ title: 'Настройки сохранены', description: p.name })
+      loadProviders()
+    } catch (e) {
+      toast({
+        title: 'Ошибка',
+        description: e instanceof Error ? e.message : 'Не удалось сохранить',
+        variant: 'destructive',
+      })
+    } finally {
+      setOptSaving((s) => ({ ...s, [p.id]: false }))
+    }
+  }
 
   // Открыть форму добавления
   const openAdd = () => {
@@ -311,8 +411,22 @@ export function AiProvidersModule() {
   const needsBaseUrl = form.type !== 'zai'
   const needsFolderId = form.type === 'yandex_cloud'
 
+  const tu = tokenUsage
+  const last14 = tu?.byDay.slice(-14) ?? []
+  const dayMax = Math.max(1, ...last14.map((d) => d.tokens))
+  const providerMax = Math.max(1, ...(tu?.byProvider.map((p) => p.tokens) ?? []))
+  const todayTokens = tu?.byDay.find((d) => d.date === todayStr())?.tokens ?? 0
+
   return (
     <div className="space-y-6">
+      <Tabs defaultValue="providers">
+        <TabsList>
+          <TabsTrigger value="providers">Провайдеры</TabsTrigger>
+          <TabsTrigger value="tokens">Токены</TabsTrigger>
+          <TabsTrigger value="optimization">Оптимизация</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="providers">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
@@ -427,6 +541,194 @@ export function AiProvidersModule() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="tokens">
+          {tokenLoading ? (
+            <div className="space-y-2">
+              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+            </div>
+          ) : !tu ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <p>Нет данных об использовании токенов.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {/* Сводная статистика */}
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                {[
+                  { label: 'Всего токенов', value: tu.total },
+                  { label: 'Запросов', value: tu.totalRequests },
+                  { label: 'Среднее на ДИ', value: tu.avgPerDI },
+                  { label: 'За сегодня', value: todayTokens },
+                ].map((s) => (
+                  <Card key={s.label}>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">{s.label}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{formatNumber(s.value)}</div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* График использования по дням */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Использование по дням (последние 14)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {last14.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Нет данных.</p>
+                  ) : (
+                    <div className="flex items-end gap-1 h-40 w-full">
+                      {last14.map((d) => {
+                        const h = Math.round((d.tokens / dayMax) * 100)
+                        return (
+                          <div key={d.date} className="flex-1 rounded-t bg-purple-500 transition-all hover:bg-purple-600" style={{ height: `${h}%`, minHeight: d.tokens > 0 ? '2px' : 0 }} title={`${d.date}: ${formatNumber(d.tokens)} токенов`} />
+                        )
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Распределение по провайдерам */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Распределение по провайдерам</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {tu.byProvider.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Нет данных.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {tu.byProvider.map((item) => {
+                        const pct = Math.round((item.tokens / providerMax) * 100)
+                        return (
+                          <div key={item.provider} className="space-y-1">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-medium">{item.provider}</span>
+                              <span className="text-muted-foreground">{formatNumber(item.tokens)}</span>
+                            </div>
+                            <div className="h-2 w-full rounded bg-muted overflow-hidden">
+                              <div className="h-full bg-purple-500" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Недавние запросы */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Недавние запросы</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {tu.recent.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Нет данных.</p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Дата</TableHead>
+                          <TableHead>Провайдер</TableHead>
+                          <TableHead>Модель</TableHead>
+                          <TableHead>Категория</TableHead>
+                          <TableHead className="text-right">Prompt</TableHead>
+                          <TableHead className="text-right">Completion</TableHead>
+                          <TableHead className="text-right">Всего</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {tu.recent.slice(0, 10).map((r) => (
+                          <TableRow key={r.id}>
+                            <TableCell className="text-sm text-muted-foreground">{new Date(r.createdAt).toLocaleString('ru-RU')}</TableCell>
+                            <TableCell className="font-medium">{r.providerName}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{r.modelName}</TableCell>
+                            <TableCell><Badge variant="outline">{r.category}</Badge></TableCell>
+                            <TableCell className="text-right text-sm">{formatNumber(r.promptTokens)}</TableCell>
+                            <TableCell className="text-right text-sm">{formatNumber(r.completionTokens)}</TableCell>
+                            <TableCell className="text-right text-sm font-medium">{formatNumber(r.totalTokens)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="optimization">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Cpu className="h-5 w-5 text-purple-600" />
+                  Оптимизация генерации
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">Настройте параметры генерации для каждого провайдера. Значения сохраняются в конфигурации провайдера.</p>
+              </CardHeader>
+            </Card>
+
+            {loading ? (
+              <div className="space-y-2">
+                {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-32 w-full" />)}
+              </div>
+            ) : providers.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <p>Нет провайдеров для настройки.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              providers.map((p) => {
+                const cfg = optConfig[p.id] ?? parseProviderConfig(p.config)
+                return (
+                  <Card key={p.id}>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        {p.name}
+                        <Badge variant="outline">{PROVIDER_TYPE_LABELS[p.type]}</Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Max tokens</Label>
+                          <Input type="number" min="1" value={cfg.maxTokens}
+                            onChange={(e) => setOptConfig((s) => ({ ...s, [p.id]: { ...cfg, maxTokens: e.target.value } }))}
+                          />
+                          <p className="text-xs text-muted-foreground">Максимальное количество токенов в ответе модели. Больше — длиннее ответ, но дороже.</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Temperature</Label>
+                          <Input type="number" step="0.1" min="0" max="2" value={cfg.temperature}
+                            onChange={(e) => setOptConfig((s) => ({ ...s, [p.id]: { ...cfg, temperature: e.target.value } }))}
+                          />
+                          <p className="text-xs text-muted-foreground">Креативность ответа: 0 — точный и детерминированный, 2 — максимально разнообразный.</p>
+                        </div>
+                      </div>
+                      <Button onClick={() => handleSaveConfig(p)} disabled={optSaving[p.id]}>
+                        {optSaving[p.id] && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        Сохранить
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )
+              })
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Диалог добавления/редактирования */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

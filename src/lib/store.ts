@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 
-export type ActiveSection = 
+export type ActiveSection =
  | 'dashboard' | 'staff-schedule' | 'dictionaries' | 'archive' | 'templates'
  | 'master-prompts' | 'generation' | 'tracking'
  | 'mass-generation' | 'ai-audit' | 'version-history' | 'instructions'
-  | 'ai-providers' | 'tech-stack'
+  | 'ai-providers' | 'tech-stack' | 'profile'
 
 interface AppState {
   activeSection: ActiveSection
