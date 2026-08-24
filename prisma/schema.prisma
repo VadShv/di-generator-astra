@@ -51,6 +51,8 @@ model Department {
   staffingTables StaffingTable[]
   masterPrompts  MasterPrompt[]
   trackings      DITracking[]
+  lineages       PositionLineage[]
+  raciMatrix     RACIMatrix?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -156,8 +158,9 @@ model Position {
  uploadedDocuments   UploadedDocument[]
  masterPrompts      MasterPrompt[] // Промпты, привязанные к конкретной должности (Фаза 21)
  trackings          DITracking[] // Отслеживание ДИ по должности (Фаза 22)
- attributes         PositionAttribute[] // Признаки должности (мат. ответственность, ПДн и др.)
- createdAt           DateTime @default(now())
+  attributes         PositionAttribute[] // Признаки должности (мат. ответственность, ПДн и др.)
+  lineageItems       PositionLineageItem[] // Участие в линейках должностей
+  createdAt           DateTime @default(now())
  updatedAt           DateTime @updatedAt
 
  @@index([departmentId])
@@ -641,4 +644,67 @@ model AuditLog {
   @@index([userId])
   @@index([createdAt])
   @@index([action])
+}
+
+// ==========================================
+// Линейки должностей (группа похожих должностей с разными уровнями)
+// ==========================================
+model PositionLineage {
+  id           String   @id @default(cuid())
+  name         String   // "Разработчики GO"
+  description  String?
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  items        PositionLineageItem[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([departmentId])
+}
+
+model PositionLineageItem {
+  id          String  @id @default(cuid())
+  lineageId   String
+  lineage     PositionLineage @relation(fields: [lineageId], references: [id], onDelete: Cascade)
+  positionId  String
+  position    Position @relation(fields: [positionId], references: [id])
+  level       Int     // 1=junior, 2=middle, 3=senior, 4=lead
+  levelLabel  String? // "Junior", "Middle", "Senior", "Team Lead"
+  createdAt   DateTime @default(now())
+
+  @@unique([lineageId, positionId])
+  @@index([lineageId])
+}
+
+// ==========================================
+// Правовая база — ТК РФ, Минтруд, профстандарты
+// ==========================================
+model LegalReference {
+  id          String   @id @default(cuid())
+  type        String   // tk_rf | mintrud | profstandard
+  article     String   // "ст. 21 ТК РФ" | "Приказ Минтруда №..." | "Профстандарт 06.001"
+  title       String
+  text        String   // Текст нормы/требования
+  category    String?  // обязанности | ответственность | права | требования_к_ДИ
+  relatedPositionCodes String? // JSON: коды профстандартов
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([article])
+  @@index([category])
+}
+
+// ==========================================
+// RACI матрица подразделения
+// ==========================================
+model RACIMatrix {
+  id           String   @id @default(cuid())
+  departmentId String   @unique
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  zones        String   // JSON: [{zone, items: [{positionId, role: "R|A|C|I"}]}]
+  generatedBy  String?  // "ai" or userId
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

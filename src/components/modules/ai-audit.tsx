@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -21,7 +22,9 @@ import { CascadePositionSelector } from './cascade-position-selector'
 import {
   Shield, Loader2, AlertTriangle, Clock, FileWarning, Scale, CheckCircle2, History,
   Copy, MessageSquareWarning, Gavel, Target, ListChecks,
+  BookOpen, FileText, Droplets, Hash, AlertCircle, Plus, Pencil, Trash2, ChevronDown, ChevronRight, AlignLeft,
 } from 'lucide-react'
+import { analyzeText, analyzeSections, type TextStats } from '@/lib/text-analysis'
 
 // ─── Data types ────────────────────────────────────────────
 
@@ -201,10 +204,52 @@ function ScoreCircle({ score }: { score: number }) {
   )
 }
 
+// ─── Legal references ──────────────────────────────────────
+
+interface LegalReference {
+  id: string
+  type: string
+  article: string
+  title: string
+  text: string
+  category: string | null
+  isActive: boolean
+}
+
+interface SessionUser {
+  id?: string
+  email?: string | null
+  name?: string | null
+  role?: string
+}
+
+const legalTypeLabels: Record<string, string> = {
+  all: 'Все',
+  tk_rf: 'ТК РФ',
+  mintrud: 'Минтруд',
+  profstandard: 'Профстандарты',
+}
+
+const legalTypeOrder: readonly string[] = ['all', 'tk_rf', 'mintrud', 'profstandard']
+
+// Сложные предложения (>25 слов) — порог синхронизирован с text-analysis.ts
+function extractComplexSentences(text: string, threshold = 25): { words: number; text: string }[] {
+  const sentences = (text.match(/[^.!?]+[.!?]+/g) || [text]).map(s => s.trim()).filter(Boolean)
+  const result: { words: number; text: string }[] = []
+  for (const s of sentences) {
+    const w = (s.match(/[а-яёА-ЯЁa-zA-Z]+(?:-[а-яёА-ЯЁa-zA-Z]+)*/g) || []).length
+    if (w > threshold) result.push({ words: w, text: s.slice(0, 300) })
+  }
+  return result
+}
+
 // ─── Main component ────────────────────────────────────────
 
 export function AiAuditModule() {
   const { toast } = useToast()
+  const { data: session } = useSession()
+  const user = session?.user as SessionUser | undefined
+  const isAdmin = user?.role === 'admin'
   const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
   // Единый каскадный фильтр «компания → подразделение → должность» для выбора ДИ.
   const [filterPositionId, setFilterPositionId] = useState('')
@@ -240,6 +285,36 @@ export function AiAuditModule() {
   }, [toast])
 
   useEffect(() => { fetchDIs() }, [fetchDIs])
+
+  // ─── Правовая база ───
+  const [legalRefs, setLegalRefs] = useState<LegalReference[]>([])
+  const [legalLoading, setLegalLoading] = useState(false)
+  const [legalType, setLegalType] = useState<string>('all')
+  const [expandedLegalId, setExpandedLegalId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLegalLoading(true)
+      try {
+        const res = await fetch('/api/legal-references')
+        if (!res.ok) throw new Error()
+        const data: LegalReference[] = await res.json()
+        if (!cancelled) setLegalRefs(data)
+      } catch {
+        if (!cancelled) toast({ title: 'Ошибка', description: 'Не удалось загрузить правовую базу', variant: 'destructive' })
+      } finally {
+        if (!cancelled) setLegalLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [toast])
+
+  const filteredLegalRefs = useMemo(
+    () => (legalType === 'all' ? legalRefs : legalRefs.filter(r => r.type === legalType)),
+    [legalRefs, legalType],
+  )
 
   const handleAudit = async () => {
     if (!selectedDIId) {
@@ -295,6 +370,23 @@ export function AiAuditModule() {
 
   const selectedDI = generatedDIs.find(d => d.id === selectedDIId)
 
+  // ─── Текстовый анализ ───
+  const sectionAnalyses = useMemo(
+    () => (selectedDI ? analyzeSections(selectedDI.sections) : []),
+    [selectedDI],
+  )
+  const totalStats: TextStats = useMemo(() => {
+    if (!selectedDI || selectedDI.sections.length === 0) {
+      return { characters: 0, charactersNoSpaces: 0, letters: 0, words: 0, sentences: 0, complexSentences: 0, avgSentenceLength: 0, waterPhrases: [], waterPercentage: 0, longestSentence: { words: 0, text: '' } }
+    }
+    return analyzeText(selectedDI.sections.map(s => s.sectionContent).join('\n\n'))
+  }, [selectedDI])
+  const complexSentenceList = useMemo(
+    () => (selectedDI ? extractComplexSentences(selectedDI.sections.map(s => s.sectionContent).join('\n\n')) : []),
+    [selectedDI],
+  )
+  const hasContent = sectionAnalyses.length > 0
+
   // Helper to get category items count
   const getCategoryCount = (key: string) => {
     if (!currentAudit) return 0
@@ -346,6 +438,14 @@ export function AiAuditModule() {
           </div>
         </CardContent>
       </Card>
+
+      <Tabs defaultValue="audit" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 h-auto">
+          <TabsTrigger value="audit" className="gap-1.5"><Shield className="h-4 w-4" />Аудит</TabsTrigger>
+          <TabsTrigger value="legal" className="gap-1.5"><Scale className="h-4 w-4" />Правовая база</TabsTrigger>
+          <TabsTrigger value="text" className="gap-1.5"><FileText className="h-4 w-4" />Текстовый анализ</TabsTrigger>
+        </TabsList>
+        <TabsContent value="audit" className="space-y-4 mt-4">
 
       {/* ─── Selection panel ─── */}
       <Card>
@@ -726,6 +826,199 @@ export function AiAuditModule() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+
+        {/* ─── Tab: Правовая база ─── */}
+        <TabsContent value="legal" className="space-y-4 mt-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {legalTypeOrder.map(t => (
+              <Button
+                key={t}
+                variant={legalType === t ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setLegalType(t)}
+              >
+                {legalTypeLabels[t]}
+              </Button>
+            ))}
+            {isAdmin && (
+              <div className="ml-auto flex gap-2">
+                <Button size="sm" variant="outline"><Plus className="h-3.5 w-3.5 mr-1.5" />Добавить норму</Button>
+              </div>
+            )}
+          </div>
+
+          {legalLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : filteredLegalRefs.length === 0 ? (
+            <Card><CardContent className="py-12 text-center text-muted-foreground">
+              <BookOpen className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">Правовые нормы не найдены</p>
+            </CardContent></Card>
+          ) : (
+            <div className="space-y-3">
+              {filteredLegalRefs.map(ref => (
+                <Card
+                  key={ref.id}
+                  className="cursor-pointer hover:bg-muted/40 transition-colors"
+                  onClick={() => setExpandedLegalId(expandedLegalId === ref.id ? null : ref.id)}
+                >
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge className="bg-blue-100 text-blue-800 border-blue-200">{ref.article}</Badge>
+                        <Badge variant="secondary">{legalTypeLabels[ref.type] || ref.type}</Badge>
+                        {ref.category && <Badge variant="outline">{ref.category}</Badge>}
+                        {!ref.isActive && <Badge variant="destructive">неактивна</Badge>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isAdmin && (
+                          <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><Pencil className="h-3.5 w-3.5" /></Button>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-600"><Trash2 className="h-3.5 w-3.5" /></Button>
+                          </div>
+                        )}
+                        {expandedLegalId === ref.id ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                      </div>
+                    </div>
+                    <p className="text-sm font-medium">{ref.title}</p>
+                    <p className="text-sm text-muted-foreground whitespace-pre-line">
+                      {expandedLegalId === ref.id ? ref.text : (ref.text.length > 200 ? ref.text.slice(0, 200) + '…' : ref.text)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ─── Tab: Текстовый анализ ─── */}
+        <TabsContent value="text" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2"><FileText className="h-4 w-4" />Выбор ДИ для анализа</CardTitle>
+              <CardDescription>Анализ выполняется локально, без AI</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <CascadePositionSelector positionId={filterPositionId} onPositionChange={(id) => { setFilterPositionId(id); setSelectedDIId('') }} />
+              <Select value={selectedDIId} onValueChange={setSelectedDIId}>
+                <SelectTrigger><SelectValue placeholder="Выберите ДИ" /></SelectTrigger>
+                <SelectContent>
+                  {filteredDIs.map(di => (
+                    <SelectItem key={di.id} value={di.id}>{di.title} — {di.position?.title || '—'}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
+          {!selectedDI ? (
+            <Card><CardContent className="py-12 text-center text-muted-foreground">
+              <FileText className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">Выберите ДИ для текстового анализа</p>
+            </CardContent></Card>
+          ) : !hasContent ? (
+            <Card><CardContent className="py-12 text-center text-muted-foreground">
+              <p className="text-sm">В выбранной ДИ нет секций с содержанием</p>
+            </CardContent></Card>
+          ) : (
+            <>
+              {/* Сводные карточки */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                <Card><CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground"><Hash className="h-4 w-4" /><p className="text-xs">Всего символов</p></div>
+                  <p className="text-2xl font-bold mt-1">{totalStats.characters}</p>
+                </CardContent></Card>
+                <Card><CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground"><FileText className="h-4 w-4" /><p className="text-xs">Слов</p></div>
+                  <p className="text-2xl font-bold mt-1">{totalStats.words}</p>
+                </CardContent></Card>
+                <Card><CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground"><AlignLeft className="h-4 w-4" /><p className="text-xs">Предложений</p></div>
+                  <p className="text-2xl font-bold mt-1">{totalStats.sentences}</p>
+                </CardContent></Card>
+                <Card><CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground"><AlertCircle className="h-4 w-4" /><p className="text-xs">Сложных (&gt;25 слов)</p></div>
+                  <p className="text-2xl font-bold mt-1">{totalStats.complexSentences}</p>
+                </CardContent></Card>
+                <Card><CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground"><Droplets className="h-4 w-4" /><p className="text-xs">% воды</p></div>
+                  <p className="text-2xl font-bold mt-1">{totalStats.waterPercentage}%</p>
+                </CardContent></Card>
+              </div>
+
+              {/* Таблица по разделам */}
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-base">Анализ по разделам</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-muted-foreground border-b">
+                          <th className="py-2 pr-4 font-medium">Раздел</th>
+                          <th className="py-2 pr-4 font-medium">Слов</th>
+                          <th className="py-2 pr-4 font-medium">Символов</th>
+                          <th className="py-2 pr-4 font-medium">Сложных</th>
+                          <th className="py-2 font-medium">Воды %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sectionAnalyses.map((s, i) => (
+                          <tr key={i} className="border-b last:border-0">
+                            <td className="py-2 pr-4 font-medium truncate max-w-xs">{s.section}</td>
+                            <td className="py-2 pr-4">{s.stats.words}</td>
+                            <td className="py-2 pr-4">{s.stats.characters}</td>
+                            <td className="py-2 pr-4">{s.stats.complexSentences}</td>
+                            <td className="py-2">{s.stats.waterPercentage}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Водные фразы */}
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><Droplets className="h-4 w-4" />Водные фразы</CardTitle></CardHeader>
+                <CardContent>
+                  {totalStats.waterPhrases.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Водные фразы не обнаружены</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {totalStats.waterPhrases.map((w, i) => (
+                        <Badge key={i} className="bg-amber-100 text-amber-800 border-amber-200">«{w.phrase}» ×{w.count}</Badge>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Сложные предложения */}
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><AlertCircle className="h-4 w-4" />Сложные предложения ({totalStats.complexSentences})</CardTitle></CardHeader>
+                <CardContent>
+                  {complexSentenceList.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Сложных предложений нет</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {complexSentenceList.map((c, i) => (
+                        <div key={i} className="p-3 rounded-lg border border-amber-200 bg-amber-50 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <Badge className="bg-amber-100 text-amber-800 border-amber-200">{c.words} слов</Badge>
+                            <Badge variant="outline" className="text-emerald-700 border-emerald-200">Упростить</Badge>
+                          </div>
+                          <p className="text-sm">{c.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* ─── History Dialog ─── */}
       <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>

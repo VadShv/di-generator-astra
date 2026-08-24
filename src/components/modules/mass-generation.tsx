@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
+import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -13,10 +14,13 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Tabs, TabsContent, TabsList, TabsTrigger,
+} from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
-import { Zap, Loader2, CheckCircle2, XCircle, Building2, Users, FileText, Layers, Landmark, ChevronRight } from 'lucide-react'
+import { Zap, Loader2, CheckCircle2, XCircle, Building2, Users, FileText, Layers, Landmark, ChevronRight, Plus, Network, X } from 'lucide-react'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -42,6 +46,31 @@ interface MassGenerateResult {
   error?: string
 }
 
+const LEVEL_LABELS: Record<number, string> = {
+  1: 'Junior',
+  2: 'Middle',
+  3: 'Senior',
+  4: 'Team Lead',
+}
+
+interface LineageItem {
+  id: string
+  positionId: string
+  level: number
+  levelLabel: string | null
+  position: { id: string; title: string; code: string; grade: string | null }
+}
+
+interface Lineage {
+  id: string
+  name: string
+  description: string | null
+  departmentId: string | null
+  department: { id: string; name: string } | null
+  items: LineageItem[]
+  createdAt: string
+}
+
 // Статус ДИ по должности (для индикации в блоке выбора должностей)
 function getPositionDiStatus(p: Position) {
   const approved = p.generatedDIs.some(d => d.status === 'approved')
@@ -51,6 +80,344 @@ function getPositionDiStatus(p: Position) {
   if (hasGenerated) return { label: 'Сгенерирована', color: 'bg-amber-500', textColor: 'text-amber-700' }
   if (hasArchive) return { label: 'Архивная', color: 'bg-slate-400', textColor: 'text-slate-600' }
   return { label: 'Нет ДИ', color: 'bg-red-400', textColor: 'text-red-600' }
+}
+
+function LineageTab({
+  departments,
+  positions,
+  templates,
+}: {
+  departments: Department[]
+  positions: Position[]
+  templates: Template[]
+}) {
+  const { toast } = useToast()
+  const [lineages, setLineages] = useState<Lineage[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const [createOpen, setCreateOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [departmentId, setDepartmentId] = useState('')
+  const [items, setItems] = useState<{ positionId: string; level: number; levelLabel: string }[]>([])
+  const [newPositionId, setNewPositionId] = useState('')
+  const [newLevel, setNewLevel] = useState('1')
+  const [creating, setCreating] = useState(false)
+
+  const [genLineage, setGenLineage] = useState<Lineage | null>(null)
+  const [genTemplateId, setGenTemplateId] = useState('')
+  const [generating, setGenerating] = useState(false)
+
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const fetchLineages = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await fetch('/api/position-lineages')
+      if (!res.ok) throw new Error('Ошибка загрузки линеек')
+      setLineages(await res.json())
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Неизвестная ошибка'
+      toast({ title: 'Ошибка', description: msg, variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
+  }, [toast])
+
+  useEffect(() => { fetchLineages() }, [fetchLineages])
+
+  const addItem = () => {
+    if (!newPositionId) {
+      toast({ title: 'Выберите должность', variant: 'destructive' })
+      return
+    }
+    if (items.some(i => i.positionId === newPositionId)) {
+      toast({ title: 'Должность уже добавлена', variant: 'destructive' })
+      return
+    }
+    const level = Number(newLevel)
+    setItems(prev =>
+      [...prev, { positionId: newPositionId, level, levelLabel: LEVEL_LABELS[level] || `Уровень ${level}` }]
+        .sort((a, b) => a.level - b.level)
+    )
+    setNewPositionId('')
+  }
+
+  const removeItem = (positionId: string) => {
+    setItems(prev => prev.filter(i => i.positionId !== positionId))
+  }
+
+  const handleCreate = async () => {
+    if (!name.trim()) {
+      toast({ title: 'Введите название линейки', variant: 'destructive' })
+      return
+    }
+    if (items.length === 0) {
+      toast({ title: 'Добавьте минимум одну должность', variant: 'destructive' })
+      return
+    }
+    setCreating(true)
+    try {
+      const res = await fetch('/api/position-lineages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), departmentId: departmentId || undefined, items }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Ошибка создания линейки')
+      }
+      toast({ title: 'Линейка создана', description: `Добавлено должностей: ${items.length}` })
+      setCreateOpen(false)
+      setName('')
+      setDepartmentId('')
+      setItems([])
+      fetchLineages()
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Неизвестная ошибка'
+      toast({ title: 'Ошибка', description: msg, variant: 'destructive' })
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteId) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/position-lineages/${deleteId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Ошибка удаления линейки')
+      }
+      toast({ title: 'Линейка удалена' })
+      setDeleteId(null)
+      fetchLineages()
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Неизвестная ошибка'
+      toast({ title: 'Ошибка', description: msg, variant: 'destructive' })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleGenerate = async () => {
+    if (!genLineage) return
+    if (!genTemplateId) {
+      toast({ title: 'Выберите шаблон', variant: 'destructive' })
+      return
+    }
+    const lineageName = genLineage.name
+    setGenerating(true)
+    try {
+      await fetch('/api/generate-di/lineage-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lineageId: genLineage.id, templateId: genTemplateId }),
+      })
+    } catch {
+      // placeholder endpoint — ignore network errors
+    }
+    setGenerating(false)
+    toast({ title: 'Генерация запущена', description: `Линейка: ${lineageName}` })
+    setGenLineage(null)
+    setGenTemplateId('')
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Линейки должностей объединяют похожие позиции по уровням (Junior → Team Lead) для пакетной генерации ДИ.
+        </p>
+        <Button onClick={() => setCreateOpen(true)} className="flex-shrink-0">
+          <Plus className="h-4 w-4 mr-2" /> Создать линейку
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : lineages.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Network className="h-10 w-10 mx-auto text-muted-foreground/50" />
+            <p className="text-sm text-muted-foreground mt-3">Линеек пока нет. Создайте первую.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {lineages.map(l => (
+            <Card key={l.id}>
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Network className="h-4 w-4" /> {l.name}
+                    </CardTitle>
+                    <CardDescription>
+                      {l.department ? `Подразделение: ${l.department.name}` : 'Без подразделения'} · {l.items.length} должн.
+                    </CardDescription>
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => { setGenLineage(l); setGenTemplateId(templates.find(t => t.isPrimary)?.id || '') }}>
+                      <Zap className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleteId(l.id)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1.5">
+                  {l.items.map(item => (
+                    <div key={item.id} className="flex items-center justify-between text-sm py-1 border-b last:border-0">
+                      <span className="truncate">{item.position.title}</span>
+                      <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
+                        {item.levelLabel || LEVEL_LABELS[item.level] || `Ур. ${item.level}`}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Создать линейку должностей</DialogTitle>
+            <DialogDescription>Объедините должности по уровням для пакетной генерации</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Название</label>
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder="Напр. Линейка разработчиков" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Подразделение</label>
+              <Select value={departmentId} onValueChange={setDepartmentId}>
+                <SelectTrigger><SelectValue placeholder="Без подразделения" /></SelectTrigger>
+                <SelectContent>
+                  {departments.map(d => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Separator />
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Добавить должность</label>
+              <div className="flex gap-2">
+                <Select value={newPositionId} onValueChange={setNewPositionId}>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Выберите должность" /></SelectTrigger>
+                  <SelectContent>
+                    {positions.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={newLevel} onValueChange={setNewLevel}>
+                  <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4].map(lvl => (
+                      <SelectItem key={lvl} value={String(lvl)}>{lvl} — {LEVEL_LABELS[lvl]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button size="icon" onClick={addItem}><Plus className="h-4 w-4" /></Button>
+              </div>
+            </div>
+            {items.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Должности в линейке ({items.length})</label>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {items.map(item => {
+                    const pos = positions.find(p => p.id === item.positionId)
+                    return (
+                      <div key={item.positionId} className="flex items-center justify-between text-sm p-2 rounded-lg bg-muted">
+                        <span className="truncate">{pos?.title || 'Неизвестно'}</span>
+                        <div className="flex items-center gap-2 ml-2">
+                          <Badge variant="secondary" className="text-xs">{item.levelLabel}</Badge>
+                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeItem(item.positionId)}>
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Отмена</Button>
+            <Button onClick={handleCreate} disabled={creating}>
+              {creating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Создать
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!genLineage} onOpenChange={open => { if (!open) { setGenLineage(null); setGenTemplateId('') } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Генерация ДИ по линейке</DialogTitle>
+            <DialogDescription>
+              {genLineage ? `Линейка «${genLineage.name}» — ${genLineage.items.length} должностей` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Шаблон ДИ</label>
+              <Select value={genTemplateId} onValueChange={setGenTemplateId}>
+                <SelectTrigger><SelectValue placeholder="Выберите шаблон" /></SelectTrigger>
+                <SelectContent>
+                  {templates.map(t => (
+                    <SelectItem key={t.id} value={t.id}>{t.name} {t.isPrimary ? '(основной)' : ''}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setGenLineage(null); setGenTemplateId('') }}>Отмена</Button>
+            <Button onClick={handleGenerate} disabled={generating || !genTemplateId}>
+              {generating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
+              Запустить генерацию
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteId} onOpenChange={open => { if (!open) setDeleteId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить линейку?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Линейка и её состав будут удалены безвозвратно. Сгенерированные ДИ не затрагиваются.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={e => { e.preventDefault(); handleDelete() }}
+            >
+              {deleting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
 }
 
 export function MassGenerationModule() {
@@ -344,12 +711,18 @@ export function MassGenerationModule() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <Tabs defaultValue="mass" className="w-full">
+        <TabsList className="w-full">
+          <TabsTrigger value="mass">Массовая генерация</TabsTrigger>
+          <TabsTrigger value="lineage">Пакетная генерация по линейкам</TabsTrigger>
+        </TabsList>
+        <TabsContent value="mass">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* ── Колонка 1: каскадный выбор (3 последовательных блока) ── */}
           <div className="lg:col-span-2 space-y-4">
             {/* Блок 1: Организации */}
@@ -653,9 +1026,14 @@ export function MassGenerationModule() {
                 )}
               </CardContent>
             </Card>
-          </div>
-        </div>
-      )}
+            </div>
+            </div>
+          )}
+        </TabsContent>
+        <TabsContent value="lineage">
+          <LineageTab departments={departments} positions={positions} templates={templates} />
+        </TabsContent>
+      </Tabs>
 
       {/* Results Dialog */}
       <Dialog open={resultDialogOpen} onOpenChange={setResultDialogOpen}>

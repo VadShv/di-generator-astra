@@ -40,6 +40,31 @@ export function buildPositionContext(position: PositionForContext): string {
   return lines.join('\n')
 }
 
+/**
+ * Построить контекст линейки должностей для промпта.
+ * Помогает ИИ дифференцировать обязанности по уровням (junior → lead).
+ */
+export function buildLineageContext(lineage: {
+  name: string
+  items: { positionTitle: string; level: number; levelLabel: string | null }[]
+}): string {
+  const sorted = [...lineage.items].sort((a, b) => a.level - b.level)
+  const lines = [
+    `ЛИНЕЙКА ДОЛЖНОСТЕЙ: ${lineage.name}`,
+    'Уровни в линейке (от младшего к старшему):',
+  ]
+  for (const item of sorted) {
+    lines.push(`  Уровень ${item.level} (${item.levelLabel || `Уровень ${item.level}`}): ${item.positionTitle}`)
+  }
+  lines.push('')
+  lines.push('ВАЖНО: Дифференцируй обязанности по уровню в линейке:')
+  lines.push('— Младшие уровни (1-2): исполнение задач, следование инструкциям, отчётность, обучение')
+  lines.push('— Средние уровни (2-3): самостоятельная работа, проверка качества, наставничество')
+  lines.push('— Старшие уровни (3-4): архитектура, принятие решений, стратегия, управление командой')
+  lines.push('— Каждый следующий уровень включает обязанности предыдущего + зону ответственности')
+  return lines.join('\n')
+}
+
 /** Архивная ДИ как референс. */
 export interface ArchiveDIRef {
   title: string
@@ -54,6 +79,25 @@ export function buildArchiveContext(archiveDIs: ArchiveDIRef[]): string {
     .join('\n\n')
 }
 
+/** Правовая норма для контекста промпта. */
+export interface LegalRefForContext {
+  article: string
+  title: string
+  text: string
+  category: string | null
+}
+
+/** Построить блок правовой базы (ТК РФ, Минтруд, профстандарты) для промпта. */
+export function buildLegalContext(refs: LegalRefForContext[]): string {
+  if (refs.length === 0) return ''
+  const lines = ['ПРАВОВАЯ БАЗА (учитывай при генерации):']
+  for (const ref of refs) {
+    lines.push(`— ${ref.article}: ${ref.title}`)
+    lines.push(`  ${ref.text.slice(0, 500)}`)
+  }
+  return lines.join('\n')
+}
+
 /**
  * Построить системный промпт для генерации секций ДИ.
  * @param position контекст должности
@@ -65,7 +109,8 @@ export function buildGenerationSystemPrompt(
   position: PositionForContext,
   renderedMasterPrompt: string | null,
   archiveContext: string,
-  extraContext?: string
+  extraContext?: string,
+  legalContext?: string
 ): string {
   return `Ты — эксперт по созданию должностных инструкций для компании Группа Астра.
 Ты создаёшь профессиональные, подробные и формально корректные должностные инструкции на русском языке в соответствии с требованиями трудового законодательства РФ.
@@ -77,7 +122,7 @@ ${buildPositionContext(position)}
 
 АРХИВНЫЕ ДИ (для справки):
 ${archiveContext}
-${extraContext ? `\n${extraContext}\n` : ''}
+${legalContext ? `\n${legalContext}\n` : ''}${extraContext ? `\n${extraContext}\n` : ''}
 ПРАВИЛА:
 - Генерируй содержание только для указанной секции
 - Используй формально-деловой стиль

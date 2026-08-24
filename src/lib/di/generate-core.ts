@@ -31,6 +31,8 @@ export interface GenerateSectionsParams {
   archiveDIs: ArchiveDIRef[]
   /** Доп. контекст (например, другие секции) — опционально. */
   extraContext?: string
+  /** Правовой контекст (ТК РФ, профстандарты) — опционально. */
+  legalContext?: string
   /** Колбэк прогресса (выполнено, всего). */
   onProgress?: (done: number, total: number) => void
   /** Текст-заглушка при ошибке генерации секции. */
@@ -50,12 +52,13 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
     renderedMasterPrompt,
     archiveDIs,
     extraContext,
+    legalContext,
     onProgress,
     errorPlaceholder = '[Ошибка генерации секции. Пожалуйста, повторите генерацию.]',
   } = params
 
   const archiveContext = buildArchiveContext(archiveDIs)
-  const systemPrompt = buildGenerationSystemPrompt(position, renderedMasterPrompt, archiveContext, extraContext)
+  const systemPrompt = buildGenerationSystemPrompt(position, renderedMasterPrompt, archiveContext, extraContext, legalContext)
 
   const results: GeneratedSectionResult[] = []
   const total = templateSections.length
