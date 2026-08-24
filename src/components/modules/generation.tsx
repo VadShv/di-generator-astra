@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
-import { Plus, Pencil, Trash2, Eye, Loader2, Sparkles, FileText, PenLine, Wand2, Download, ChevronDown, ChevronRight, CheckCircle2, RotateCcw, BookOpen, Zap, Crown, Star, LayoutTemplate, ArrowUp, ArrowDown, Settings2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, Loader2, Sparkles, FileText, PenLine, Wand2, Download, ChevronDown, ChevronRight, CheckCircle2, RotateCcw, BookOpen, Zap, Crown, Star, LayoutTemplate, ArrowUp, ArrowDown, Settings2, GitCompare } from 'lucide-react'
 import { CascadePositionSelector } from '@/components/modules/cascade-position-selector'
 
 interface Department { id: string; name: string; code: string }
@@ -90,6 +90,13 @@ export function GenerationModule() {
   const [statusComment, setStatusComment] = useState('')
   const [statusHistory, setStatusHistory] = useState<{ id: string; fromStatus: string; toStatus: string; comment: string | null; userEmail: string | null; createdAt: string }[]>([])
   const [statusHistoryOpen, setStatusHistoryOpen] = useState(false)
+
+  // DI comparison
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [compareDiA, setCompareDiA] = useState('')
+  const [compareDiB, setCompareDiB] = useState('')
+  const [compareDataA, setCompareDataA] = useState<{ sections: { sectionTitle: string; sectionContent: string }[] } | null>(null)
+  const [compareDataB, setCompareDataB] = useState<{ sections: { sectionTitle: string; sectionContent: string }[] } | null>(null)
 
   // Manual creation form
   const [manualTitle, setManualTitle] = useState('')
@@ -517,6 +524,9 @@ export function GenerationModule() {
           <p className="text-sm text-muted-foreground mt-1">Создание должностных инструкций с ИИ</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setCompareOpen(true)}>
+            <GitCompare className="h-4 w-4 mr-1.5" /> Сравнить ДИ
+          </Button>
           <Button variant="outline" onClick={startManual}>
             <PenLine className="h-4 w-4 mr-1.5" /> Создать вручную
           </Button>
@@ -1264,6 +1274,62 @@ export function GenerationModule() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setStatusHistoryOpen(false)}>Закрыть</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Compare DIs Dialog */}
+      <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Сравнение должностных инструкций</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>ДИ №1</Label>
+                <Select value={compareDiA} onValueChange={async (v) => { setCompareDiA(v); const res = await fetch(`/api/generated-di?positionId=${generatedDIs.find(d => d.id === v)?.positionId}`); if (res.ok) { const data = await res.json(); setCompareDataA({ sections: (data.items || []).find((d: GeneratedDI) => d.id === v)?.sections || [] }) } }}>
+                  <SelectTrigger><SelectValue placeholder="Выберите ДИ" /></SelectTrigger>
+                  <SelectContent>
+                    {filteredDIs.map(di => <SelectItem key={di.id} value={di.id}>{di.title}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>ДИ №2</Label>
+                <Select value={compareDiB} onValueChange={async (v) => { setCompareDiB(v); const res = await fetch(`/api/generated-di?positionId=${generatedDIs.find(d => d.id === v)?.positionId}`); if (res.ok) { const data = await res.json(); setCompareDataB({ sections: (data.items || []).find((d: GeneratedDI) => d.id === v)?.sections || [] }) } }}>
+                  <SelectTrigger><SelectValue placeholder="Выберите ДИ" /></SelectTrigger>
+                  <SelectContent>
+                    {filteredDIs.map(di => <SelectItem key={di.id} value={di.id}>{di.title}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {compareDataA && compareDataB && (
+              <div className="border rounded-lg p-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="font-medium text-sm mb-2">{filteredDIs.find(d => d.id === compareDiA)?.title || 'ДИ №1'}</p>
+                    {compareDataA.sections.map((s, i) => (
+                      <div key={i} className="mb-3">
+                        <p className="text-xs font-medium text-muted-foreground">{s.sectionTitle}</p>
+                        <p className="text-sm whitespace-pre-wrap">{s.sectionContent.slice(0, 500)}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm mb-2">{filteredDIs.find(d => d.id === compareDiB)?.title || 'ДИ №2'}</p>
+                    {compareDataB.sections.map((s, i) => (
+                      <div key={i} className="mb-3">
+                        <p className="text-xs font-medium text-muted-foreground">{s.sectionTitle}</p>
+                        <p className="text-sm whitespace-pre-wrap">{s.sectionContent.slice(0, 500)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompareOpen(false)}>Закрыть</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
