@@ -1,38 +1,38 @@
 'use client'
 
-import { Component, ReactNode } from 'react'
+import { Component, type ReactNode } from 'react'
 
-interface Props {
-  children: ReactNode
-  fallback?: ReactNode
-}
-
-interface State {
-  hasError: boolean
-  error?: Error
-}
-
-export class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
+// Error boundary — ловит необработанные ошибки рендеринга.
+// В проде: заменить на Sentry.init() + Sentry.ErrorBoundary.
+export class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: ReactNode }) {
     super(props)
     this.state = { hasError: false }
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error) {
     return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, errorInfo: { componentStack: string }) {
+    // В проде: Sentry.captureException(error, { extra: errorInfo })
+    console.error('ErrorBoundary caught:', error, errorInfo)
   }
 
   render() {
     if (this.state.hasError) {
-      return this.props.fallback || (
-        <div className="p-8 text-center">
-          <h2 className="text-lg font-semibold text-destructive mb-2">Ошибка загрузки модуля</h2>
-          <p className="text-muted-foreground text-sm">
-            {this.state.error?.message || 'Произошла неизвестная ошибка'}
+      return (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <p className="text-lg font-medium text-destructive mb-2">Что-то пошло не так</p>
+          <p className="text-sm text-muted-foreground mb-4">
+            {this.state.error?.message || 'Неизвестная ошибка'}
           </p>
           <button
-            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90"
-            onClick={() => this.setState({ hasError: false, error: undefined })}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm"
+            onClick={() => this.setState({ hasError: false })}
           >
             Попробовать снова
           </button>

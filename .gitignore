@@ -88,3 +88,4 @@ server.log
 
 # Дампы БД (pg_dump — не в git)
 /backups/
+/backups/
