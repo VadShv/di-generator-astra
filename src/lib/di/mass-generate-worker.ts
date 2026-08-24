@@ -17,7 +17,7 @@ import {
 } from '../master-prompt'
 import { generateSectionsForPosition, generateAiCultureSection } from './generate-core'
 import { createInitialVersion } from './version'
-import { type ArchiveDIRef } from './prompts'
+import { type ArchiveDIRef, buildLineageContext } from './prompts'
 import { createLogger } from '../logger'
 
 const log = createLogger('mass-generate-worker')
@@ -120,6 +120,31 @@ async function processJob(jobId: string): Promise<void> {
     content: s.content,
   }))
 
+  // Загрузка контекста линейки (если scopeData содержит lineageId)
+  let lineageContext: string | null = null
+  const scopeDataObj = typeof job.scopeData === 'string' ? JSON.parse(job.scopeData) : {}
+  if (scopeDataObj.lineageId) {
+    const lineage = await db.positionLineage.findUnique({
+      where: { id: scopeDataObj.lineageId },
+      include: {
+        items: {
+          include: { position: { select: { title: true } } },
+          orderBy: { level: 'asc' },
+        },
+      },
+    })
+    if (lineage) {
+      lineageContext = buildLineageContext({
+        name: lineage.name,
+        items: lineage.items.map((item) => ({
+          positionTitle: item.position.title,
+          level: item.level,
+          levelLabel: item.levelLabel,
+        })),
+      })
+    }
+  }
+
   await db.generationJob.update({
     where: { id: jobId },
     data: { total: positions.length },
@@ -154,6 +179,7 @@ async function processJob(jobId: string): Promise<void> {
         client,
         renderedMasterPrompt,
         archiveDIs: archiveRefs,
+        extraContext: lineageContext || undefined,
         errorPlaceholder: '[Ошибка генерации. Повторите для данной должности.]',
       })
 

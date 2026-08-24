@@ -6,7 +6,7 @@ import { withErrorHandler, parseBody } from '@/lib/api-utils'
 import { aiAuditSchema } from '@/lib/validation/schemas'
 import { createLogger } from '@/lib/logger'
 import { parseJsonOr } from '@/lib/json-safe'
-import { buildPositionContext } from '@/lib/di/prompts'
+import { buildPositionContext, buildLegalContext, type LegalRefForContext } from '@/lib/di/prompts'
 import { requireAuth } from '@/lib/auth/session'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { ApiError, errorResponse } from '@/lib/api-utils'
@@ -100,14 +100,22 @@ export const POST = withErrorHandler(async (request: Request) => {
     consistency: 'ФОКУС на классах 2 (Расплывчатые формулировки) и 4 (Завышенные требования). Это аудит согласованности — главное найти неясные обязанности и нереалистичные показатели.',
   }
 
+  // Загрузка правовой базы для аудита
+  const legalRefs = await db.legalReference.findMany({
+    where: { isActive: true, type: 'tk_rf' },
+    select: { article: true, title: true, text: true, category: true },
+  })
+  const legalContext = buildLegalContext(legalRefs as LegalRefForContext[])
+
   const systemPrompt = `Ты — эксперт-юрист и HR-аналитик, специализирующийся на должностных инструкциях в Российской Федерации. Ты проводишь профессиональный аудит ДИ на основе правового ядра из 5 классов реальных ошибок, встречающихся в 80% инструкций.
 
 ИНФОРМАЦИЯ О ДОЛЖНОСТИ:
 ${positionContext}
-
+${legalContext ? `\n${legalContext}\n` : ''}
 ПРАВИЛА:
 - Анализируй каждое положение инструкции детально, применяя все 5 классов
-- Приводи конкретные ссылки на статьи ТК РФ когда это уместно
+- Приводи конкретные ссылки на статьи ТК РФ из правовой базы выше
+- Сравнивай положения ДИ с текстами статей ТК РФ — находи дублирования и противоречия
 - Для расплывчатых формулировок предлагай конкретную альтернативу
 - Для завышенных требований предлагай реалистичный ориентир
 - Для неполноты разделов описывай, что именно должно быть добавлено

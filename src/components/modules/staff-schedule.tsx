@@ -44,6 +44,7 @@ import {
 
 // ============ Interfaces ============
 import type { Company, Department, Position, BusinessFunction, Project, GDI } from './staff-schedule-types'
+import { RaciMatrixDialog } from '@/components/raci-matrix-dialog'
 
 // ============ Main Component ============
 export function StaffScheduleModule() {
@@ -95,6 +96,8 @@ export function StaffScheduleModule() {
   const [posDeleteOpen, setPosDeleteOpen] = useState(false)
   const [posToDelete, setPosToDelete] = useState<Position | null>(null)
   const [positionAttributes, setPositionAttributes] = useState<{ id: string; name: string; code: string; isActive: boolean }[]>([])
+  const [raciOpen, setRaciOpen] = useState(false)
+  const [raciDept, setRaciDept] = useState<{ id: string; name: string } | null>(null)
 
   // Bulk / file upload
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
@@ -887,6 +890,14 @@ export function StaffScheduleModule() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {selectedDeptId && (
+                  <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => {
+                    const dept = departments.find(d => d.id === selectedDeptId)
+                    if (dept) { setRaciDept({ id: dept.id, name: dept.name }); setRaciOpen(true) }
+                  }}>
+                    RACI матрица
+                  </Button>
+                )}
                 {(selectedDeptId || selectedCompanyId) && (
                   <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={(e) => { e.stopPropagation(); setSelectedDeptId(null); setSelectedCompanyId(null) }}>
                     Сбросить фильтр
@@ -1451,9 +1462,18 @@ export function StaffScheduleModule() {
        pos={detailPos}
        onClosePos={() => setDetailPos(null)}
        onSelectDept={d => { setDetailPos(null); setDetailDept(d) }}
-       onEditPos={p => { setDetailPos(null); openEditPos(p) }}
-       onChanged={fetchPositions}
-    />
-   </div>
- )
+        onEditPos={p => { setDetailPos(null); openEditPos(p) }}
+        onChanged={fetchPositions}
+     />
+     {raciDept && (
+       <RaciMatrixDialog
+         open={raciOpen}
+         onOpenChange={setRaciOpen}
+         departmentId={raciDept.id}
+         departmentName={raciDept.name}
+         positions={positions.filter(p => p.departmentId === raciDept.id).map(p => ({ id: p.id, title: p.title }))}
+       />
+     )}
+    </div>
+  )
 }

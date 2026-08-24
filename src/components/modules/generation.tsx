@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { analyzeText } from '@/lib/text-analysis'
 import { Progress } from '@/components/ui/progress'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -1059,6 +1060,28 @@ export function GenerationModule() {
       <Card>
         <CardContent className="p-4">
           <div className="mb-4"><Label>Название</Label><Input value={editTitle} onChange={e => setEditTitle(e.target.value)} /></div>
+          {/* Text analysis badge */}
+          {editSections.length > 0 && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {(() => {
+                const totalStats = analyzeText(editSections.map(s => s.sectionContent).join('\n\n'))
+                return (
+                  <>
+                    <Badge variant="secondary" className="text-xs">{totalStats.words} слов</Badge>
+                    <Badge variant="secondary" className="text-xs">{totalStats.characters} символов</Badge>
+                    {totalStats.complexSentences > 0 && (
+                      <Badge variant="secondary" className="text-xs bg-amber-50 text-amber-700 border-amber-200">{totalStats.complexSentences} сложных предложений</Badge>
+                    )}
+                    {totalStats.waterPercentage > 0 && (
+                      <Badge variant="secondary" className={`text-xs ${totalStats.waterPercentage > 15 ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                        {totalStats.waterPercentage}% воды
+                      </Badge>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+          )}
           {/* Position context info */}
           {editingDI?.position && (
             <div className="mb-4 bg-muted/30 p-3 rounded-lg">
@@ -1097,6 +1120,21 @@ export function GenerationModule() {
                   </div>
                 </div>
                 <Textarea value={section.sectionContent} onChange={e => setEditSections(prev => prev.map(s => s.id === section.id ? { ...s, sectionContent: e.target.value } : s))} className="min-h-[120px] text-sm" />
+                {section.sectionContent && (() => {
+                  const sStats = analyzeText(section.sectionContent)
+                  if (sStats.words < 5) return null
+                  return (
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="text-xs text-muted-foreground">{sStats.words} слов</span>
+                      {sStats.complexSentences > 0 && (
+                        <span className="text-xs text-amber-600">· {sStats.complexSentences} сложных</span>
+                      )}
+                      {sStats.waterPercentage > 0 && (
+                        <span className={`text-xs ${sStats.waterPercentage > 15 ? 'text-red-600' : 'text-amber-600'}`}>· {sStats.waterPercentage}% воды</span>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             ))}
           </div>
