@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAppSession } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createNotification } from '@/lib/notifications'
 
 // GET /api/generate-di/[id]/status — история смены статусов ДИ
 export async function GET(
@@ -75,6 +76,15 @@ export async function POST(
         },
       }),
     ])
+
+    // Уведомление о смене статуса
+    createNotification({
+      type: 'status_change',
+      title: `Статус ДИ изменён: ${di.status} → ${toStatus}`,
+      message: updatedDi.title + (comment ? ` — ${comment}` : ''),
+      entityType: 'di',
+      entityId: id,
+    })
 
     return NextResponse.json(updatedDi)
   } catch (error) {

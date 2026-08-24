@@ -85,8 +85,27 @@ model Project {
   description String?  // Описание
   isActive    Boolean  @default(true)
   positions   Position[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ==========================================
+// In-app уведомления
+// ==========================================
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String?  // null = всем пользователям
+  type       String   // mass_gen_complete | status_change | audit_critical | system
+  title      String
+  message    String
+  isRead     Boolean  @default(false)
+  entityType String?  // di | job | audit
+  entityId   String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
 }
 
 // ==========================================

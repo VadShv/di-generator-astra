@@ -19,6 +19,7 @@ import { generateSectionsForPosition, generateAiCultureSection } from './generat
 import { createInitialVersion } from './version'
 import { type ArchiveDIRef, buildLineageContext } from './prompts'
 import { createLogger } from '../logger'
+import { createNotification } from '../notifications'
 
 const log = createLogger('mass-generate-worker')
 
@@ -256,6 +257,15 @@ async function processJob(jobId: string): Promise<void> {
       results: JSON.stringify(results),
       finishedAt: new Date(),
     },
+  })
+
+  // Уведомление о завершении массовой генерации
+  createNotification({
+    type: 'mass_gen_complete',
+    title: failed === positions.length ? 'Массовая генерация завершена с ошибками' : 'Массовая генерация завершена',
+    message: `Создано ${completed} ДИ из ${positions.length}. Ошибок: ${failed}.`,
+    entityType: 'job',
+    entityId: jobId,
   })
 
   log.info(`Job ${jobId} finished`, { total: positions.length, completed, failed })
