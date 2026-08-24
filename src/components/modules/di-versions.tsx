@@ -26,6 +26,7 @@ import {
   GitCompareArrows, ChevronsUpDown, Sparkles, FileText, CheckCircle2,
 } from 'lucide-react'
 import { CascadePositionSelector } from './cascade-position-selector'
+import { DIVersionDiff } from '@/components/di-version-diff'
 
 // ─── Типы данных ───────────────────────────────────────────────
 
@@ -234,6 +235,18 @@ export function DIVersionsModule() {
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false)
   const [restoringVersion, setRestoringVersion] = useState<DIVersion | null>(null)
 
+  // Диалог визуального сравнения версий (side-by-side diff).
+  const [compareDialogOpen, setCompareDialogOpen] = useState(false)
+  const [compareVerA, setCompareVerA] = useState('')
+  const [compareVerB, setCompareVerB] = useState('')
+  const [compareLoading, setCompareLoading] = useState(false)
+  const [compareResult, setCompareResult] = useState<{
+    oldContent: string
+    newContent: string
+    oldLabel: string
+    newLabel: string
+  } | null>(null)
+
   // ─── Загрузка данных ────────────────────────────────────────
 
   const fetchDIs = useCallback(async () => {
@@ -437,6 +450,36 @@ export function DIVersionsModule() {
     setViewDialogOpen(true)
   }
 
+  const handleOpenCompareDialog = () => {
+    setCompareVerA('')
+    setCompareVerB('')
+    setCompareResult(null)
+    setCompareDialogOpen(true)
+  }
+
+  const handleRunCompare = async () => {
+    if (!compareVerA || !compareVerB || compareVerA === compareVerB) return
+    setCompareLoading(true)
+    try {
+      const [resA, resB] = await Promise.all([
+        fetch(`/api/compare/${compareVerA}`),
+        fetch(`/api/compare/${compareVerB}`),
+      ])
+      if (!resA.ok || !resB.ok) throw new Error()
+      const [vA, vB] = await Promise.all([resA.json(), resB.json()])
+      setCompareResult({
+        oldContent: vA.content ?? '',
+        newContent: vB.content ?? '',
+        oldLabel: `v${vA.version}`,
+        newLabel: `v${vB.version}`,
+      })
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось загрузить версии для сравнения', variant: 'destructive' })
+    } finally {
+      setCompareLoading(false)
+    }
+  }
+
   // ─── Рендер ────────────────────────────────────────────────
 
   return (
@@ -593,9 +636,20 @@ export function DIVersionsModule() {
                   </div>
                 ) : (
                   <>
-                    <p className="text-xs text-muted-foreground">
-                    Отметьте до двух версий для сравнения между собой
-                  </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        Отметьте до двух версий для сравнения между собой
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleOpenCompareDialog}
+                        disabled={(versionsByDI[selectedDI.id] || []).length < 2}
+                      >
+                        <GitCompareArrows className="h-3.5 w-3.5 mr-1" />
+                        Сравнить версии
+                      </Button>
+                    </div>
                   <div className="space-y-1.5">
                     {(versionsByDI[selectedDI.id] || [])
                       .slice()
@@ -812,6 +866,75 @@ export function DIVersionsModule() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Диалог визуального сравнения версий (side-by-side diff) */}
+      <Dialog
+        open={compareDialogOpen}
+        onOpenChange={(open) => { setCompareDialogOpen(open); if (!open) setCompareResult(null) }}
+      >
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GitCompareArrows className="h-4 w-4" /> Сравнение версий
+            </DialogTitle>
+            <DialogDescription>Выберите две версии для визуального сравнения изменений</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <p className="text-xs font-medium text-muted-foreground mb-1">Версия A</p>
+                <Select value={compareVerA} onValueChange={setCompareVerA}>
+                  <SelectTrigger><SelectValue placeholder="Выберите версию" /></SelectTrigger>
+                  <SelectContent>
+                    {(versionsByDI[selectedDI?.id || ''] || [])
+                      .slice()
+                      .sort((a, b) => b.version - a.version)
+                      .map(v => (
+                        <SelectItem key={v.id} value={v.id} disabled={v.id === compareVerB}>
+                          v{v.version}{v.isOriginal ? ' (оригинал)' : ''}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-medium text-muted-foreground mb-1">Версия B</p>
+                <Select value={compareVerB} onValueChange={setCompareVerB}>
+                  <SelectTrigger><SelectValue placeholder="Выберите версию" /></SelectTrigger>
+                  <SelectContent>
+                    {(versionsByDI[selectedDI?.id || ''] || [])
+                      .slice()
+                      .sort((a, b) => b.version - a.version)
+                      .map(v => (
+                        <SelectItem key={v.id} value={v.id} disabled={v.id === compareVerA}>
+                          v{v.version}{v.isOriginal ? ' (оригинал)' : ''}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                onClick={handleRunCompare}
+                disabled={!compareVerA || !compareVerB || compareVerA === compareVerB || compareLoading}
+              >
+                {compareLoading
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                  : <GitCompareArrows className="h-3.5 w-3.5 mr-1" />}
+                Сравнить
+              </Button>
+            </div>
+
+            {compareResult && (
+              <DIVersionDiff
+                oldVersion={{ content: compareResult.oldContent }}
+                newVersion={{ content: compareResult.newContent }}
+                oldLabel={compareResult.oldLabel}
+                newLabel={compareResult.newLabel}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

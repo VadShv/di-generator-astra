@@ -270,6 +270,7 @@ model GeneratedDI {
   trackings        DITracking[]
   versions         DIVersion[]
   auditResults     DIAuditResult[]
+  statusHistory    DIStatusChange[]
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -419,6 +420,24 @@ model DIAuditResult {
   createdAt        DateTime @default(now())
 
   @@index([generatedDIId])
+}
+
+// ==========================================
+// История изменений статуса ДИ (workflow согласования)
+// ==========================================
+model DIStatusChange {
+  id            String   @id @default(cuid())
+  generatedDIId String
+  generatedDI   GeneratedDI @relation(fields: [generatedDIId], references: [id], onDelete: Cascade)
+  fromStatus    String   // draft | review | approved | exported
+  toStatus      String   // draft | review | approved | exported
+  comment       String?  // Комментарий при смене статуса
+  userId        String?
+  userEmail     String?
+  createdAt     DateTime @default(now())
+
+  @@index([generatedDIId])
+  @@index([createdAt])
 }
 
 // ==========================================

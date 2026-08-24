@@ -82,7 +82,14 @@ export function GenerationModule() {
  const [archiveDIs, setArchiveDIs] = useState<{ id: string; title: string; uploadedAt: string }[]>([])
  const [selArchiveDIId, setSelArchiveDIId] = useState('')
  const [useArchiveAsReference, setUseArchiveAsReference] = useState(true)
- const [generating, setGenerating] = useState(false)
+  const [generating, setGenerating] = useState(false)
+
+  // Workflow status
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false)
+  const [newStatus, setNewStatus] = useState('')
+  const [statusComment, setStatusComment] = useState('')
+  const [statusHistory, setStatusHistory] = useState<{ id: string; fromStatus: string; toStatus: string; comment: string | null; userEmail: string | null; createdAt: string }[]>([])
+  const [statusHistoryOpen, setStatusHistoryOpen] = useState(false)
 
   // Manual creation form
   const [manualTitle, setManualTitle] = useState('')
@@ -430,6 +437,44 @@ export function GenerationModule() {
   }
 
   const openEditor = (di: GeneratedDI) => { setEditingDI(di); setEditSections([...di.sections]); setEditTitle(di.title); setEditSignedByEmployee(di.signedByEmployee ?? false); setViewMode('editor') }
+
+  const STATUS_LABELS: Record<string, string> = { draft: 'Черновик', review: 'На согласовании', approved: 'Согласована', exported: 'Экспортирована' }
+  const STATUS_COLORS: Record<string, string> = { draft: 'bg-gray-100 text-gray-700 border-gray-300', review: 'bg-amber-100 text-amber-700 border-amber-300', approved: 'bg-emerald-100 text-emerald-700 border-emerald-300', exported: 'bg-blue-100 text-blue-700 border-blue-300' }
+
+  const handleStatusChange = async () => {
+    if (!editingDI || !newStatus) return
+    try {
+      const res = await fetch(`/api/generate-di/${editingDI.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toStatus: newStatus, comment: statusComment }),
+      })
+      if (res.ok) {
+        toast({ title: 'Статус изменён', description: STATUS_LABELS[newStatus] })
+        setEditingDI({ ...editingDI, status: newStatus })
+        setGeneratedDIs(prev => prev.map(d => d.id === editingDI.id ? { ...d, status: newStatus } : d))
+        setStatusDialogOpen(false)
+        setNewStatus('')
+        setStatusComment('')
+      } else {
+        const d = await res.json()
+        toast({ title: 'Ошибка', description: d.error || 'Не удалось сменить статус', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Ошибка', description: 'Ошибка сети', variant: 'destructive' })
+    }
+  }
+
+  const fetchStatusHistory = async () => {
+    if (!editingDI) return
+    try {
+      const res = await fetch(`/api/generate-di/${editingDI.id}/status`)
+      if (res.ok) {
+        setStatusHistory(await res.json())
+        setStatusHistoryOpen(true)
+      }
+    } catch { /* silent */ }
+  }
 
   const filteredDIs = generatedDIs.filter(di => !searchQuery || di.title.toLowerCase().includes(searchQuery.toLowerCase()) || di.position?.title?.toLowerCase().includes(searchQuery.toLowerCase()))
 
@@ -1088,19 +1133,30 @@ export function GenerationModule() {
               {renderPositionContextInfo(editingDI.position)}
             </div>
           )}
-          {/* Signed toggle in editor */}
+          {/* Signed toggle + workflow status */}
           {editingDI && (
-            <div className="mb-4 flex items-center gap-3">
-              <Switch
-                checked={editSignedByEmployee}
-                onCheckedChange={(checked) => handleToggleSigned(editingDI!.id, checked)}
-              />
-              <Label className="text-sm cursor-pointer">Подписана сотрудником</Label>
-              {editSignedByEmployee && (
-                <Badge className="bg-emerald-600 text-white text-xs gap-1 ml-2">
-                  <CheckCircle2 className="h-3 w-3" /> Подписана сотрудником
-                </Badge>
-              )}
+            <div className="mb-4 flex items-center gap-3 flex-wrap">
+              <Badge className={`text-xs ${STATUS_COLORS[editingDI.status] || STATUS_COLORS.draft}`}>
+                {STATUS_LABELS[editingDI.status] || editingDI.status}
+              </Badge>
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { setNewStatus(editingDI.status === 'draft' ? 'review' : editingDI.status === 'review' ? 'approved' : 'draft'); setStatusDialogOpen(true) }}>
+                Сменить статус
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={fetchStatusHistory}>
+                История
+              </Button>
+              <div className="flex items-center gap-2 ml-auto">
+                <Switch
+                  checked={editSignedByEmployee}
+                  onCheckedChange={(checked) => handleToggleSigned(editingDI.id, checked)}
+                />
+                <Label className="text-sm cursor-pointer">Подписана сотрудником</Label>
+                {editSignedByEmployee && (
+                  <Badge className="bg-emerald-600 text-white text-xs gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> Подписана
+                  </Badge>
+                )}
+              </div>
             </div>
           )}
           <div className="space-y-3">
@@ -1154,6 +1210,60 @@ export function GenerationModule() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setImproveDialogOpen(false)}>Отмена</Button>
             <Button onClick={handleImprove} disabled={improving}>{improving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Улучшить'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Status Change Dialog */}
+      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Сменить статус ДИ</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Новый статус</Label>
+              <Select value={newStatus} onValueChange={setNewStatus}>
+                <SelectTrigger><SelectValue placeholder="Выберите статус" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Черновик</SelectItem>
+                  <SelectItem value="review">На согласование</SelectItem>
+                  <SelectItem value="approved">Согласована</SelectItem>
+                  <SelectItem value="exported">Экспортирована</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Комментарий (необязательно)</Label>
+              <Textarea value={statusComment} onChange={e => setStatusComment(e.target.value)} placeholder="Например: отправлено на согласование руководителю отдела" className="min-h-[80px]" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStatusDialogOpen(false)}>Отмена</Button>
+            <Button onClick={handleStatusChange} disabled={!newStatus}>Применить</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Status History Dialog */}
+      <Dialog open={statusHistoryOpen} onOpenChange={setStatusHistoryOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>История изменений статуса</DialogTitle></DialogHeader>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {statusHistory.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Нет записей</p>}
+            {statusHistory.map((h) => (
+              <div key={h.id} className="border rounded-lg p-3 space-y-1">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">{STATUS_LABELS[h.fromStatus] || h.fromStatus}</Badge>
+                  <span className="text-muted-foreground">→</span>
+                  <Badge className={`text-xs ${STATUS_COLORS[h.toStatus] || STATUS_COLORS.draft}`}>{STATUS_LABELS[h.toStatus] || h.toStatus}</Badge>
+                  <span className="text-xs text-muted-foreground ml-auto">{new Date(h.createdAt).toLocaleString('ru-RU')}</span>
+                </div>
+                {h.comment && <p className="text-sm text-muted-foreground">{h.comment}</p>}
+                {h.userEmail && <p className="text-xs text-muted-foreground">Пользователь: {h.userEmail}</p>}
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStatusHistoryOpen(false)}>Закрыть</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
