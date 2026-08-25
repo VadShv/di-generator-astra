@@ -78,7 +78,8 @@ export function getPresetForRole(role: string): Permissions {
 
 // Распарсить permissions из JSON-строки
 export function parsePermissions(role: string, permissionsJson: string | null): Permissions {
-  if (role === 'admin' || !permissionsJson) return ALL_WRITE
+  if (role === 'admin') return ALL_WRITE
+  if (!permissionsJson) return getPresetForRole(role)
   try {
     const parsed = JSON.parse(permissionsJson) as Permissions
     // Дополняем недостающие вкладки значением 'none'

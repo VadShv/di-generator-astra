@@ -573,7 +573,7 @@ export function MasterPromptsModule() {
                       </div>
                       {c.description && <p className="text-sm text-muted-foreground mt-1">{c.description}</p>}
                       <div className="flex items-center gap-1 mt-2 flex-wrap">
-                        {c.steps.sort((a, b) => a.order - b.order).map((s, i) => (
+                        {c.steps.slice().sort((a, b) => a.order - b.order).map((s, i) => (
                           <span key={i} className="flex items-center gap-1">
                             <Badge variant="outline" className="text-xs">{i + 1}. {categoryLabel(s.category)}</Badge>
                             {i < c.steps.length - 1 && <span className="text-muted-foreground">→</span>}

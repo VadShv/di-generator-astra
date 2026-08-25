@@ -159,12 +159,14 @@ export function CascadePositionSelector({
     setSelCompanyId(id)
     setSelDepartmentId('')
     onPositionChange('')
+    onPositionsChange?.([])
     onCompanyChange?.(id)
     onDepartmentChange?.('')
   }
   const handleDepartmentChange = (id: string) => {
     setSelDepartmentId(id)
     onPositionChange('')
+    onPositionsChange?.([])
     onDepartmentChange?.(id)
   }
   const handlePositionChange = (id: string) => {

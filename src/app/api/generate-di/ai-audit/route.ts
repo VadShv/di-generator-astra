@@ -229,18 +229,19 @@ export async function GET(request: Request) {
       orderBy: { createdAt: 'desc' },
     })
 
-    // Parse JSON fields for each result
+    // Parse JSON fields for each result (safe against null/invalid legacy data)
+    const safeParse = (s: string | null): unknown => { try { return JSON.parse(s ?? '[]') } catch { return [] } }
     const parsed = auditResults.map((r) => ({
       ...r,
-      duplicatedTkItems: JSON.parse(r.duplicatedTkItems),
-      vagueFormulationItems: JSON.parse(r.vagueFormulationItems),
-      legislativeConflictItems: JSON.parse(r.legislativeConflictItems),
-      unrealisticRequirementItems: JSON.parse(r.unrealisticRequirementItems),
-      incompleteSectionItems: JSON.parse(r.incompleteSectionItems),
-      outdatedItems: JSON.parse(r.outdatedItems),
-      contradictoryItems: JSON.parse(r.contradictoryItems),
-      riskyItems: JSON.parse(r.riskyItems),
-      recommendations: JSON.parse(r.recommendations),
+      duplicatedTkItems: safeParse(r.duplicatedTkItems),
+      vagueFormulationItems: safeParse(r.vagueFormulationItems),
+      legislativeConflictItems: safeParse(r.legislativeConflictItems),
+      unrealisticRequirementItems: safeParse(r.unrealisticRequirementItems),
+      incompleteSectionItems: safeParse(r.incompleteSectionItems),
+      outdatedItems: safeParse(r.outdatedItems),
+      contradictoryItems: safeParse(r.contradictoryItems),
+      riskyItems: safeParse(r.riskyItems),
+      recommendations: safeParse(r.recommendations),
     }))
 
     return NextResponse.json(parsed)

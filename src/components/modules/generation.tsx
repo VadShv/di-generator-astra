@@ -149,7 +149,7 @@ export function GenerationModule() {
    try { const res = await fetch('/api/templates'); if (res.ok) setTemplates((await res.json()).filter((t: Template) => t.isActive)) } catch { /* silent */ }
  }, [])
  const fetchPrompts = useCallback(async () => {
-   try { const res = await fetch('/api/master-prompts?active=true'); if (res.ok) setMasterPrompts(Array.isArray(await res.json()) ? await res.json() : []) } catch { setMasterPrompts([]) }
+    try { const res = await fetch('/api/master-prompts?active=true'); if (res.ok) { const data = await res.json(); setMasterPrompts(Array.isArray(data) ? data : []) } } catch { setMasterPrompts([]) }
  }, [])
 
   useEffect(() => { (async () => { setLoading(true); await Promise.all([fetchDIs(), fetchPositions(), fetchTemplates(), fetchPrompts(), fetchCompanies(), fetchDepartments()]); setLoading(false) })() }, [fetchDIs, fetchPositions, fetchTemplates, fetchPrompts, fetchCompanies, fetchDepartments])

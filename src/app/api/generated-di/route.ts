@@ -47,6 +47,7 @@ export async function GET(request: Request) {
               },
             },
           },
+          sections: { orderBy: { order: 'asc' }, select: { id: true, sectionTitle: true, sectionContent: true, order: true, aiGenerated: true, editedBy: true } },
           sourceArchive: { select: { id: true, title: true } },
           _count: { select: { sections: true, versions: true, auditResults: true } },
         },
