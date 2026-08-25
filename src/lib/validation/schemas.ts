@@ -5,7 +5,7 @@
 import { z } from 'zod'
 
 /** Базовая проверка: непустая строка (после trim). */
-const nonEmptyString = z
+export const nonEmptyString = z
   .string()
   .trim()
   .min(1, 'Поле не может быть пустым')
@@ -46,10 +46,23 @@ export const aiSectionSchema = z
     message: 'Требуется либо manualMode+positionId, либо generatedDIId',
   })
 
+/** Пресеты Magic Wand Toolbar. */
+export const magicWandPresetSchema = z.enum([
+  'detail',
+  'shorten',
+  'formalize',
+  'simplify',
+  'kpi',
+  'style',
+])
+
 /** POST /api/generate-di/ai-improve */
 export const aiImproveSchema = z.object({
   sectionId: idSchema,
-  instruction: nonEmptyString,
+  instruction: z.string().trim().optional(),
+  preset: magicWandPresetSchema.optional(),
+}).refine((data) => data.instruction || data.preset, {
+  message: 'Требуется либо instruction, либо preset',
 })
 
 /** POST /api/generate-di/ai-audit */

@@ -28,6 +28,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { Plus, Pencil, Trash2, Eye, Loader2, Sparkles, FileText, PenLine, Wand2, Download, ChevronDown, ChevronRight, CheckCircle2, RotateCcw, BookOpen, Zap, Crown, Star, LayoutTemplate, ArrowUp, ArrowDown, Settings2, GitCompare } from 'lucide-react'
 import { CascadePositionSelector } from '@/components/modules/cascade-position-selector'
+import { MagicWandToolbar } from '@/components/editor/magic-wand-toolbar'
+import type { MagicWandPreset } from '@/components/editor/magic-wand-toolbar'
 
 interface Department { id: string; name: string; code: string }
 interface BusinessFunction { id: string; name: string }
@@ -123,6 +125,7 @@ export function GenerationModule() {
   const [improveSectionId, setImproveSectionId] = useState('')
   const [improveInstruction, setImproveInstruction] = useState('')
   const [improving, setImproving] = useState(false)
+  const [activeMagicPreset, setActiveMagicPreset] = useState<MagicWandPreset | null>(null)
 
   // View/delete
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
@@ -395,7 +398,27 @@ export function GenerationModule() {
     } finally { setSectionGenerating(p => ({ ...p, [sectionOrder]: false })) }
   }
 
-  // Editor: Improve section
+  // Editor: Magic Wand preset
+  const handleMagicWand = async (preset: MagicWandPreset, sectionId: string) => {
+    setActiveMagicPreset(preset)
+    try {
+      const res = await fetch('/api/generate-di/ai-improve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sectionId, preset }),
+      })
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Ошибка') }
+      const updated = await res.json()
+      setEditSections(prev => prev.map(s => s.id === sectionId ? { ...s, ...updated } : s))
+      toast({ title: `Секция улучшена: ${preset}` })
+    } catch (e) {
+      toast({ title: 'Ошибка', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' })
+    } finally {
+      setActiveMagicPreset(null)
+    }
+  }
+
+  // Editor: Improve section (legacy — через диалог "Своя инструкция")
   const handleImprove = async () => {
     if (!improveSectionId || !improveInstruction.trim()) return
     setImproving(true)
@@ -1179,14 +1202,20 @@ export function GenerationModule() {
                     {section.aiGenerated && <Badge variant="outline" className="text-xs">ИИ</Badge>}
                     {!section.aiGenerated && section.sectionContent && <Badge variant="secondary" className="text-xs">Вручную</Badge>}
                   </Label>
-                  <div className="flex gap-1">
-                    <Button variant="outline" size="sm" onClick={() => handleGenerateSection(section.order)} disabled={sectionGenerating[section.order]}>
+                   <div className="flex gap-1">
+                    <Button variant="outline" size="sm" onClick={() => handleGenerateSection(section.order)} disabled={sectionGenerating[section.order] || activeMagicPreset !== null}>
                       {sectionGenerating[section.order] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => { setImproveSectionId(section.id); setImproveInstruction(''); setImproveDialogOpen(true) }}><FileText className="h-3 w-3" /></Button>
                   </div>
                 </div>
                 <Textarea value={section.sectionContent} onChange={e => setEditSections(prev => prev.map(s => s.id === section.id ? { ...s, sectionContent: e.target.value } : s))} className="min-h-[120px] text-sm" />
+                <MagicWandToolbar
+                  loading={activeMagicPreset !== null}
+                  activePreset={activeMagicPreset}
+                  onPreset={(preset) => handleMagicWand(preset, section.id)}
+                  onCustom={() => { setImproveSectionId(section.id); setImproveInstruction(''); setImproveDialogOpen(true) }}
+                  showCustom
+                />
                 {section.sectionContent && (() => {
                   const sStats = analyzeText(section.sectionContent)
                   if (sStats.words < 5) return null
