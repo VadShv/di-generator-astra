@@ -28,10 +28,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { Plus, Pencil, Trash2, Eye, Loader2, Sparkles, FileText, PenLine, Wand2, Download, ChevronDown, ChevronRight, CheckCircle2, RotateCcw, BookOpen, Zap, Crown, Star, LayoutTemplate, ArrowUp, ArrowDown, Settings2, GitCompare } from 'lucide-react'
 import { CascadePositionSelector } from '@/components/modules/cascade-position-selector'
+import { DICard, diTypeFromStatus, type DICardData } from '@/components/modules/di-card'
+import { DIDetail } from '@/components/modules/di-detail'
 import { MagicWandToolbar } from '@/components/editor/magic-wand-toolbar'
 import type { MagicWandPreset } from '@/components/editor/magic-wand-toolbar'
 
-interface Department { id: string; name: string; code: string }
+interface Department { id: string; name: string; code: string; company?: { id: string; name: string } | null }
 interface BusinessFunction { id: string; name: string }
 interface Project { id: string; name: string }
 interface Position { id: string; title: string; code: string; departmentId: string; department: Department; grade?: string | null; businessFunctionId?: string | null; businessFunction?: BusinessFunction | null; projectId?: string | null; project?: Project | null; headcount: number; functions?: string | null }
@@ -68,7 +70,7 @@ const gradeLabel = (grade?: string | null) => grade ? GRADE_LABELS[grade] || gra
 
 export function GenerationModule() {
   const { toast } = useToast()
-  const [viewMode, setViewMode] = useState<'list' | 'generate' | 'manual' | 'editor'>('list')
+  const [viewMode, setViewMode] = useState<'list' | 'generate' | 'manual' | 'editor' | 'detail'>('list')
  const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
  const [positions, setPositions] = useState<Position[]>([])
  const [templates, setTemplates] = useState<Template[]>([])
@@ -619,51 +621,41 @@ export function GenerationModule() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Название</TableHead>
-                  <TableHead>Должность</TableHead>
-                  <TableHead>Статус</TableHead>
-                  <TableHead className="hidden sm:table-cell">Дата</TableHead>
-                  <TableHead className="w-24 text-right">Действия</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredDIs.map(di => (
-                  <TableRow key={di.id} className="hover:bg-muted/40">
-                    <TableCell className="font-medium">{di.title}</TableCell>
-                    <TableCell className="text-sm">
-                      <div>{di.position?.title}</div>
-                      {di.position?.grade && <div className="text-xs text-muted-foreground">{gradeLabel(di.position.grade)}</div>}
-                      {di.position?.businessFunction && <div className="text-xs text-muted-foreground">БФ: {di.position.businessFunction.name}</div>}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <Badge variant={STATUS_MAP[di.status]?.variant || 'secondary'}>{STATUS_MAP[di.status]?.label || di.status}</Badge>
-                        {di.signedByEmployee && (
-                          <Badge className="bg-emerald-600 text-white text-xs gap-1">
-                            <CheckCircle2 className="h-3 w-3" /> Подписана
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground hidden sm:table-cell">{new Date(di.createdAt).toLocaleDateString('ru-RU')}</TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-0.5">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setViewingDI(di); setViewDialogOpen(true) }}><Eye className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditor(di)}><Pencil className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(di.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredDIs.map(di => (
+            <DICard
+              key={di.id}
+              di={{
+                id: di.id,
+                type: diTypeFromStatus(di.status),
+                title: di.title,
+                companyName: di.position?.department?.company?.name ?? null,
+                departmentName: di.position?.department?.name ?? null,
+                positionTitle: di.position?.title ?? null,
+                positionCode: di.position?.code ?? null,
+                date: di.createdAt,
+                content: di.sections.map(s => `${s.sectionTitle}\n${s.sectionContent}`).join('\n\n'),
+                templateName: di.template?.name ?? null,
+              } as DICardData}
+              onOpen={() => { setEditingDI(di); setViewMode('detail') }}
+              onEdit={() => openEditor(di)}
+              onExport={async (d) => {
+                try {
+                  const res = await fetch(`/api/export-di/docx?id=${d.id}`)
+                  if (!res.ok) throw new Error()
+                  const blob = await res.blob()
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url; a.download = `${d.title}.docx`; a.click()
+                  URL.revokeObjectURL(url)
+                  toast({ title: 'Экспортировано' })
+                } catch { toast({ title: 'Ошибка', description: 'Не удалось экспортировать', variant: 'destructive' }) }
+              }}
+              onCompare={() => setCompareOpen(true)}
+              onDelete={(d) => setDeleteId(d.id)}
+            />
+          ))}
+        </div>
       )}
 
       {/* View Dialog */}
@@ -712,6 +704,20 @@ export function GenerationModule() {
       </AlertDialog>
     </div>
   )
+
+  // ===================== DETAIL VIEW =====================
+  if (viewMode === 'detail' && editingDI) {
+    return (
+      <DIDetail
+        di={editingDI as unknown as Parameters<typeof DIDetail>[0]['di']}
+        onBack={() => setViewMode('list')}
+        onEdit={(di) => openEditor(di as unknown as GeneratedDI)}
+        onDelete={(id) => setDeleteId(id)}
+        onCompare={() => setCompareOpen(true)}
+        onRefresh={fetchDIs}
+      />
+    )
+  }
 
   // ===================== AI GENERATE VIEW =====================
   if (viewMode === 'generate') {
