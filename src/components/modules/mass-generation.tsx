@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { Zap, Loader2, CheckCircle2, XCircle, Building2, Users, FileText, Layers, Landmark, ChevronRight, Plus, Network, X } from 'lucide-react'
+import { ListSkeleton } from '@/components/skeletons'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -236,9 +237,7 @@ function LineageTab({
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <ListSkeleton count={4} />
       ) : lineages.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
@@ -718,9 +717,7 @@ export function MassGenerationModule() {
         </TabsList>
         <TabsContent value="mass">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
+            <ListSkeleton count={4} />
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* ── Колонка 1: каскадный выбор (3 последовательных блока) ── */}

@@ -29,6 +29,7 @@ import {
   FileText, GitCommitVertical, ShieldCheck, Archive, GitBranch, CheckCircle2,
   Clock, AlertTriangle, MessageSquarePlus, Flag,
 } from 'lucide-react'
+import { TableSkeleton } from '@/components/skeletons'
 import { CascadePositionSelector } from './cascade-position-selector'
 
 // ============ Типы ============
@@ -512,7 +513,7 @@ export function TrackingModule() {
             </CardHeader>
             <CardContent>
               {feedLoading ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                <TableSkeleton rows={6} cols={4} />
               ) : feed.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground">
                   <ClipboardList className="h-10 w-10 mx-auto mb-2 opacity-40" />
@@ -571,7 +572,7 @@ export function TrackingModule() {
             </CardHeader>
             <CardContent>
               {auditLoading ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                <TableSkeleton rows={8} cols={5} />
               ) : auditItems.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground">
                   <ClipboardList className="h-10 w-10 mx-auto mb-2 opacity-40" />

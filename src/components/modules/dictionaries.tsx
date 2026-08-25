@@ -20,6 +20,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Briefcase, FolderOpen, Plus, Pencil, Trash2, Search, Loader2, ShieldCheck } from 'lucide-react'
+import { CardGridSkeleton } from '@/components/skeletons'
 
 // ==========================================
 // Types
@@ -518,9 +519,7 @@ export function DictionariesModule() {
           </div>
 
           {loadingBf ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
+            <CardGridSkeleton count={6} />
           ) : filteredBf.length === 0 ? (
             searchBf ? (
               <Card>
@@ -561,9 +560,7 @@ export function DictionariesModule() {
           </div>
 
           {loadingPr ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
+            <CardGridSkeleton count={6} />
           ) : filteredPr.length === 0 ? (
             searchPr ? (
               <Card>
@@ -604,9 +601,7 @@ export function DictionariesModule() {
           </div>
 
           {loadingPa ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
+            <CardGridSkeleton count={6} />
           ) : filteredPa.length === 0 ? (
             searchPa ? (
               <Card>

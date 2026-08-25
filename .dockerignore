@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+.next
+coverage
+.env
+.pgdata
+backups
+*.log
+playwright-report
+test-results
+.zscripts
+tool-results

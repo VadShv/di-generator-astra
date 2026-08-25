@@ -34,8 +34,11 @@ export async function GET() {
   return NextResponse.json(
     {
       status: allOk ? 'healthy' : 'degraded',
+      version: '2.0.0',
       checks,
       timestamp: new Date().toISOString(),
+      metricsEndpoint: '/api/metrics',
+      docsEndpoint: '/api/docs',
     },
     { status: allOk ? 200 : 503 }
   )

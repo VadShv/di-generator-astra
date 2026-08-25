@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { requireAuth, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import {
+  listCompanies,
+  createCompany,
+  updateCompany,
+  deleteCompany,
+} from '@/services/company-service'
 
 export async function GET() {
   try {
     await requireAuth()
-    const companies = await db.company.findMany({
-      include: {
-        _count: {
-          select: { departments: true }
-        }
-      },
-      orderBy: { name: 'asc' }
-    })
+    const companies = await listCompanies()
     return NextResponse.json(companies)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
@@ -26,40 +24,8 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuth()
     const body = await request.json()
-   const { name, shortName, code, type, director, description } = body
-    const { inn, ogrn, kpp, legalAddress, actualAddress } = body
-
-   if (!name || !code) {
-      return NextResponse.json({ error: 'Название и код обязательны' }, { status: 400 })
-    }
-
-    const existing = await db.company.findUnique({ where: { code } })
-    if (existing) {
-      return NextResponse.json({ error: 'Компания с таким кодом уже существует' }, { status: 409 })
-    }
-
-    const company = await db.company.create({
-      data: {
-       name,
-       shortName: shortName || null,
-       code,
-       type: type || null,
-       director: director || null,
-       description: description || null,
-        inn: inn || null,
-        ogrn: ogrn || null,
-        kpp: kpp || null,
-        legalAddress: legalAddress || null,
-        actualAddress: actualAddress || null,
-     },
-     include: {
-       _count: {
-         select: { departments: true }
-       }
-     }
-   })
-
-   return NextResponse.json(company, { status: 201 })
+    const company = await createCompany(body)
+    return NextResponse.json(company, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
     console.error('Error creating company:', error)
@@ -71,49 +37,8 @@ export async function PUT(request: NextRequest) {
   try {
     await requireAuth()
     const body = await request.json()
-   const { id, name, shortName, code, type, director, description } = body
-    const { inn, ogrn, kpp, legalAddress, actualAddress } = body
-
-   if (!id) {
-      return NextResponse.json({ error: 'ID обязателен' }, { status: 400 })
-    }
-
-    const existing = await db.company.findUnique({ where: { id } })
-    if (!existing) {
-      return NextResponse.json({ error: 'Компания не найдена' }, { status: 404 })
-    }
-
-    // Check unique code if changing
-    if (code && code !== existing.code) {
-      const codeTaken = await db.company.findUnique({ where: { code } })
-      if (codeTaken) {
-        return NextResponse.json({ error: 'Компания с таким кодом уже существует' }, { status: 409 })
-      }
-    }
-
-    const company = await db.company.update({
-      where: { id },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(shortName !== undefined && { shortName: shortName || null }),
-        ...(code !== undefined && { code }),
-       ...(type !== undefined && { type: type || null }),
-       ...(director !== undefined && { director: director || null }),
-       ...(description !== undefined && { description: description || null }),
-        ...(inn !== undefined && { inn: inn || null }),
-        ...(ogrn !== undefined && { ogrn: ogrn || null }),
-        ...(kpp !== undefined && { kpp: kpp || null }),
-        ...(legalAddress !== undefined && { legalAddress: legalAddress || null }),
-        ...(actualAddress !== undefined && { actualAddress: actualAddress || null }),
-     },
-     include: {
-       _count: {
-         select: { departments: true }
-       }
-     }
-   })
-
-   return NextResponse.json(company)
+    const company = await updateCompany(body)
+    return NextResponse.json(company)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
     console.error('Error updating company:', error)
@@ -125,28 +50,8 @@ export async function DELETE(request: NextRequest) {
   try {
     await requireRole('admin')
     const body = await request.json()
-    const { id } = body
-
-    if (!id) {
-      return NextResponse.json({ error: 'ID обязателен' }, { status: 400 })
-    }
-
-    const existing = await db.company.findUnique({
-      where: { id },
-      include: { departments: true }
-    })
-
-    if (!existing) {
-      return NextResponse.json({ error: 'Компания не найдена' }, { status: 404 })
-    }
-
-    if (existing.departments.length > 0) {
-      return NextResponse.json({ error: 'Невозможно удалить компанию с подразделениями' }, { status: 400 })
-    }
-
-    await db.company.delete({ where: { id } })
-
-    return NextResponse.json({ success: true })
+    const result = await deleteCompany(body.id)
+    return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
     console.error('Error deleting company:', error)

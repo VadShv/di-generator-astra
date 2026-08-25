@@ -1,0 +1,391 @@
+openapi: 3.1.0
+info:
+  title: Генератор ДИ — API
+  description: API корпоративного сервиса генерации должностных инструкций Группы Астра
+  version: 2.0.0
+  contact:
+    name: Группа Астра
+servers:
+  - url: http://localhost:3001/api
+    description: Локальный dev-сервер
+paths:
+  /companies:
+    get:
+      summary: Список юридических лиц
+      tags: [Компании]
+      responses:
+        '200':
+          description: Массив компаний с количеством подразделений
+    post:
+      summary: Создать компанию
+      tags: [Компании]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code]
+              properties:
+                name: { type: string }
+                code: { type: string }
+                inn: { type: string }
+                ogrn: { type: string }
+      responses:
+        '201': { description: Компания создана }
+    put:
+      summary: Обновить компанию
+      tags: [Компании]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string }
+                name: { type: string }
+                code: { type: string }
+      responses:
+        '200': { description: Компания обновлена }
+    delete:
+      summary: Удалить компанию
+      tags: [Компании]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string }
+      responses:
+        '200': { description: Компания удалена }
+
+  /departments:
+    get:
+      summary: Список подразделений
+      tags: [Подразделения]
+      responses:
+        '200': { description: Дерево подразделений }
+    post:
+      summary: Создать подразделение
+      tags: [Подразделения]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code]
+              properties:
+                name: { type: string }
+                code: { type: string }
+                parentId: { type: string, nullable: true }
+                companyId: { type: string, nullable: true }
+      responses:
+        '201': { description: Подразделение создано }
+    put:
+      summary: Обновить подразделение
+      tags: [Подразделения]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string }
+                name: { type: string }
+                code: { type: string }
+                parentId: { type: string, nullable: true }
+      responses:
+        '200': { description: Подразделение обновлено }
+    delete:
+      summary: Удалить подразделение
+      tags: [Подразделения]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string }
+      responses:
+        '200': { description: Подразделение удалено }
+
+  /positions:
+    get:
+      summary: Список должностей
+      tags: [Должности]
+      parameters:
+        - name: departmentId
+          in: query
+          schema: { type: string }
+        - name: grade
+          in: query
+          schema: { type: string, enum: [линейная, руководитель] }
+      responses:
+        '200': { description: Массив должностей }
+    post:
+      summary: Создать должность
+      tags: [Должности]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, code, departmentId]
+              properties:
+                title: { type: string }
+                code: { type: string }
+                departmentId: { type: string }
+                grade: { type: string, enum: [линейная, руководитель] }
+                headcount: { type: number }
+      responses:
+        '201': { description: Должность создана }
+    put:
+      summary: Обновить должность
+      tags: [Должности]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string }
+                title: { type: string }
+                code: { type: string }
+      responses:
+        '200': { description: Должность обновлена }
+    delete:
+      summary: Удалить должность
+      tags: [Должности]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string }
+      responses:
+        '200': { description: Должность удалена }
+
+  /generated-di:
+    get:
+      summary: Список сгенерированных ДИ
+      tags: [Должностные инструкции]
+      parameters:
+        - name: positionId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, review, approved, exported] }
+      responses:
+        '200': { description: Массив ДИ }
+    post:
+      summary: Создать ДИ вручную
+      tags: [Должностные инструкции]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [positionId, title]
+              properties:
+                positionId: { type: string }
+                title: { type: string }
+                sections:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      sectionTitle: { type: string }
+                      sectionContent: { type: string }
+                      order: { type: number }
+      responses:
+        '201': { description: ДИ создана }
+    put:
+      summary: Обновить ДИ (с авто-версионированием)
+      tags: [Должностные инструкции]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string }
+                title: { type: string }
+                status: { type: string, enum: [draft, review, approved, exported] }
+                signedByEmployee: { type: boolean }
+      responses:
+        '200': { description: ДИ обновлена }
+    delete:
+      summary: Удалить ДИ
+      tags: [Должностные инструкции]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string }
+      responses:
+        '200': { description: ДИ удалена }
+
+  /generate-di/ai-generate:
+    post:
+      summary: ИИ-генерация ДИ по должности
+      tags: [Генерация]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [positionId, templateId]
+              properties:
+                positionId: { type: string }
+                templateId: { type: string }
+                providerId: { type: string }
+      responses:
+        '200': { description: Сгенерированная ДИ }
+
+  /generate-di/mass-generate:
+    post:
+      summary: Запуск массовой генерации
+      tags: [Генерация]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [templateId, scopeData]
+              properties:
+                templateId: { type: string }
+                scopeData:
+                  type: object
+                  properties:
+                    companyIds: { type: array, items: { type: string } }
+                    departmentIds: { type: array, items: { type: string } }
+                    positionIds: { type: array, items: { type: string } }
+      responses:
+        '202': { description: Job создан, генерация запущена в фоне }
+
+  /archive-di:
+    get:
+      summary: Список архивных ДИ
+      tags: [Архив]
+      parameters:
+        - name: positionId
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: linkStatus
+          in: query
+          schema: { type: string, enum: [unlinked, linked, all] }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: pageSize
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Пагинированный список архивных ДИ }
+    post:
+      summary: Загрузить архивную ДИ
+      tags: [Архив]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, content]
+              properties:
+                title: { type: string }
+                content: { type: string }
+                positionId: { type: string, nullable: true }
+                fileName: { type: string, nullable: true }
+      responses:
+        '201': { description: Архивная ДИ создана }
+
+  /ai-providers:
+    get:
+      summary: Список ИИ-провайдеров
+      tags: [ИИ-провайдеры]
+      responses:
+        '200': { description: Массив провайдеров (API-ключи замаскированы) }
+    post:
+      summary: Добавить ИИ-провайдера
+      tags: [ИИ-провайдеры]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type, modelName]
+              properties:
+                name: { type: string }
+                type: { type: string, enum: [openai_compatible, yandex_cloud, cloud, ollama, zai] }
+                baseUrl: { type: string }
+                apiKey: { type: string }
+                modelName: { type: string }
+      responses:
+        '201': { description: Провайдер добавлен }
+
+  /export-di/docx:
+    post:
+      summary: Экспорт ДИ в DOCX
+      tags: [Экспорт]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [diId]
+              properties:
+                diId: { type: string }
+      responses:
+        '200':
+          description: DOCX-файл
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+
+  /health:
+    get:
+      summary: Health check
+      tags: [Система]
+      responses:
+        '200':
+          description: Статус сервиса
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  timestamp: { type: string }
+                  version: { type: string }

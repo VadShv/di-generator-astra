@@ -31,8 +31,15 @@ jobs:
       - name: ESLint
         run: bun run lint
 
-      - name: Unit tests
-        run: bunx vitest run
+      - name: Unit tests with coverage
+        run: bunx vitest run --coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
 
       - name: Build
         run: bun run build

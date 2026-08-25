@@ -167,7 +167,7 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    logger.error('Экспорт DOCX', error)
+    logger.error('Экспорт DOCX', error instanceof Error ? error.message : String(error))
     return NextResponse.json({ error: 'Ошибка экспорта' }, { status: 500 })
   }
 }

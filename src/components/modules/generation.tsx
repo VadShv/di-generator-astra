@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { analyzeText } from '@/lib/text-analysis'
+import { ListSkeleton } from '@/components/skeletons'
 import { Progress } from '@/components/ui/progress'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -582,7 +583,7 @@ export function GenerationModule() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+        <ListSkeleton count={4} />
       ) : filteredDIs.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">

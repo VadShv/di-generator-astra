@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { requireAuth, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import {
+  listDepartments,
+  createDepartment,
+  updateDepartment,
+  deleteDepartment,
+} from '@/services/department-service'
 
 export async function GET() {
   try {
     await requireAuth()
-    const departments = await db.department.findMany({
-      include: {
-        parent: true,
-        children: true,
-        company: true,
-        _count: {
-          select: { positions: true }
-        }
-      },
-      orderBy: { name: 'asc' }
-    })
+    const departments = await listDepartments()
     return NextResponse.json(departments)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
@@ -29,43 +24,7 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuth()
     const body = await request.json()
-    const { name, code, parentId, companyId } = body
-
-    if (!name || !code) {
-      return NextResponse.json({ error: 'Название и код обязательны' }, { status: 400 })
-    }
-
-    // Check for unique code
-    const existing = await db.department.findUnique({ where: { code } })
-    if (existing) {
-      return NextResponse.json({ error: 'Подразделение с таким кодом уже существует' }, { status: 409 })
-    }
-
-    // Validate parent exists if provided
-    if (parentId) {
-      const parent = await db.department.findUnique({ where: { id: parentId } })
-      if (!parent) {
-        return NextResponse.json({ error: 'Родительское подразделение не найдено' }, { status: 404 })
-      }
-    }
-
-    const department = await db.department.create({
-      data: {
-        name,
-        code,
-        parentId: parentId || null,
-        companyId: companyId || null,
-      },
-      include: {
-        parent: true,
-        children: true,
-        company: true,
-        _count: {
-          select: { positions: true }
-        }
-      }
-    })
-
+    const department = await createDepartment(body)
     return NextResponse.json(department, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
@@ -78,48 +37,7 @@ export async function PUT(request: NextRequest) {
   try {
     await requireAuth()
     const body = await request.json()
-    const { id, name, code, parentId, companyId } = body
-
-    if (!id) {
-      return NextResponse.json({ error: 'ID обязателен' }, { status: 400 })
-    }
-
-    const existing = await db.department.findUnique({ where: { id } })
-    if (!existing) {
-      return NextResponse.json({ error: 'Подразделение не найдено' }, { status: 404 })
-    }
-
-    // Check unique code if changing
-    if (code && code !== existing.code) {
-      const codeTaken = await db.department.findUnique({ where: { code } })
-      if (codeTaken) {
-        return NextResponse.json({ error: 'Подразделение с таким кодом уже существует' }, { status: 409 })
-      }
-    }
-
-    // Prevent circular reference
-    if (parentId === id) {
-      return NextResponse.json({ error: 'Подразделение не может быть родителем самому себе' }, { status: 400 })
-    }
-
-    const department = await db.department.update({
-      where: { id },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(code !== undefined && { code }),
-        ...(parentId !== undefined && { parentId: parentId || null }),
-        ...(companyId !== undefined && { companyId: companyId || null }),
-      },
-      include: {
-        parent: true,
-        children: true,
-        company: true,
-        _count: {
-          select: { positions: true }
-        }
-      }
-    })
-
+    const department = await updateDepartment(body)
     return NextResponse.json(department)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
@@ -132,35 +50,8 @@ export async function DELETE(request: NextRequest) {
   try {
     await requireRole('admin')
     const body = await request.json()
-    const { id } = body
-
-    if (!id) {
-      return NextResponse.json({ error: 'ID обязателен' }, { status: 400 })
-    }
-
-    const existing = await db.department.findUnique({
-      where: { id },
-      include: {
-        children: true,
-        positions: true,
-      }
-    })
-
-    if (!existing) {
-      return NextResponse.json({ error: 'Подразделение не найдено' }, { status: 404 })
-    }
-
-    if (existing.children.length > 0) {
-      return NextResponse.json({ error: 'Невозможно удалить подразделение с дочерними элементами' }, { status: 400 })
-    }
-
-    if (existing.positions.length > 0) {
-      return NextResponse.json({ error: 'Невозможно удалить подразделение с должностями' }, { status: 400 })
-    }
-
-    await db.department.delete({ where: { id } })
-
-    return NextResponse.json({ success: true })
+    const result = await deleteDepartment(body.id)
+    return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
     console.error('Error deleting department:', error)

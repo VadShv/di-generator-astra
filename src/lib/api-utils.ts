@@ -6,8 +6,16 @@ import { NextResponse } from 'next/server'
 import { ZodError } from 'zod'
 import type { AppLogger } from './logger'
 import { createLogger } from './logger'
+import { isSentryEnabled } from './sentry'
 
 const defaultLogger = createLogger('api')
+
+function captureSentry(error: unknown, extra?: Record<string, unknown>) {
+  if (!isSentryEnabled()) return
+  import('@sentry/node').then((Sentry) => {
+    Sentry.captureException(error, { extra })
+  }).catch(() => {})
+}
 
 /** Стандартизованная ошибка API. */
 export class ApiError extends Error {
@@ -45,6 +53,7 @@ export function errorResponse(
 
   const message = error instanceof Error ? error.message : String(error)
   logger.error(`${scope ?? 'request'}: unexpected`, { message })
+  captureSentry(error, { scope, message })
   return NextResponse.json(
     { error: message, code: 'internal_error' },
     { status: 500 }

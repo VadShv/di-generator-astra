@@ -1,54 +1,59 @@
-// Единый логгер сервиса (Фаза 1).
-// Обёртка над console с уровнями и контекстом роута/модуля.
-// В проде можно расширить отправкой в систему мониторинга / БД (ActivityLog).
+// Структурированный JSON-логгер на базе pino (спринт 5).
+// В dev — pretty print, в prod — JSON для сбора в ELK/Loki.
 
-type LogLevel = 'info' | 'warn' | 'error' | 'debug'
+import pino from 'pino'
+import { getRequestContext } from './async-context'
 
-const LEVEL_PRIORITY: Record< LogLevel, number > = {
-  debug: 10,
-  info: 20,
-  warn: 30,
-  error: 40,
-}
+const isDev = process.env.NODE_ENV !== 'production'
 
-const MIN_LEVEL: LogLevel =
-  (process.env.LOG_LEVEL as LogLevel | undefined) ??
-  (process.env.NODE_ENV === 'production' ? 'info' : 'debug')
-
-function shouldLog(level: LogLevel): boolean {
-  return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[MIN_LEVEL]
-}
-
-function format(level: LogLevel, scope: string, message: string, meta?: unknown): string {
-  const ts = new Date().toISOString()
-  const metaStr = meta !== undefined ? ` ${typeof meta === 'string' ? meta : JSON.stringify(meta)}` : ''
-  return `[${ts}] ${level.toUpperCase()} (${scope}) ${message}${metaStr}`
-}
+const rootLogger = pino({
+  level: (process.env.LOG_LEVEL as string) || (isDev ? 'debug' : 'info'),
+  timestamp: pino.stdTimeFunctions.isoTime,
+  ...(isDev && {
+    transport: {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'SYS:standard',
+        ignore: 'pid,hostname',
+      },
+    },
+  }),
+})
 
 export interface AppLogger {
-  info(message: string, meta?: unknown): void
-  warn(message: string, meta?: unknown): void
-  error(message: string, meta?: unknown): void
-  debug(message: string, meta?: unknown): void
+  info(message: string, meta?: Record<string, unknown> | string): void
+  warn(message: string, meta?: Record<string, unknown> | string): void
+  error(message: string, meta?: Record<string, unknown> | string): void
+  debug(message: string, meta?: Record<string, unknown> | string): void
 }
 
-/** Создать логгер с фиксированным scope (обычно имя роута/модуля). */
+/** Создать логгер с фиксированным scope и автоматическим requestId из AsyncLocalStorage. */
 export function createLogger(scope: string): AppLogger {
   return {
-    info(message: string, meta?: unknown) {
-      if (shouldLog('info')) console.log(format('info', scope, message, meta))
+    info(message: string, meta?: Record<string, unknown>) {
+      rootLogger.info({ scope, ...getContextFields(), ...meta }, message)
     },
-    warn(message: string, meta?: unknown) {
-      if (shouldLog('warn')) console.warn(format('warn', scope, message, meta))
+    warn(message: string, meta?: Record<string, unknown>) {
+      rootLogger.warn({ scope, ...getContextFields(), ...meta }, message)
     },
-    error(message: string, meta?: unknown) {
-      if (shouldLog('error')) console.error(format('error', scope, message, meta))
+    error(message: string, meta?: Record<string, unknown>) {
+      rootLogger.error({ scope, ...getContextFields(), ...meta }, message)
     },
-    debug(message: string, meta?: unknown) {
-      if (shouldLog('debug')) console.debug(format('debug', scope, message, meta))
+    debug(message: string, meta?: Record<string, unknown>) {
+      rootLogger.debug({ scope, ...getContextFields(), ...meta }, message)
     },
   }
 }
 
-/** Логгер по умолчанию (для мест без явного scope). */
+/** Глобальный логгер (для мест без явного scope). */
 export const logger = createLogger('app')
+
+function getContextFields(): Record<string, unknown> {
+  const ctx = getRequestContext()
+  const fields: Record<string, unknown> = {}
+  if (ctx?.requestId) fields.requestId = ctx.requestId
+  if (ctx?.userId) fields.userId = ctx.userId
+  if (ctx?.path) fields.path = ctx.path
+  return fields
+}
