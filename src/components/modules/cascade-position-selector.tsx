@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -113,12 +113,19 @@ export function CascadePositionSelector({
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // При смене выбранной должности снаружи — восстановим компанию/подразделение
+  // При смене выбранной должности снаружи — восстановим компанию/подразделение.
+  // Сброс компании/подразделения делаем только при реальном переходе должности
+  // из выбранного состояния в пустое, чтобы не сбрасывать выбор пользователя
+  // во время каскадного выбора (организация → подразделение → должность),
+  // где должность законно пуста, пока пользователь выбирает верхние уровни.
+  const prevPositionIdRef = useRef(positionId)
   useEffect(() => {
+    const prevPositionId = prevPositionIdRef.current
+    prevPositionIdRef.current = positionId
+
     if (!positionId) {
-      // Сбрасываем только если не заданы внешние контролируемые значения.
-      if (companyIdProp === undefined) setSelCompanyId('')
-      if (departmentIdProp === undefined) setSelDepartmentId('')
+      if (prevPositionId && companyIdProp === undefined) setSelCompanyId('')
+      if (prevPositionId && departmentIdProp === undefined) setSelDepartmentId('')
       return
     }
     const pos = positions.find(p => p.id === positionId)
