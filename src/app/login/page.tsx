@@ -1,8 +1,7 @@
 'use client'
 
-// Страница входа (Фаза 5: Auth & production prep).
-// Split-screen дизайн: слева — бренд-картинка, справа — форма входа.
-// Упрощённая версия: img вместо next/Image, нет Switch (SSR-safe).
+// Страница входа. Вынесли useSearchParams в отдельный компонент с Suspense
+// для избежания BAILOUT_TO_CLIENT_SIDE_RENDERING в Next.js 15+.
 
 import { useState, Suspense } from 'react'
 import { signIn } from 'next-auth/react'
@@ -12,10 +11,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, Mail, Lock, ArrowRight } from 'lucide-react'
 
-function LoginForm() {
-  const router = useRouter()
+function SearchParamsReader({ children }: { children: (callbackUrl: string) => React.ReactNode }) {
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/'
+  return <>{children(callbackUrl)}</>
+}
+
+function LoginForm({ callbackUrl }: { callbackUrl: string }) {
+  const router = useRouter()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -51,16 +54,13 @@ function LoginForm() {
     <div className="min-h-screen w-full grid lg:grid-cols-2">
       {/* Левая панель — картинка + брендинг */}
       <div className="relative hidden lg:flex flex-col justify-between overflow-hidden">
-        {/* Фоновая картинка — img вместо Image для SSR-safe */}
         <img
           src="/images/login-hero.png"
           alt="Генератор ДИ — Группа Астра"
           className="absolute inset-0 w-full h-full object-cover"
         />
-        {/* Градиентный overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-violet-900/60" />
 
-        {/* Верхний брендинг */}
         <div className="relative z-10 p-10">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
@@ -76,7 +76,6 @@ function LoginForm() {
           </div>
         </div>
 
-        {/* Центральный слоган */}
         <div className="relative z-10 px-10">
           <h1 className="text-3xl font-bold text-white mb-3 leading-snug">
             Создавайте должностные<br />инструкции с ИИ
@@ -85,14 +84,9 @@ function LoginForm() {
             Автоматическая генерация, согласование и архивирование ДИ
             для всей группы компаний — в единой системе.
           </p>
-
-          {/* Feature badges */}
           <div className="mt-6 flex flex-wrap gap-2">
             {['AI-генерация', 'Соответствие ТК РФ', 'Экспорт DOCX / PDF'].map((label, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 px-3 py-1.5 text-xs text-white/90"
-              >
+              <span key={i} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 px-3 py-1.5 text-xs text-white/90">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
@@ -102,7 +96,6 @@ function LoginForm() {
           </div>
         </div>
 
-        {/* Нижний колонтитул */}
         <div className="relative z-10 p-10">
           <p className="text-xs text-white/40">
             © {new Date().getFullYear()} Группа Астра. Корпоративная система управления ДИ.
@@ -112,7 +105,6 @@ function LoginForm() {
 
       {/* Правая панель — форма входа */}
       <div className="flex flex-col justify-center items-center px-6 py-12 lg:px-16 bg-background">
-        {/* Мобильный хедер (только на sm и меньше) */}
         <div className="lg:hidden w-full max-w-sm mb-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100">
@@ -127,11 +119,7 @@ function LoginForm() {
             </div>
           </div>
           <div className="relative h-40 w-full rounded-xl overflow-hidden">
-            <img
-              src="/images/login-hero.png"
-              alt="Генератор ДИ"
-              className="absolute inset-0 w-full h-full object-cover"
-            />
+            <img src="/images/login-hero.png" alt="Генератор ДИ" className="absolute inset-0 w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
           </div>
         </div>
@@ -139,80 +127,38 @@ function LoginForm() {
         <div className="w-full max-w-sm space-y-6">
           <div className="space-y-1">
             <h3 className="text-2xl font-bold tracking-tight">Вход в систему</h3>
-            <p className="text-sm text-muted-foreground">
-              Введите учётные данные для доступа к генератору ДИ
-            </p>
+            <p className="text-sm text-muted-foreground">Введите учётные данные для доступа к генератору ДИ</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium">
-                Email
-              </Label>
+              <Label htmlFor="email" className="text-sm font-medium">Email</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@astra.ru"
-                  required
-                  autoFocus
-                  className="pl-10 h-11"
-                  autoComplete="email"
-                />
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@astra.ru" required autoFocus className="pl-10 h-11" autoComplete="email" />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium">
-                Пароль
-              </Label>
+              <Label htmlFor="password" className="text-sm font-medium">Пароль</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  className="pl-10 h-11"
-                  autoComplete="current-password"
-                />
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className="pl-10 h-11" autoComplete="current-password" />
               </div>
             </div>
 
             {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
-                {error}
-              </div>
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">{error}</div>
             )}
 
-            <Button
-              type="submit"
-              className="w-full h-11 bg-violet-600 hover:bg-violet-700 transition-colors"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Вход...
-                </>
-              ) : (
-                <>
-                  Войти
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </>
-              )}
+            <Button type="submit" className="w-full h-11 bg-violet-600 hover:bg-violet-700" disabled={loading}>
+              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Вход...</> : <>Войти<ArrowRight className="ml-2 h-4 w-4" /></>}
             </Button>
           </form>
 
           <div className="pt-4 border-t">
             <p className="text-xs text-muted-foreground text-center leading-relaxed">
-              При возникновении проблем со входом обратитесь<br />
-              в службу поддержки ИТ-отдела Группы Астра
+              При возникновении проблем со входом обратитесь<br />в службу поддержки ИТ-отдела Группы Астра
             </p>
           </div>
         </div>
@@ -223,8 +169,14 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={null}>
-      <LoginForm />
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
+      </div>
+    }>
+      <SearchParamsReader>
+        {(callbackUrl) => <LoginForm callbackUrl={callbackUrl} />}
+      </SearchParamsReader>
     </Suspense>
   )
 }
