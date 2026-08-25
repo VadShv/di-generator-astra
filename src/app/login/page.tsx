@@ -2,17 +2,15 @@
 
 // Страница входа (Фаза 5: Auth & production prep).
 // Split-screen дизайн: слева — бренд-картинка, справа — форма входа.
-// Адаптивная: на мобильных — стек, картинка сверху.
+// Упрощённая версия: img вместо next/Image, нет Switch (SSR-safe).
 
 import { useState, Suspense } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Loader2, Mail, Lock, ShieldCheck, Sparkles, FileText, ArrowRight } from 'lucide-react'
+import { Loader2, Mail, Lock, ArrowRight } from 'lucide-react'
 
 function LoginForm() {
   const router = useRouter()
@@ -21,7 +19,6 @@ function LoginForm() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -54,22 +51,23 @@ function LoginForm() {
     <div className="min-h-screen w-full grid lg:grid-cols-2">
       {/* Левая панель — картинка + брендинг */}
       <div className="relative hidden lg:flex flex-col justify-between overflow-hidden">
-        {/* Фоновая картинка */}
-        <Image
+        {/* Фоновая картинка — img вместо Image для SSR-safe */}
+        <img
           src="/images/login-hero.png"
           alt="Генератор ДИ — Группа Астра"
-          fill
-          className="object-cover"
-          priority
+          className="absolute inset-0 w-full h-full object-cover"
         />
-        {/* Градиентный overlay для читаемости текста */}
+        {/* Градиентный overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-slate-900/80 via-slate-900/50 to-violet-900/60" />
 
         {/* Верхний брендинг */}
         <div className="relative z-10 p-10">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
-              <FileText className="h-5 w-5 text-white" />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
             </div>
             <div>
               <h2 className="text-lg font-bold text-white leading-tight">Генератор ДИ</h2>
@@ -90,17 +88,15 @@ function LoginForm() {
 
           {/* Feature badges */}
           <div className="mt-6 flex flex-wrap gap-2">
-            {[
-              { icon: <Sparkles className="h-3 w-3" />, label: 'AI-генерация' },
-              { icon: <ShieldCheck className="h-3 w-3" />, label: 'Соответствие ТК РФ' },
-              { icon: <FileText className="h-3 w-3" />, label: 'Экспорт DOCX / PDF' },
-            ].map((f, i) => (
+            {['AI-генерация', 'Соответствие ТК РФ', 'Экспорт DOCX / PDF'].map((label, i) => (
               <span
                 key={i}
                 className="inline-flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 px-3 py-1.5 text-xs text-white/90"
               >
-                {f.icon}
-                {f.label}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                {label}
               </span>
             ))}
           </div>
@@ -120,7 +116,10 @@ function LoginForm() {
         <div className="lg:hidden w-full max-w-sm mb-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100">
-              <FileText className="h-5 w-5 text-violet-600" />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
             </div>
             <div>
               <h2 className="text-lg font-bold leading-tight">Генератор ДИ</h2>
@@ -128,12 +127,10 @@ function LoginForm() {
             </div>
           </div>
           <div className="relative h-40 w-full rounded-xl overflow-hidden">
-            <Image
+            <img
               src="/images/login-hero.png"
               alt="Генератор ДИ"
-              fill
-              className="object-cover"
-              priority
+              className="absolute inset-0 w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
           </div>
@@ -169,11 +166,9 @@ function LoginForm() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sm font-medium">
-                  Пароль
-                </Label>
-              </div>
+              <Label htmlFor="password" className="text-sm font-medium">
+                Пароль
+              </Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -189,21 +184,8 @@ function LoginForm() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="remember"
-                  checked={rememberMe}
-                  onCheckedChange={setRememberMe}
-                />
-                <Label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">
-                  Запомнить меня
-                </Label>
-              </div>
-            </div>
-
             {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 animate-in fade-in slide-in-from-top-1">
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
                 {error}
               </div>
             )}
