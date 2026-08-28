@@ -28,7 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { Plus, Pencil, Trash2, Eye, Loader2, Sparkles, FileText, PenLine, Wand2, Download, ChevronDown, ChevronRight, CheckCircle2, RotateCcw, BookOpen, Zap, Crown, Star, LayoutTemplate, ArrowUp, ArrowDown, Settings2, GitCompare } from 'lucide-react'
 import { CascadePositionSelector } from '@/components/modules/cascade-position-selector'
-import { DICard, diTypeFromStatus, type DICardData } from '@/components/modules/di-card'
+import { DICard, DICardSkeleton, diTypeFromStatus, type DICardData } from '@/components/modules/di-card'
 import { DIDetail } from '@/components/modules/di-detail'
 import { MagicWandToolbar } from '@/components/editor/magic-wand-toolbar'
 import type { MagicWandPreset } from '@/components/editor/magic-wand-toolbar'
@@ -608,7 +608,9 @@ export function GenerationModule() {
       </div>
 
       {loading ? (
-        <ListSkeleton count={4} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <DICardSkeleton key={i} />)}
+        </div>
       ) : filteredDIs.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
@@ -622,9 +624,10 @@ export function GenerationModule() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredDIs.map(di => (
+          {filteredDIs.map((di, idx) => (
             <DICard
               key={di.id}
+              index={idx}
               di={{
                 id: di.id,
                 type: diTypeFromStatus(di.status),
@@ -636,6 +639,8 @@ export function GenerationModule() {
                 date: di.createdAt,
                 content: di.sections.map(s => `${s.sectionTitle}\n${s.sectionContent}`).join('\n\n'),
                 templateName: di.template?.name ?? null,
+                filledSections: di.sections.filter(s => s.sectionContent.trim()).length,
+                totalSections: di.sections.length,
               } as DICardData}
               onOpen={() => { setEditingDI(di); setViewMode('detail') }}
               onEdit={() => openEditor(di)}
