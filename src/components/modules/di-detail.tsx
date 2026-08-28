@@ -135,7 +135,8 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
       if (!res.ok) throw new Error()
       const v = await res.json()
       const content = JSON.parse(v.content)
-      const sections = content.sections || content
+      const sections = Array.isArray(content?.sections) ? content.sections : Array.isArray(content) ? content : null
+      if (!sections) throw new Error('Invalid version format')
       const putRes = await fetch('/api/generate-di', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentDI.id, title: currentDI.title, sections: sections.map((s: { sectionTitle: string; sectionContent: string; order?: number; aiGenerated?: boolean; editedBy?: string | null }) => ({ sectionTitle: s.sectionTitle, sectionContent: s.sectionContent, order: s.order ?? 0, aiGenerated: s.aiGenerated ?? false, editedBy: s.editedBy ?? null })) }) })
       if (!putRes.ok) throw new Error()
       toast({ title: 'Версия восстановлена' }); onRefresh(); fetchVersions()

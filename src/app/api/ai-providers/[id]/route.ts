@@ -5,7 +5,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { encryptApiKey, maskApiKey } from '@/lib/ai-connector'
-import { requireRole } from '@/lib/auth/session'
+import { requireRole, requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
 function toDto(row: {
@@ -50,7 +50,7 @@ type Params = { params: Promise<{ id: string }> }
 // GET — получить одного провайдера
 export async function GET(_request: Request, { params }: Params) {
   try {
-    await requireRole('admin')
+    await requireAuth()
     const { id } = await params
     const provider = await db.aIProvider.findUnique({ where: { id } })
     if (!provider) {

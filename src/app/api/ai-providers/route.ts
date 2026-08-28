@@ -4,7 +4,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { encryptApiKey, maskApiKey } from '@/lib/ai-connector'
-import { requireRole } from '@/lib/auth/session'
+import { requireRole, requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
 /** Преобразовать запись БД в безопасный DTO (без расшифрованного ключа). */
@@ -49,7 +49,7 @@ function toDto(row: {
 // GET — список всех провайдеров
 export async function GET() {
   try {
-    await requireRole('admin')
+    await requireAuth()
     const providers = await db.aIProvider.findMany({
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
     })

@@ -26,7 +26,7 @@ const quickActions = [
   { label: 'AI-аудит ДИ', icon: Shield, color: 'text-red-600', bgColor: 'bg-red-100', section: 'ai-audit' as ActiveSection, badge: 'New' },
   { label: 'Версионирование ДИ', icon: History, color: 'text-indigo-600', bgColor: 'bg-indigo-100', section: 'version-history' as ActiveSection, badge: 'New' },
   { label: 'Загрузить архивную ДИ', icon: Archive, color: 'text-amber-600', bgColor: 'bg-amber-100', section: 'archive' as ActiveSection, badge: null },
-  { label: 'Сравнить версии ДИ', icon: GitCompareArrows, color: 'text-pink-600', bgColor: 'bg-pink-100', section: 'comparison' as ActiveSection, badge: null },
+  { label: 'Сравнить версии ДИ', icon: GitCompareArrows, color: 'text-pink-600', bgColor: 'bg-pink-100', section: 'version-history' as ActiveSection, badge: null },
   { label: 'Настроить мастер-промпт', icon: Brain, color: 'text-purple-600', bgColor: 'bg-purple-100', section: 'master-prompts' as ActiveSection, badge: null },
   { label: 'Загрузить штатное расписание', icon: Users, color: 'text-emerald-600', bgColor: 'bg-emerald-100', section: 'staff-schedule' as ActiveSection, badge: null },
   { label: 'Создать шаблон ДИ', icon: FileText, color: 'text-rose-600', bgColor: 'bg-rose-100', section: 'templates' as ActiveSection, badge: null },

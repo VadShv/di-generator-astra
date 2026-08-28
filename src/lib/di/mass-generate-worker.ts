@@ -112,7 +112,7 @@ async function processJob(jobId: string): Promise<void> {
     return
   }
 
-  const client = await getProviderClient()
+  const client = await getProviderClient(job.providerId || undefined)
   const templateSections = template.sections.map((s) => ({
     id: s.id,
     title: s.title,
@@ -158,11 +158,13 @@ async function processJob(jobId: string): Promise<void> {
   // Обработка одной должности (вынесена для параллельного вызова).
   const processPosition = async (position: typeof positions[0]): Promise<{ positionId: string; positionTitle: string; diId: string; title: string; status: string; message?: string }> => {
     try {
-      const masterPrompt = await resolveMasterPrompt('generation', {
-        departmentId: position.departmentId,
-        businessFunctionId: position.businessFunctionId,
-        grade: position.grade,
-      })
+      const masterPrompt = job.masterPromptId
+        ? await db.masterPrompt.findUnique({ where: { id: job.masterPromptId } })
+        : await resolveMasterPrompt('generation', {
+            departmentId: position.departmentId,
+            businessFunctionId: position.businessFunctionId,
+            grade: position.grade,
+          })
       const renderedMasterPrompt = masterPrompt
         ? renderPrompt(masterPrompt.content, buildContextFromPosition(position))
         : null

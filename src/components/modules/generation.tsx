@@ -1352,7 +1352,7 @@ export function GenerationModule() {
                     {compareDataA.sections.map((s, i) => (
                       <div key={i} className="mb-3">
                         <p className="text-xs font-medium text-muted-foreground">{s.sectionTitle}</p>
-                        <p className="text-sm whitespace-pre-wrap">{s.sectionContent.slice(0, 500)}</p>
+                        <p className="text-sm whitespace-pre-wrap">{(s.sectionContent || '').slice(0, 500)}</p>
                       </div>
                     ))}
                   </div>
@@ -1361,7 +1361,7 @@ export function GenerationModule() {
                     {compareDataB.sections.map((s, i) => (
                       <div key={i} className="mb-3">
                         <p className="text-xs font-medium text-muted-foreground">{s.sectionTitle}</p>
-                        <p className="text-sm whitespace-pre-wrap">{s.sectionContent.slice(0, 500)}</p>
+                        <p className="text-sm whitespace-pre-wrap">{(s.sectionContent || '').slice(0, 500)}</p>
                       </div>
                     ))}
                   </div>

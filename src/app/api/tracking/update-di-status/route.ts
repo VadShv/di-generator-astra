@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createNotification } from '@/lib/notifications'
 
 // PUT /api/tracking/update-di-status - Update the GeneratedDI status
 export async function PUT(request: Request) {
@@ -50,6 +51,19 @@ export async function PUT(request: Request) {
         },
       },
     })
+
+    if (existing.status !== status) {
+      await db.dIStatusChange.create({
+        data: { generatedDIId, fromStatus: existing.status, toStatus: status },
+      })
+      createNotification({
+        type: 'status_change',
+        title: 'Статус ДИ изменён',
+        message: `${existing.title}: ${existing.status} → ${status}`,
+        entityType: 'di',
+        entityId: generatedDIId,
+      })
+    }
 
     return NextResponse.json(updated)
   } catch (error) {
