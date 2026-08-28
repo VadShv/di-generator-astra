@@ -15,8 +15,9 @@ import {
   ArrowLeft, Pencil, Download, GitCompare, Trash2, CheckCircle2,
   Sparkles, FileText, Clock, Shield, Loader2, ChevronDown, ChevronRight,
   Building2, Users, Briefcase, Crown, AlertTriangle, MessageSquare,
-  Maximize2, Minimize2, Home, ChevronRight as ChevronR,
+  Maximize2, Minimize2, Home, ChevronRight as ChevronR, Save,
 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 import { useToast } from '@/hooks/use-toast'
 
 interface Department { id: string; name: string; company?: { id: string; name: string } | null }
@@ -78,6 +79,9 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
   const [fullscreen, setFullscreen] = useState(false)
   const [activeSectionId, setActiveSectionId] = useState<string>('')
   const [scrollProgress, setScrollProgress] = useState(0)
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null)
+  const [editingSectionContent, setEditingSectionContent] = useState('')
+  const [savingSection, setSavingSection] = useState(false)
 
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -169,6 +173,35 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
       if (!res.ok) throw new Error()
       setCurrentDI(prev => ({ ...prev, signedByEmployee: value })); toast({ title: value ? 'Подписана сотрудником' : 'Подпись снята' }); onRefresh()
     } catch { toast({ title: 'Ошибка', description: 'Не удалось обновить', variant: 'destructive' }) }
+  }
+
+  // 3.3 — Inline section editing with autosave
+  const startEditSection = (section: DISection) => {
+    setEditingSectionId(section.id)
+    setEditingSectionContent(section.sectionContent)
+  }
+  const saveSection = async () => {
+    if (!editingSectionId) return
+    setSavingSection(true)
+    const updatedSections = currentDI.sections.map(s =>
+      s.id === editingSectionId ? { ...s, sectionContent: editingSectionContent, aiGenerated: false, editedBy: 'manual' } : s
+    )
+    setCurrentDI(prev => ({ ...prev, sections: updatedSections }))
+    try {
+      await fetch('/api/generate-di', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentDI.id, sections: updatedSections.map(s => ({ sectionTitle: s.sectionTitle, sectionContent: s.sectionContent, order: s.order, aiGenerated: s.aiGenerated, editedBy: s.editedBy })) }),
+      })
+      toast({ title: 'Секция сохранена' }); onRefresh()
+    } catch { toast({ title: 'Ошибка', description: 'Не удалось сохранить', variant: 'destructive' }) }
+    finally { setSavingSection(false); setEditingSectionId(null) }
+  }
+
+  // 3.2 — Section metrics
+  function sectionMetrics(content: string) {
+    const words = content.trim() ? content.trim().split(/\s+/).length : 0
+    const readTime = Math.max(1, Math.ceil(words / 150))
+    return { words, readTime }
   }
 
   const gLabel = currentDI.position.grade ? GRADE_LABELS[currentDI.position.grade] || currentDI.position.grade : null
@@ -276,7 +309,42 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
                       </div>
                       <div className="flex-shrink-0">{section.sectionContent.trim() ? <Badge variant="outline" className="text-xs text-emerald-700 border-emerald-300 bg-emerald-50 gap-1"><CheckCircle2 className="h-3 w-3" /> {section.sectionContent.length} симв.</Badge> : <Badge variant="outline" className="text-xs text-muted-foreground">Пусто</Badge>}</div>
                     </div>
-                    {isExpanded && section.sectionContent && (<CardContent className="pt-0 px-4 pb-4"><div className="text-sm whitespace-pre-wrap leading-relaxed bg-muted/50 p-4 rounded-lg">{section.sectionContent}</div></CardContent>)}
+                    {isExpanded && (editingSectionId === section.id ? (
+                      <CardContent className="pt-0 px-4 pb-4 space-y-2">
+                        <textarea
+                          value={editingSectionContent}
+                          onChange={e => setEditingSectionContent(e.target.value)}
+                          className="w-full min-h-[200px] text-sm rounded-lg border bg-background p-3 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                          autoFocus
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={saveSection} disabled={savingSection} className="bg-cyan-600 hover:bg-cyan-700">
+                            {savingSection ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />} Сохранить
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditingSectionId(null)}>Отмена</Button>
+                        </div>
+                      </CardContent>
+                    ) : section.sectionContent ? (
+                      <CardContent className="pt-0 px-4 pb-4">
+                        <div className="text-sm leading-relaxed bg-muted/50 p-4 rounded-lg prose prose-sm max-w-none">
+                          <ReactMarkdown>{section.sectionContent}</ReactMarkdown>
+                        </div>
+                        <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">
+                          <span>{sectionMetrics(section.sectionContent).words} слов</span>
+                          <span>~{sectionMetrics(section.sectionContent).readTime} мин чтения</span>
+                          <Button variant="ghost" size="sm" className="h-6 text-xs ml-auto" onClick={() => startEditSection(section)}>
+                            <Pencil className="h-3 w-3 mr-1" /> Править
+                          </Button>
+                        </div>
+                      </CardContent>
+                    ) : (
+                      <CardContent className="pt-0 px-4 pb-4">
+                        <div className="text-sm text-muted-foreground bg-muted/30 p-4 rounded-lg italic">Секция пуста</div>
+                        <Button variant="ghost" size="sm" className="h-6 text-xs mt-2" onClick={() => startEditSection(section)}>
+                          <Pencil className="h-3 w-3 mr-1" /> Заполнить
+                        </Button>
+                      </CardContent>
+                    ))}
                   </Card>
                 )
               })}
@@ -305,7 +373,42 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
                         </div>
                         <div className="flex-shrink-0">{section.sectionContent.trim() ? <Badge variant="outline" className="text-xs text-emerald-700 border-emerald-300 bg-emerald-50 gap-1"><CheckCircle2 className="h-3 w-3" /> {section.sectionContent.length} симв.</Badge> : <Badge variant="outline" className="text-xs text-muted-foreground">Пусто</Badge>}</div>
                       </div>
-                      {isExpanded && section.sectionContent && (<CardContent className="pt-0 px-4 pb-4"><div className="text-sm whitespace-pre-wrap leading-relaxed bg-muted/50 p-4 rounded-lg">{section.sectionContent}</div></CardContent>)}
+                      {isExpanded && (editingSectionId === section.id ? (
+                      <CardContent className="pt-0 px-4 pb-4 space-y-2">
+                        <textarea
+                          value={editingSectionContent}
+                          onChange={e => setEditingSectionContent(e.target.value)}
+                          className="w-full min-h-[200px] text-sm rounded-lg border bg-background p-3 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                          autoFocus
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={saveSection} disabled={savingSection} className="bg-cyan-600 hover:bg-cyan-700">
+                            {savingSection ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />} Сохранить
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditingSectionId(null)}>Отмена</Button>
+                        </div>
+                      </CardContent>
+                    ) : section.sectionContent ? (
+                      <CardContent className="pt-0 px-4 pb-4">
+                        <div className="text-sm leading-relaxed bg-muted/50 p-4 rounded-lg prose prose-sm max-w-none">
+                          <ReactMarkdown>{section.sectionContent}</ReactMarkdown>
+                        </div>
+                        <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">
+                          <span>{sectionMetrics(section.sectionContent).words} слов</span>
+                          <span>~{sectionMetrics(section.sectionContent).readTime} мин чтения</span>
+                          <Button variant="ghost" size="sm" className="h-6 text-xs ml-auto" onClick={() => startEditSection(section)}>
+                            <Pencil className="h-3 w-3 mr-1" /> Править
+                          </Button>
+                        </div>
+                      </CardContent>
+                    ) : (
+                      <CardContent className="pt-0 px-4 pb-4">
+                        <div className="text-sm text-muted-foreground bg-muted/30 p-4 rounded-lg italic">Секция пуста</div>
+                        <Button variant="ghost" size="sm" className="h-6 text-xs mt-2" onClick={() => startEditSection(section)}>
+                          <Pencil className="h-3 w-3 mr-1" /> Заполнить
+                        </Button>
+                      </CardContent>
+                    ))}
                     </Card>
                   )
                 })}
