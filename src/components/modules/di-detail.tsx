@@ -16,6 +16,7 @@ import {
   Sparkles, FileText, Clock, Shield, Loader2, ChevronDown, ChevronRight,
   Building2, Users, Briefcase, Crown, AlertTriangle, MessageSquare,
   Maximize2, Minimize2, Home, ChevronRight as ChevronR, Save,
+  Play, Copy, AlertCircle, CheckCircle2 as Check2,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useToast } from '@/hooks/use-toast'
@@ -82,6 +83,7 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null)
   const [editingSectionContent, setEditingSectionContent] = useState('')
   const [savingSection, setSavingSection] = useState(false)
+  const [runningAudit, setRunningAudit] = useState(false)
 
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -204,6 +206,30 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
     return { words, readTime }
   }
 
+  // 4.1 — Run audit from detail view
+  const handleRunAudit = async () => {
+    setRunningAudit(true)
+    try {
+      const res = await fetch('/api/generate-di/ai-audit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ generatedDIId: currentDI.id }) })
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Ошибка') }
+      toast({ title: 'Аудит завершён' })
+      fetchAuditResults()
+    } catch (e) { toast({ title: 'Ошибка аудита', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' }) }
+    finally { setRunningAudit(false) }
+  }
+
+  // 6.5 — Copy full DI text
+  const handleCopyText = async () => {
+    const text = currentDI.sections.map(s => `${s.sectionTitle}\n\n${s.sectionContent}`).join('\n\n---\n\n')
+    try { await navigator.clipboard.writeText(text); toast({ title: 'Скопировано', description: 'Текст ДИ в буфере обмена' }) } catch { toast({ title: 'Ошибка', description: 'Не удалось скопировать', variant: 'destructive' }) }
+  }
+
+  // 7.1 — Compliance check
+  const allFilled = currentDI.sections.length > 0 && currentDI.sections.every(s => s.sectionContent.trim())
+  // 7.4 — Warning badges
+  const daysSinceUpdate = Math.floor((Date.now() - new Date(currentDI.updatedAt).getTime()) / 86400000)
+  const isStale = daysSinceUpdate > 30
+
   const gLabel = currentDI.position.grade ? GRADE_LABELS[currentDI.position.grade] || currentDI.position.grade : null
   const aiCount = currentDI.sections.filter(s => s.aiGenerated).length
   const filledCount = currentDI.sections.filter(s => s.sectionContent.trim()).length
@@ -277,6 +303,7 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
         <Button onClick={() => onEdit(currentDI)} className="bg-cyan-600 hover:bg-cyan-700"><Pencil className="h-4 w-4 mr-1.5" /> Редактировать</Button>
         <Button variant="outline" onClick={handleExport} disabled={exporting}>{exporting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />} Экспорт DOCX</Button>
         <Button variant="outline" onClick={onCompare}><GitCompare className="h-4 w-4 mr-1.5" /> Сравнить</Button>
+        <Button variant="outline" onClick={handleCopyText}><Copy className="h-4 w-4 mr-1.5" /> Копировать</Button>
         <Button variant="ghost" className="text-destructive ml-auto" onClick={() => onDelete(currentDI.id)}><Trash2 className="h-4 w-4 mr-1.5" /> Удалить</Button>
       </div>
 
@@ -451,6 +478,44 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
                       </div>
                     </CardContent>
                   </Card>
+
+                  {/* 7.1 — Compliance + 7.5 fill map */}
+                  <Card>
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Структура</CardTitle></CardHeader>
+                    <CardContent className="pt-0 space-y-2">
+                      <div className={`flex items-center gap-2 text-xs ${allFilled ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {allFilled ? <Check2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+                        {allFilled ? 'Все секции заполнены' : 'Есть пустые секции'}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {currentDI.sections.map((s, i) => (
+                          <div
+                            key={s.id}
+                            className={`h-4 w-4 rounded ${s.sectionContent.trim() ? 'bg-emerald-400' : 'bg-muted-foreground/20'}`}
+                            title={`${i + 1}. ${s.sectionTitle}: ${s.sectionContent.trim() ? 'заполнено' : 'пусто'}`}
+                          />
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* 7.4 — Warnings */}
+                  {(isStale || !currentDI.signedByEmployee) && (
+                    <Card className="border-amber-200 bg-amber-50/50">
+                      <CardContent className="p-3 space-y-1.5">
+                        {isStale && (
+                          <div className="flex items-center gap-2 text-xs text-amber-700">
+                            <AlertCircle className="h-3.5 w-3.5" /> Не обновлялась {daysSinceUpdate} дн
+                          </div>
+                        )}
+                        {!currentDI.signedByEmployee && (
+                          <div className="flex items-center gap-2 text-xs text-amber-700">
+                            <AlertCircle className="h-3.5 w-3.5" /> Не подписана сотрудником
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               </div>
             </div>
@@ -506,6 +571,9 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
 
         {/* Audit tab */}
         <TabsContent value="audit" className="space-y-3">
+          <Button onClick={handleRunAudit} disabled={runningAudit} className="bg-red-600 hover:bg-red-700">
+            {runningAudit ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Play className="h-4 w-4 mr-1.5" />} Запустить аудит
+          </Button>
           {auditLoading ? (<div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>)
           : auditResults.length === 0 ? (<Card><CardContent className="p-8 text-center text-muted-foreground"><Shield className="h-10 w-10 mx-auto mb-2 opacity-50" /><p>Аудит ещё не проводился</p><p className="text-sm mt-1">Запустите аудит во вкладке «AI-аудит»</p></CardContent></Card>)
           : auditResults.map((audit) => (
