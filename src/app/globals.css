@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -152,4 +153,18 @@
 
 .flip-card-back {
   transform: rotateY(180deg);
+}
+
+/* Print-friendly: hide UI chrome, show only DI content */
+@media print {
+  body { background: white !important; }
+  .no-print, nav, aside, button { display: none !important; }
+  .print-only { display: block !important; }
+  main { padding: 0 !important; max-width: 100% !important; }
+  .prose { font-size: 12pt !important; line-height: 1.5 !important; }
+  h1 { font-size: 18pt !important; }
+  h2, h3 { font-size: 14pt !important; }
+  .shadow-md, .shadow-lg { box-shadow: none !important; }
+  .border, .rounded-lg { border: 1px solid #ccc !important; }
+  .print-break { page-break-after: always; }
 }

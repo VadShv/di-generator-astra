@@ -16,9 +16,10 @@ import {
   Sparkles, FileText, Clock, Shield, Loader2, ChevronDown, ChevronRight,
   Building2, Users, Briefcase, Crown, AlertTriangle, MessageSquare,
   Maximize2, Minimize2, Home, ChevronRight as ChevronR, Save,
-  Play, Copy, AlertCircle, CheckCircle2 as Check2,
+  Play, Copy, AlertCircle, CheckCircle2 as Check2, Printer, Share2,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts'
 import { useToast } from '@/hooks/use-toast'
 
 interface Department { id: string; name: string; company?: { id: string; name: string } | null }
@@ -84,6 +85,14 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
   const [editingSectionContent, setEditingSectionContent] = useState('')
   const [savingSection, setSavingSection] = useState(false)
   const [runningAudit, setRunningAudit] = useState(false)
+  const [versions, setVersions] = useState<{ id: string; version: number; isOriginal: boolean; createdAt: string; changeDescription?: string | null; diffSummary?: string | null; uploadedBy?: string | null }[]>([])
+  const [versionsLoading, setVersionsLoading] = useState(false)
+  const [versionContent, setVersionContent] = useState<{ sections: { sectionTitle: string; sectionContent: string }[] } | null>(null)
+  const [diffData, setDiffData] = useState<{ aiSummary: string; diff: { type: string; text: string }[] } | null>(null)
+  const [diffLoading, setDiffLoading] = useState(false)
+  const [sectionSearch, setSectionSearch] = useState('')
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [applyingRec, setApplyingRec] = useState<number | null>(null)
 
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -100,6 +109,38 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
 
   useEffect(() => { fetchStatusHistory() }, [fetchStatusHistory])
   useEffect(() => { if (activeTab === 'audit' && auditResults.length === 0) fetchAuditResults() }, [activeTab, auditResults.length, fetchAuditResults])
+
+  // B1 — Versions fetch
+  const fetchVersions = useCallback(async () => {
+    setVersionsLoading(true)
+    try { const res = await fetch(`/api/compare?generatedDIId=${currentDI.id}`); if (res.ok) { const d = await res.json(); setVersions(d.items || []) } } catch { /* silent */ } finally { setVersionsLoading(false) }
+  }, [currentDI.id])
+  useEffect(() => { if (activeTab === 'versions' && versions.length === 0) fetchVersions() }, [activeTab, versions.length, fetchVersions])
+
+  // B1 — Version content preview
+  const fetchVersionContent = async (versionId: string) => {
+    try { const res = await fetch(`/api/compare/${versionId}`); if (res.ok) { const d = await res.json(); setVersionContent(JSON.parse(d.content)) } } catch { /* silent */ }
+  }
+
+  // B2 — Diff between versions
+  const handleDiff = async (v1Id: string, v2Id: string) => {
+    setDiffLoading(true); setDiffData(null)
+    try { const res = await fetch('/api/compare/ai-diff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version1Id: v1Id, version2Id: v2Id }) }); if (res.ok) setDiffData(await res.json()) } catch { /* silent */ } finally { setDiffLoading(false) }
+  }
+
+  // B3 — Restore version
+  const handleRestore = async (versionId: string) => {
+    try {
+      const res = await fetch(`/api/compare/${versionId}`)
+      if (!res.ok) throw new Error()
+      const v = await res.json()
+      const content = JSON.parse(v.content)
+      const sections = content.sections || content
+      const putRes = await fetch('/api/generate-di', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentDI.id, title: currentDI.title, sections: sections.map((s: { sectionTitle: string; sectionContent: string; order?: number; aiGenerated?: boolean; editedBy?: string | null }) => ({ sectionTitle: s.sectionTitle, sectionContent: s.sectionContent, order: s.order ?? 0, aiGenerated: s.aiGenerated ?? false, editedBy: s.editedBy ?? null })) }) })
+      if (!putRes.ok) throw new Error()
+      toast({ title: 'Версия восстановлена' }); onRefresh(); fetchVersions()
+    } catch { toast({ title: 'Ошибка', description: 'Не удалось восстановить', variant: 'destructive' }) }
+  }
 
   // 2.3 — Reading progress + 2.2 active section tracking
   useEffect(() => {
@@ -230,6 +271,19 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
   const daysSinceUpdate = Math.floor((Date.now() - new Date(currentDI.updatedAt).getTime()) / 86400000)
   const isStale = daysSinceUpdate > 30
 
+  // D2 — Apply recommendation to a section
+  const handleApplyRec = async (sectionId: string, instruction: string, recIndex: number) => {
+    setApplyingRec(recIndex)
+    try {
+      const res = await fetch('/api/generate-di/ai-improve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sectionId, instruction }) })
+      if (!res.ok) throw new Error()
+      const updated = await res.json()
+      setCurrentDI(prev => ({ ...prev, sections: prev.sections.map(s => s.id === sectionId ? { ...s, sectionContent: updated.sectionContent || updated.content || s.sectionContent } : s) }))
+      toast({ title: 'Рекомендация применена' }); onRefresh()
+    } catch { toast({ title: 'Ошибка', description: 'Не удалось применить (нужен ИИ-провайдер)', variant: 'destructive' }) }
+    finally { setApplyingRec(null) }
+  }
+
   const gLabel = currentDI.position.grade ? GRADE_LABELS[currentDI.position.grade] || currentDI.position.grade : null
   const aiCount = currentDI.sections.filter(s => s.aiGenerated).length
   const filledCount = currentDI.sections.filter(s => s.sectionContent.trim()).length
@@ -301,9 +355,12 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
       {/* Actions */}
       <div className="flex items-center gap-2 flex-wrap">
         <Button onClick={() => onEdit(currentDI)} className="bg-cyan-600 hover:bg-cyan-700"><Pencil className="h-4 w-4 mr-1.5" /> Редактировать</Button>
-        <Button variant="outline" onClick={handleExport} disabled={exporting}>{exporting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />} Экспорт DOCX</Button>
+        <Button variant="outline" onClick={handleExport} disabled={exporting}>{exporting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />} DOCX</Button>
+        <Button variant="outline" onClick={() => window.open(`/api/export-di/pdf?id=${currentDI.id}`, '_blank')}><FileText className="h-4 w-4 mr-1.5" /> PDF</Button>
+        <Button variant="outline" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" /> Печать</Button>
         <Button variant="outline" onClick={onCompare}><GitCompare className="h-4 w-4 mr-1.5" /> Сравнить</Button>
         <Button variant="outline" onClick={handleCopyText}><Copy className="h-4 w-4 mr-1.5" /> Копировать</Button>
+        <Button variant="outline" onClick={async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/di/${currentDI.id}`); toast({ title: 'Ссылка скопирована' }) } catch {} }}><Share2 className="h-4 w-4 mr-1.5" /> Поделиться</Button>
         <Button variant="ghost" className="text-destructive ml-auto" onClick={() => onDelete(currentDI.id)}><Trash2 className="h-4 w-4 mr-1.5" /> Удалить</Button>
       </div>
 
@@ -312,6 +369,8 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
           <TabsTrigger value="sections"><FileText className="h-4 w-4 mr-1.5" /> Секции</TabsTrigger>
           <TabsTrigger value="status"><Clock className="h-4 w-4 mr-1.5" /> Статусы {statusHistory.length > 0 && `(${statusHistory.length})`}</TabsTrigger>
           <TabsTrigger value="audit"><Shield className="h-4 w-4 mr-1.5" /> Аудит</TabsTrigger>
+          <TabsTrigger value="versions"><GitCompare className="h-4 w-4 mr-1.5" /> Версии {versions.length > 0 && `(${versions.length})`}</TabsTrigger>
+          <TabsTrigger value="history"><Clock className="h-4 w-4 mr-1.5" /> История</TabsTrigger>
         </TabsList>
 
         {/* 2.1+2.2 — Sections tab with two-column layout + sticky TOC */}
@@ -381,10 +440,12 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
               {/* Left: sections (2/3) */}
               <div className="lg:col-span-2 space-y-3">
                 <div className="flex items-center gap-2 mb-1">
-                  <Button variant="ghost" size="sm" onClick={expandAll} className="text-xs h-7">Развернуть все</Button>
-                  <Button variant="ghost" size="sm" onClick={collapseAll} className="text-xs h-7">Свернуть все</Button>
+                  <input type="text" value={sectionSearch} onChange={e => setSectionSearch(e.target.value)} placeholder="Поиск по секциям..." className="flex-1 h-8 rounded-md border bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+                  {sectionSearch && <Button variant="ghost" size="sm" onClick={() => setSectionSearch('')} className="text-xs h-7">Очистить</Button>}
+                  <Button variant="ghost" size="sm" onClick={expandAll} className="text-xs h-7">Развернуть</Button>
+                  <Button variant="ghost" size="sm" onClick={collapseAll} className="text-xs h-7">Свернуть</Button>
                 </div>
-                {currentDI.sections.map((section, idx) => {
+                {currentDI.sections.filter(s => !sectionSearch || s.sectionTitle.toLowerCase().includes(sectionSearch.toLowerCase()) || s.sectionContent.toLowerCase().includes(sectionSearch.toLowerCase())).map((section, idx) => {
                   const isExpanded = expandedSections.has(section.id) || section.sectionContent.length < 500
                   return (
                     <Card key={section.id} ref={(el) => { sectionRefs.current[section.id] = el }} className={activeSectionId === section.id ? 'ring-2 ring-cyan-300' : ''}>
@@ -585,6 +646,23 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {/* C2 — Score breakdown radar chart */}
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart data={[
+                        { cat: 'ТК РФ', score: Math.max(0, 100 - (audit.duplicatedTkItems?.length || 0) * 10) },
+                        { cat: 'Формул.', score: Math.max(0, 100 - (audit.vagueFormulationItems?.length || 0) * 10) },
+                        { cat: 'Законы', score: Math.max(0, 100 - (audit.legislativeConflictItems?.length || 0) * 10) },
+                        { cat: 'Требов.', score: Math.max(0, 100 - (audit.unrealisticRequirementItems?.length || 0) * 10) },
+                        { cat: 'Полнота', score: Math.max(0, 100 - (audit.incompleteSectionItems?.length || 0) * 10) },
+                      ]}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="cat" tick={{ fontSize: 10 }} />
+                        <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 8 }} />
+                        <Radar dataKey="score" stroke="#0891b2" fill="#0891b2" fillOpacity={0.3} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
                   {audit.summary && <p className="text-sm text-muted-foreground">{audit.summary}</p>}
                   {AUDIT_CATEGORIES.map((cat) => {
                     const items = (audit[cat.key] as unknown[]) || []
@@ -600,11 +678,129 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
                     )
                   })}
                   {Array.isArray(audit.recommendations) && audit.recommendations.length > 0 && (
-                    <><Separator /><div><div className="flex items-center gap-2 text-sm font-medium mb-1"><MessageSquare className="h-4 w-4 text-blue-600" /> Рекомендации</div><ul className="text-xs text-muted-foreground ml-6 space-y-0.5">{audit.recommendations.slice(0, 5).map((r, i) => (<li key={i}>• {typeof r === 'string' ? r : JSON.stringify(r)}</li>))}</ul></div></>
+                    <><Separator /><div>
+                      <div className="flex items-center gap-2 text-sm font-medium mb-2"><MessageSquare className="h-4 w-4 text-blue-600" /> Рекомендации</div>
+                      <div className="space-y-2">
+                        {audit.recommendations.slice(0, 5).map((r, i) => {
+                          const recText = typeof r === 'string' ? r : JSON.stringify(r)
+                          return (
+                            <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-blue-50/50 border border-blue-100">
+                              <span className="text-xs text-muted-foreground flex-1">{recText}</span>
+                              <Select onValueChange={(sectionId) => handleApplyRec(sectionId, recText, i)}>
+                                <SelectTrigger className="h-7 text-xs w-40 flex-shrink-0"><SelectValue placeholder="К секции..." /></SelectTrigger>
+                                <SelectContent>
+                                  {currentDI.sections.map(s => <SelectItem key={s.id} value={s.id}>{s.sectionTitle}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              {applyingRec === i && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 flex-shrink-0" />}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div></>
                   )}
                 </CardContent>
               </Card>
             ))}
+        </TabsContent>
+
+        {/* B1-B3 — Versions tab */}
+        <TabsContent value="versions" className="space-y-3">
+          {versionsLoading ? (<div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>)
+          : versions.length === 0 ? (<Card><CardContent className="p-8 text-center text-muted-foreground"><GitCompare className="h-10 w-10 mx-auto mb-2 opacity-50" /><p>Нет сохранённых версий</p></CardContent></Card>)
+          : (<>
+            {versions.map((v) => (
+              <Card key={v.id}>
+                <div className="flex items-center gap-3 p-4">
+                  <div className={`flex items-center justify-center h-8 w-8 rounded-lg flex-shrink-0 ${v.isOriginal ? 'bg-blue-100' : 'bg-violet-100'}`}>
+                    <span className={`text-sm font-bold ${v.isOriginal ? 'text-blue-600' : 'text-violet-600'}`}>v{v.version}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm">Версия {v.version}</span>
+                      {v.isOriginal && <Badge variant="outline" className="text-xs">Оригинал</Badge>}
+                      {v.diffSummary && <span className="text-xs text-muted-foreground truncate">{v.diffSummary}</span>}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">{formatDateTime(v.createdAt)}{v.uploadedBy && ` · ${v.uploadedBy}`}</p>
+                    {v.changeDescription && <p className="text-xs text-muted-foreground mt-0.5">{v.changeDescription}</p>}
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => fetchVersionContent(v.id)}>Превью</Button>
+                    {v.version !== currentDI.currentVersion && (
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => handleDiff(v.id, versions[0]?.id || v.id)} disabled={diffLoading}>
+                        {diffLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Diff'}
+                      </Button>
+                    )}
+                    {v.version !== currentDI.currentVersion && (
+                      <Button size="sm" variant="ghost" className="h-7 text-xs text-amber-700" onClick={() => handleRestore(v.id)}>Восстановить</Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))}
+            {/* Version content preview */}
+            {versionContent && (
+              <Card className="border-cyan-200">
+                <CardHeader className="pb-2"><CardTitle className="text-sm">Превью версии</CardTitle></CardHeader>
+                <CardContent className="pt-0 space-y-2">
+                  {versionContent.sections?.map((s, i) => (
+                    <div key={i} className="border rounded-lg p-3">
+                      <p className="font-semibold text-xs mb-1">{s.sectionTitle}</p>
+                      <p className="text-xs whitespace-pre-wrap text-muted-foreground">{s.sectionContent || '—'}</p>
+                    </div>
+                  ))}
+                  <Button size="sm" variant="outline" onClick={() => setVersionContent(null)}>Закрыть превью</Button>
+                </CardContent>
+              </Card>
+            )}
+            {/* B2 — Diff display */}
+            {diffData && (
+              <Card className="border-blue-200">
+                <CardHeader className="pb-2"><CardTitle className="text-sm">Сравнение версий</CardTitle></CardHeader>
+                <CardContent className="pt-0 space-y-2">
+                  {diffData.aiSummary && <p className="text-sm text-muted-foreground">{diffData.aiSummary}</p>}
+                  <div className="font-mono text-xs space-y-0.5 max-h-96 overflow-y-auto">
+                    {diffData.diff?.map((line, i) => (
+                      <div key={i} className={`px-2 py-0.5 rounded ${line.type === 'added' ? 'bg-emerald-50 text-emerald-800' : line.type === 'removed' ? 'bg-red-50 text-red-800' : 'text-muted-foreground'}`}>
+                        {line.type === 'added' ? '+ ' : line.type === 'removed' ? '- ' : '  '}{line.text}
+                      </div>
+                    ))}
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setDiffData(null)}>Закрыть diff</Button>
+                </CardContent>
+              </Card>
+            )}
+          </>)}
+        </TabsContent>
+
+        {/* B4 — Unified activity feed */}
+        <TabsContent value="history" className="space-y-3">
+          {(() => {
+            const events: { type: string; date: string; title: string; desc?: string }[] = [
+              ...statusHistory.map(h => ({ type: 'status', date: h.createdAt, title: `${STATUS_LABELS[h.fromStatus] || h.fromStatus} → ${STATUS_LABELS[h.toStatus] || h.toStatus}`, desc: h.comment || undefined })),
+              ...auditResults.map(a => ({ type: 'audit', date: a.createdAt, title: `Аудит: ${a.overallScore}/100`, desc: a.summary || undefined })),
+              ...versions.map(v => ({ type: 'version', date: v.createdAt, title: `Версия v${v.version}${v.isOriginal ? ' (оригинал)' : ''}`, desc: v.changeDescription || v.diffSummary || undefined })),
+            ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            if (events.length === 0) return <Card><CardContent className="p-8 text-center text-muted-foreground"><p>Нет событий</p></CardContent></Card>
+            return events.map((e, i) => (
+              <div key={i} className="flex gap-3 items-start">
+                <div className="flex flex-col items-center">
+                  <div className={`h-2.5 w-2.5 rounded-full ${e.type === 'status' ? 'bg-blue-500' : e.type === 'audit' ? 'bg-red-500' : 'bg-violet-500'}`} />
+                  {i < events.length - 1 && <div className="w-px h-full bg-border flex-1" />}
+                </div>
+                <div className="flex-1 pb-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    {e.type === 'status' && <Clock className="h-3.5 w-3.5 text-blue-500" />}
+                    {e.type === 'audit' && <Shield className="h-3.5 w-3.5 text-red-500" />}
+                    {e.type === 'version' && <GitCompare className="h-3.5 w-3.5 text-violet-500" />}
+                    <span className="font-medium">{e.title}</span>
+                  </div>
+                  {e.desc && <p className="text-xs text-muted-foreground mt-0.5">{e.desc}</p>}
+                  <p className="text-xs text-muted-foreground mt-0.5">{formatDateTime(e.date)}</p>
+                </div>
+              </div>
+            ))
+          })()}
         </TabsContent>
       </Tabs>
 

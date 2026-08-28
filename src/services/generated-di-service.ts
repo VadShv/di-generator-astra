@@ -60,6 +60,22 @@ export async function listGeneratedDIs(filters: DIListFilters = {}) {
   })
 }
 
+export async function getGeneratedDIById(id: string) {
+  if (!id) throw new ApiError('ID обязателен', 400, 'missing_id')
+  const di = await db.generatedDI.findUnique({
+    where: { id },
+    include: {
+      position: { include: { department: { include: { company: true } }, businessFunction: true } },
+      template: true,
+      sections: { orderBy: { order: 'asc' } },
+      sourceArchive: true,
+      _count: { select: { sections: true, versions: true } },
+    },
+  })
+  if (!di) throw new ApiError('ДИ не найдена', 404, 'di_not_found')
+  return di
+}
+
 export async function createGeneratedDI(input: CreateDIInput) {
   const { positionId, templateId, title, sections } = input
 
