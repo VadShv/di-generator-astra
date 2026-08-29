@@ -4,6 +4,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { encryptApiKey, maskApiKey } from '@/lib/ai-connector'
+import { validateProviderUrl } from '@/lib/ai-connector/url-validator'
 import { requireRole, requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
@@ -90,6 +91,15 @@ export async function POST(request: Request) {
         { error: 'baseUrl обязателен для провайдеров, отличных от zai' },
         { status: 400 }
       )
+    }
+    // SSRF-защита: валидация baseUrl (схема, приватные IP, DNS-резолв).
+    if (needsBaseUrl && baseUrl) {
+      try {
+        await validateProviderUrl(baseUrl)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Некорректный baseUrl'
+        return NextResponse.json({ error: msg }, { status: 400 })
+      }
     }
     // Для yandex_cloud folderId обязателен.
     if (type === 'yandex_cloud' && !folderId) {

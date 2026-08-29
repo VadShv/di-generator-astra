@@ -99,7 +99,40 @@ export function hasAccess(
   tab: string,
   level: AccessLevel = 'read'
 ): boolean {
-  if (!permissions) return true // нет permissions = полный доступ (admin / auth disabled)
+  // null/undefined permissions = полный доступ ТОЛЬКО для admin.
+  // Fail-closed: при отключённой аутентификации requirePermission() возвращает null
+  // (не вызывает hasAccess), поэтому сюда null доходит только от admin-сессии.
+  if (!permissions) return true
+  const tabPerm = permissions[tab]
+  if (!tabPerm || tabPerm === 'none') return false
+  if (level === 'write') return tabPerm === 'write'
+  return true // read или write
+}
+
+/**
+ * Безопасная проверка доступа с учётом состояния аутентификации (fail-closed).
+ * Возвращает false, если аутентификация включена, но permissions отсутствуют и это не admin.
+ * Возвращает true только для admin (role === 'admin') или при отключённой аутентификации.
+ *
+ * @param permissions — матрица прав из сессии
+ * @param tab — id вкладки
+ * @param level — требуемый уровень
+ * @param role — роль пользователя (для определения admin без матрицы)
+ * @param authDisabled — признак отключённой аутентификации (только для dev)
+ */
+export function hasAccessSafe(
+  permissions: Permissions | null | undefined,
+  tab: string,
+  level: AccessLevel = 'read',
+  role?: string,
+  authDisabled = false
+): boolean {
+  // Отключённая аутентификация (dev-only) — открытый доступ.
+  if (authDisabled) return true
+  // Admin без явной матрицы прав — полный доступ.
+  if (!permissions && role === 'admin') return true
+  // Fail-closed: аутентификация включена, но permissions отсутствуют и это не admin.
+  if (!permissions) return false
   const tabPerm = permissions[tab]
   if (!tabPerm || tabPerm === 'none') return false
   if (level === 'write') return tabPerm === 'write'

@@ -15,6 +15,12 @@ import { parsePermissions, type Permissions } from '@/lib/auth/permissions'
 function getAuthSecret(): string {
   const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET
   if (!secret) {
+    // В dev без секрета — возвращаем пустую строку, чтобы модуль загрузился.
+    // isAuthEnabled() вернёт false → requireAuth() откроет доступ (dev-only).
+    // assertAuthConfigured() на верхнем уровне уже заблокировал production.
+    if (process.env.NODE_ENV !== 'production') {
+      return ''
+    }
     throw new Error(
       'AUTH_SECRET (или NEXTAUTH_SECRET) не задан. Установите его в .env для включения аутентификации.'
     )
@@ -26,6 +32,24 @@ function getAuthSecret(): string {
 export function isAuthEnabled(): boolean {
   return Boolean(process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET)
 }
+
+/**
+ * Проверка fail-closed: в production отсутствие AUTH_SECRET — критическая ошибка.
+ * Сервер не должен запускаться без аутентификации в production-окружении.
+ * @throws Error если NODE_ENV === 'production' и секрет не задан.
+ */
+export function assertAuthConfigured(): void {
+  if (process.env.NODE_ENV === 'production' && !isAuthEnabled()) {
+    throw new Error(
+      'AUTH_SECRET (или NEXTAUTH_SECRET) не задан в production. ' +
+        'Аутентификация обязательна — сервер не может работать в открытом режиме. ' +
+        'Сгенерируйте секрет: openssl rand -base64 32'
+    )
+  }
+}
+
+// Проверка при загрузке модуля: fail-closed в production.
+assertAuthConfigured()
 
 export const authOptions: NextAuthOptions = {
   secret: getAuthSecret(),

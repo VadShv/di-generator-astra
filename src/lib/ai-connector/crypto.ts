@@ -7,6 +7,35 @@ import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'crypt
 const ALGO = 'aes-256-gcm'
 const IV_LENGTH = 12 // 96 бит — рекомендация для GCM
 
+// Публично известные слабые ключи — запрещены в production.
+// Совпадают с fallback dev-ключом в коде, поэтому компрометируют шифрование, если попадут в прод.
+const KNOWN_WEAK_KEYS = ['di-generator-dev-encryption-key-change-me']
+
+// Минимальная длина ключа в production (до нормализации через SHA-256).
+const MIN_KEY_LENGTH = 32
+
+/**
+ * Проверить силу ключа шифрования (только в production).
+ * В dev проверки не блокирующие — допускается использование dev-ключа.
+ * @throws Error в production, если ключ слабый/публично известный/слишком короткий.
+ */
+function assertKeyStrength(raw: string, isProduction: boolean): void {
+  if (!isProduction) return
+  if (KNOWN_WEAK_KEYS.includes(raw)) {
+    throw new Error(
+      'AI_PROVIDER_ENCRYPTION_KEY использует публично известное dev-значение. ' +
+        'Это небезопасно: шифрование API-ключей компрометируется. ' +
+        'Сгенерируйте новый ключ: openssl rand -hex 32'
+    )
+  }
+  if (raw.length < MIN_KEY_LENGTH) {
+    throw new Error(
+      `AI_PROVIDER_ENCRYPTION_KEY слишком короткий (${raw.length} символов, минимум ${MIN_KEY_LENGTH}). ` +
+        'Сгенерируйте новый ключ: openssl rand -hex 32'
+    )
+  }
+}
+
 /**
  * Получить 32-байтовый ключ из AI_PROVIDER_ENCRYPTION_KEY.
  * Ключ нормализуется через SHA-256, чтобы принимать строки любой длины.
@@ -14,8 +43,9 @@ const IV_LENGTH = 12 // 96 бит — рекомендация для GCM
  */
 function getKey(): Buffer {
   const raw = process.env.AI_PROVIDER_ENCRYPTION_KEY
+  const isProduction = process.env.NODE_ENV === 'production'
   if (!raw || raw.length === 0) {
-    if (process.env.NODE_ENV === 'production') {
+    if (isProduction) {
       throw new Error(
         'AI_PROVIDER_ENCRYPTION_KEY не задан. Установите переменную окружения для production.'
       )
@@ -30,6 +60,8 @@ function getKey(): Buffer {
     )
     return createHash('sha256').update('di-generator-dev-encryption-key-change-me').digest()
   }
+  // Проверка силы ключа в production: блокируем публично известные и слишком короткие значения.
+  assertKeyStrength(raw, isProduction)
   return createHash('sha256').update(raw).digest()
 }
 

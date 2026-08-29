@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
 import type { Session } from 'next-auth'
 import { ApiError } from '@/lib/api-utils'
-import { hasAccess, type AccessLevel, type Permissions } from '@/lib/auth/permissions'
+import { hasAccessSafe, type AccessLevel, type Permissions } from '@/lib/auth/permissions'
 
 export type AppSession = Session & {
   user?: {
@@ -65,7 +65,9 @@ export async function requirePermission(
   const session = await requireAuth()
   if (!session) return null // auth отключен — открытый доступ
   const perms = session.user?.permissions
-  if (!hasAccess(perms, tab, level)) {
+  const role = session.user?.role
+  // Fail-closed: admin без матрицы прав получает доступ, не-admin без permissions — нет.
+  if (!hasAccessSafe(perms, tab, level, role, false)) {
     throw new ApiError('Недостаточно прав для этого действия', 403, 'forbidden')
   }
   return session

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi, beforeEach, afterEach } from 'vitest'
 import { encryptApiKey, decryptApiKey, maskApiKey } from './crypto'
 
 let originalAllowDevKey: string | undefined
@@ -83,5 +83,62 @@ describe('maskApiKey', () => {
     expect(masked.slice(0, 4)).toBe('1234')
     expect(masked.slice(-4)).toBe('3456')
     expect(masked.length).toBe(key.length)
+  })
+})
+
+describe('assertKeyStrength (проверка силы ключа в production)', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('бросает в production при публично известном dev-ключе', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AI_PROVIDER_ENCRYPTION_KEY', 'di-generator-dev-encryption-key-change-me')
+    vi.stubEnv('AI_PROVIDER_ALLOW_DEV_KEY', '')
+    const { encryptApiKey } = await import('./crypto')
+    expect(() => encryptApiKey('sk-test')).toThrow(/публично известное dev-значение/)
+  })
+
+  it('бросает в production при слишком коротком ключе', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AI_PROVIDER_ENCRYPTION_KEY', 'shortkey')
+    vi.stubEnv('AI_PROVIDER_ALLOW_DEV_KEY', '')
+    const { encryptApiKey } = await import('./crypto')
+    expect(() => encryptApiKey('sk-test')).toThrow(/слишком короткий/)
+  })
+
+  it('бросает в production при отсутствии ключа', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AI_PROVIDER_ENCRYPTION_KEY', '')
+    vi.stubEnv('AI_PROVIDER_ALLOW_DEV_KEY', '')
+    const { encryptApiKey } = await import('./crypto')
+    expect(() => encryptApiKey('sk-test')).toThrow(/не задан/)
+  })
+
+  it('работает в production с надёжным ключом (>= 32 символа)', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AI_PROVIDER_ENCRYPTION_KEY', 'a'.repeat(64))
+    vi.stubEnv('AI_PROVIDER_ALLOW_DEV_KEY', '')
+    const { encryptApiKey, decryptApiKey } = await import('./crypto')
+    const encrypted = encryptApiKey('sk-production-key')
+    expect(encrypted).toMatch(/^v1:/)
+    expect(decryptApiKey(encrypted)).toBe('sk-production-key')
+  })
+
+  it('не блокирует слабый ключ в dev (только warning)', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('AI_PROVIDER_ENCRYPTION_KEY', '')
+    vi.stubEnv('AI_PROVIDER_ALLOW_DEV_KEY', 'true')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { encryptApiKey, decryptApiKey } = await import('./crypto')
+    const encrypted = encryptApiKey('sk-dev')
+    expect(encrypted).toMatch(/^v1:/)
+    expect(decryptApiKey(encrypted)).toBe('sk-dev')
+    expect(warnSpy).toHaveBeenCalled()
+    warnSpy.mockRestore()
   })
 })
