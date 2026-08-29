@@ -14,7 +14,7 @@ import type {
 } from '../types'
 import { classifyError, isRetryable, AIProviderError } from '../errors'
 import { Semaphore, getProviderSemaphore } from '../semaphore'
-import { validateProviderUrlSync } from '../url-validator'
+import { validateProviderUrlSync, validateProviderUrl } from '../url-validator'
 import { createLogger } from '../../logger'
 import { sanitizeProviderMessage } from '../errors'
 
@@ -112,17 +112,23 @@ export class OpenAICompatibleProvider implements AIProviderClient {
    * Ретраит только ретряемые ошибки (timeout, 429, 5xx, network).
    * @param externalSignal — сигнал отмены от per-job таймаута массовой генерации.
    */
-  protected async doFetch(
-    body: Record<string, unknown>,
-    timeoutMs: number,
-    externalSignal?: AbortSignal
-  ): Promise<OpenAIResponse> {
-    return this.semaphore.run(async () => {
-      // Если внешний сигнал уже абортирован — выходим сразу.
-      if (externalSignal?.aborted) {
-        throw new AIProviderError('Запрос отменён до начала (job timeout)', 'timeout', undefined, false)
-      }
-      let lastError: unknown = null
+ protected async doFetch(
+   body: Record<string, unknown>,
+   timeoutMs: number,
+   externalSignal?: AbortSignal
+ ): Promise<OpenAIResponse> {
+   return this.semaphore.run(async () => {
+     // Если внешний сигнал уже абортирован — выходим сразу.
+     if (externalSignal?.aborted) {
+       throw new AIProviderError('Запрос отменён до начала (job timeout)', 'timeout', undefined, false)
+     }
+     // SSRF-защита: полная async-валидация URL с DNS-резолвом перед каждым
+     // запросом. Защищает от DNS-rebinding (TOCTOU): домен, прошедший проверку
+     // при создании провайдера, мог начать резолвиться в приватный IP.
+     if (this.config.baseUrl) {
+       await validateProviderUrl(this.config.baseUrl)
+     }
+     let lastError: unknown = null
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         const controller = new AbortController()
         const timer = setTimeout(() => controller.abort(), timeoutMs)

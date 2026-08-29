@@ -13,7 +13,13 @@ import { Loader2, Mail, Lock, ArrowRight } from 'lucide-react'
 
 function SearchParamsReader({ children }: { children: (callbackUrl: string) => React.ReactNode }) {
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') || '/'
+  // Open redirect-защита: допускаем только относительные пути того же origin.
+  // Блокируем абсолютные URL (https://evil.com) и протокольные редиректы (//evil.com).
+  const rawCallbackUrl = searchParams.get('callbackUrl') || '/'
+  const callbackUrl =
+    rawCallbackUrl.startsWith('/') && !rawCallbackUrl.startsWith('//')
+      ? rawCallbackUrl
+      : '/'
   return <>{children(callbackUrl)}</>
 }
 

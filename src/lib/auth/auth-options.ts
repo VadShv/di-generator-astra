@@ -103,12 +103,21 @@ export const authOptions: NextAuthOptions = {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Пароль', type: 'password' },
       },
-      async authorize(credentials) {
-        const email = credentials?.email?.trim().toLowerCase()
-        const password = credentials?.password
-        if (!email || !password) return null
+     async authorize(credentials) {
+       const email = credentials?.email?.trim().toLowerCase()
+       const password = credentials?.password
+       if (!email || !password) return null
 
-        const user = await db.user.findUnique({
+      // Brute-force-защита: лимит на email+10 мин (5 попыток).
+      // Без раскрытия факта lockout — возвращаем null как при неверном пароле.
+      // Ленивый импорт:避免 загрузки тяжёлого графа модулей (api-utils →
+      // ai-connector/errors) при инициализации auth-options, что замедляет
+      // динамический re-import в тестах с vi.resetModules().
+      const { rateLimit } = await import('@/lib/rate-limit')
+      const { ok: loginAllowed } = rateLimit(`login:${email}`, 5, 10 * 60 * 1000)
+      if (!loginAllowed) return null
+
+       const user = await db.user.findUnique({
           where: { email },
           select: { id: true, email: true, name: true, role: true, passwordHash: true, isActive: true, permissions: true },
         })
@@ -134,16 +143,32 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = (user as unknown as { id: string }).id
-        token.role = (user as unknown as { role: string }).role
-        token.permissions = (user as unknown as { permissions: Permissions }).permissions
+ callbacks: {
+ async jwt({ token, user, trigger }) {
+    // Первичный логин: берём роль/права из объекта user (только что проверены).
+    if (user) {
+      token.id = (user as unknown as { id: string }).id
+      token.role = (user as unknown as { role: string }).role
+      token.permissions = (user as unknown as { permissions: Permissions }).permissions
+    }
+    // Обновление токена (trigger='update' или ротация): перечитываем
+    // role/isActive/permissions из БД, чтобы отзыв прав вступал в силу
+    // без ожидания истечения maxAge (7 дней).
+    if (trigger === 'update' && token.id) {
+      const fresh = await db.user.findUnique({
+        where: { id: token.id as string },
+        select: { role: true, isActive: true, permissions: true },
+      })
+      if (!fresh || !fresh.isActive) {
+        // Пользователь деактивирован — инвалидируем токен.
+        return { ...token, role: undefined, permissions: undefined } as typeof token
       }
-      return token
-    },
-    async session({ session, token }) {
+      token.role = fresh.role
+      token.permissions = parsePermissions(fresh.role, fresh.permissions)
+    }
+    return token
+  },
+   async session({ session, token }) {
       if (token && session.user) {
         ;(session.user as { id?: string }).id = token.id as string
         ;(session.user as { role?: string }).role = token.role as string

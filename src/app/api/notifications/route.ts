@@ -60,13 +60,22 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    if (id) {
-      await db.notification.update({
-        where: { id },
+   if (id) {
+      // IDOR-защита: обновляем только уведомления, принадлежащие текущему
+      // пользователю или общие (userId=null). updateMany возвращает count —
+      // если 0, значит уведомление чужое/не существует → 404.
+      const result = await db.notification.updateMany({
+        where: {
+          id,
+          OR: [{ userId: session.user.id }, { userId: null }],
+        },
         data: { isRead: true },
       })
+      if (result.count === 0) {
+        return NextResponse.json({ error: 'Уведомление не найдено' }, { status: 404 })
+      }
       return NextResponse.json({ success: true })
-    }
+   }
 
     return NextResponse.json({ error: 'id или markAll required' }, { status: 400 })
   } catch (error) {

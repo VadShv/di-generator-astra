@@ -116,6 +116,75 @@ describe('validateProviderUrlSync', () => {
         /заблокирован/
       )
     })
+
+    it('блокирует decimal IPv4 (2130706433 → 127.0.0.1)', () => {
+      expect(() => validateProviderUrlSync('https://2130706433')).toThrow(
+        /приватном\/служебном диапазоне/
+      )
+    })
+
+    it('блокирует hex IPv4 (0x7f000001 → 127.0.0.1)', () => {
+      expect(() => validateProviderUrlSync('https://0x7f000001')).toThrow(
+        /приватном\/служебном диапазоне/
+      )
+    })
+
+    it('блокирует octal IPv4 (0177.0.0.1 → 127.0.0.1)', () => {
+      expect(() => validateProviderUrlSync('https://0177.0.0.1')).toThrow(
+        /приватном\/служебном диапазоне/
+      )
+    })
+
+    it('блокирует IPv4-mapped IPv6 (::ffff:169.254.169.254)', () => {
+      expect(() => validateProviderUrlSync('https://[::ffff:169.254.169.254]')).toThrow(
+        /приватном\/служебном диапазоне/
+      )
+      expect(() => validateProviderUrlSync('https://[::ffff:127.0.0.1]')).toThrow(
+        /приватном\/служебном диапазоне/
+      )
+    })
+
+    it('блокирует IPv4-compatible IPv6 (::169.254.169.254)', () => {
+      expect(() => validateProviderUrlSync('https://[::169.254.169.254]')).toThrow(
+        /приватном\/служебном диапазоне/
+      )
+    })
+  })
+})
+
+describe('parseAlternativeIpEncoding', () => {
+  let parseAlternativeIpEncoding: typeof import('./url-validator').parseAlternativeIpEncoding
+
+  beforeEach(async () => {
+    vi.resetModules()
+    const mod = await import('./url-validator')
+    parseAlternativeIpEncoding = mod.parseAlternativeIpEncoding
+  })
+
+  it('распознаёт decimal IPv4', () => {
+    expect(parseAlternativeIpEncoding('2130706433')).toBe('127.0.0.1')
+    expect(parseAlternativeIpEncoding('3232235521')).toBe('192.168.0.1')
+  })
+
+  it('распознаёт hex IPv4', () => {
+    expect(parseAlternativeIpEncoding('0x7f000001')).toBe('127.0.0.1')
+  })
+
+  it('распознаёт octal IPv4', () => {
+    expect(parseAlternativeIpEncoding('0177.0.0.1')).toBe('127.0.0.1')
+  })
+
+  it('распознаёт mixed hex/octet IPv4', () => {
+    expect(parseAlternativeIpEncoding('0x7f.0.0.1')).toBe('127.0.0.1')
+  })
+
+  it('возвращает null для обычного домена', () => {
+    expect(parseAlternativeIpEncoding('api.openai.com')).toBeNull()
+    expect(parseAlternativeIpEncoding('example.com')).toBeNull()
+  })
+
+  it('возвращает null для канонического IPv4 (isIP обработает)', () => {
+    expect(parseAlternativeIpEncoding('8.8.8.8')).toBe('8.8.8.8')
   })
 })
 

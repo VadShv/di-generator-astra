@@ -74,6 +74,25 @@ function isPrivateIPv4(ip: string): boolean {
 }
 
 /**
+ * Распарсить две hex-группы IPv6 в IPv4-адрес.
+ * Каждая группа — от 1 до 4 hex-цифр; дополняется до 4 нулями слева.
+ * Из двух 16-битных групп получаем 4 октета IPv4.
+ */
+function hexGroupsToIPv4(g1: string, g2: string): string {
+  const p1 = g1.padStart(4, '0')
+  const p2 = g2.padStart(4, '0')
+  return (
+    parseInt(p1.slice(0, 2), 16) +
+    '.' +
+    parseInt(p1.slice(2, 4), 16) +
+    '.' +
+    parseInt(p2.slice(0, 2), 16) +
+    '.' +
+    parseInt(p2.slice(2, 4), 16)
+  )
+}
+
+/**
  * Проверить, попадает ли IPv6-адрес в приватный/служебный диапазон.
  * @returns true, если адрес приватный/служебный (должен быть заблокирован).
  */
@@ -89,6 +108,28 @@ function isPrivateIPv6(ip: string): boolean {
   }
   // :: — неопределённый адрес
   if (lower === '::') return true
+  // IPv4-mapped IPv6: ::ffff:a.b.c.d — извлекаем встроенный IPv4 и проверяем.
+  const mapped = lower.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)
+  if (mapped) {
+    return isPrivateIPv4(mapped[1])
+  }
+  // IPv4-compatible IPv6: ::a.b.c.d
+  const compat = lower.match(/^::(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)
+  if (compat) {
+    return isPrivateIPv4(compat[1])
+  }
+  // IPv4-mapped IPv6 в hex-форме (::ffff:7f00:1) после нормализации URL.
+  // new URL() преобразует ::ffff:127.0.0.1 → ::ffff:7f00:1.
+  // Группы имеют переменную длину (1–4 hex-цифры), дополняем до 4.
+  const mappedHex = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+  if (mappedHex) {
+    return isPrivateIPv4(hexGroupsToIPv4(mappedHex[1], mappedHex[2]))
+  }
+  // IPv4-compatible IPv6 в hex-форме (::a9fe:a9fe) после нормализации URL.
+  const compatHex = lower.match(/^::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+  if (compatHex) {
+    return isPrivateIPv4(hexGroupsToIPv4(compatHex[1], compatHex[2]))
+  }
   return false
 }
 
@@ -100,6 +141,75 @@ function isPrivateIP(ip: string): boolean {
   if (family === 4) return isPrivateIPv4(ip)
   if (family === 6) return isPrivateIPv6(ip)
   return false
+}
+
+/**
+ * Распарсить альтернативные кодировки IPv4, которые isIP() не распознаёт:
+ *   - decimal integer: "2130706433" → 127.0.0.1
+ *   - hexadecimal: "0x7f000001" → 127.0.0.1
+ *   - octal: "0177.0.0.1" → 127.0.0.1
+ *   - mixed hex/octal: "0x7f.0.0.1" → 127.0.0.1
+ *
+ * @returns канонический IPv4-адрес или null, если хост не является IP-кодировкой.
+ */
+export function parseAlternativeIpEncoding(hostname: string): string | null {
+  const lower = hostname.toLowerCase()
+
+  // Чистое десятичное число (decimal IPv4): 2130706433 → 127.0.0.1
+  if (/^\d+$/.test(hostname) && hostname.length <= 10) {
+    const num = parseInt(hostname, 10)
+    if (num >= 0 && num <= 0xffffffff) {
+      const a = (num >>> 24) & 0xff
+      const b = (num >> 16) & 0xff
+      const c = (num >> 8) & 0xff
+      const d = num & 0xff
+      return `${a}.${b}.${c}.${d}`
+    }
+  }
+
+  // Чистое hex-число: 0x7f000001 → 127.0.0.1
+  if (lower.startsWith('0x') && /^0x[0-9a-f]+$/.test(lower)) {
+    const num = parseInt(lower, 16)
+    if (num >= 0 && num <= 0xffffffff) {
+      const a = (num >>> 24) & 0xff
+      const b = (num >> 16) & 0xff
+      const c = (num >> 8) & 0xff
+      const d = num & 0xff
+      return `${a}.${b}.${c}.${d}`
+    }
+  }
+
+  // dotted-quad с octal/hex октетами: 0177.0.0.1, 0x7f.0.0.1
+  if (hostname.includes('.')) {
+    const parts = hostname.split('.')
+    if (parts.length === 4) {
+      const octets: number[] = []
+      let allNumeric = true
+      for (const part of parts) {
+        let val: number
+        if (lower.startsWith('0x') && /^0x[0-9a-f]+$/i.test(part)) {
+          val = parseInt(part, 16)
+        } else if (part.startsWith('0') && part.length > 1 && /^0[0-7]+$/.test(part)) {
+          val = parseInt(part, 8)
+        } else if (/^\d+$/.test(part)) {
+          val = parseInt(part, 10)
+        } else {
+          allNumeric = false
+          break
+        }
+        if (val < 0 || val > 255) {
+          allNumeric = false
+          break
+        }
+        octets.push(val)
+      }
+      if (allNumeric) {
+        return octets.join('.')
+      }
+    }
+  }
+
+  return null
 }
 
 /**
@@ -176,6 +286,17 @@ export function validateProviderUrlSync(baseUrl: string, opts?: ValidateUrlOptio
 
   // Доменное имя: проверяем loopback для dev.
   if (!isProduction() && isLoopbackHost(hostname)) return
+
+  // Хост не распознан как канонический IP и не loopback-домен.
+  // Проверяем альтернативные IP-кодировки, которые isIP не распознаёт:
+  // decimal (2130706433), octal (0177.0.0.1), hex (0x7f000001), IPv4-mapped IPv6.
+  const altIp = parseAlternativeIpEncoding(hostname)
+  if (altIp && isPrivateIP(altIp)) {
+    throw new UrlValidationError(
+      `Хост ${hostname} (${altIp}) находится в приватном/служебном диапазоне и заблокирован.`
+    )
+  }
+  if (altIp) return
 
   // В production блокируем loopback-домены (localhost и т.п.).
   if (isProduction() && isLoopbackHost(hostname)) {
