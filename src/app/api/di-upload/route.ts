@@ -4,6 +4,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { extractDI } from '@/lib/di-parser'
+import { parseBody } from '@/lib/api-utils'
+import { diUploadSaveSchema } from '@/lib/validation/schemas'
+import { validateFileType, sanitizeFileName } from '@/lib/file-type'
 import { requireAuth, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
@@ -30,8 +33,8 @@ export async function POST(request: NextRequest) {
       if (!file || !(file instanceof File)) {
         return NextResponse.json({ error: 'Файл не передан' }, { status: 400 })
       }
-      const fileName = file.name.toLowerCase()
-      if (!fileName.endsWith('.pdf') && !fileName.endsWith('.docx')) {
+      const ext = file.name.toLowerCase().split('.').pop() || ''
+      if (ext !== 'pdf' && ext !== 'docx') {
         return NextResponse.json(
           { error: 'Поддерживаются только файлы .pdf и .docx' },
           { status: 400 }
@@ -45,7 +48,16 @@ export async function POST(request: NextRequest) {
       }
 
       const buffer = await file.arrayBuffer()
-      const result = await extractDI(buffer, file.name)
+      // Проверка по magic bytes: расширение может быть подменено.
+      if (!validateFileType(buffer, ext)) {
+        return NextResponse.json(
+          { error: 'Содержимое файла не соответствует заявленному типу' },
+          { status: 400 }
+        )
+      }
+      // Санитизация имени перед передачей в парсер/БД.
+      const safeName = sanitizeFileName(file.name)
+      const result = await extractDI(buffer, safeName)
 
       return NextResponse.json({
         success: true,
@@ -63,25 +75,8 @@ export async function POST(request: NextRequest) {
 
     // ===== РЕЖИМ SAVE: принимаем JSON, сохраняем в БД =====
     if (mode === 'save') {
-      const body = await request.json()
-      const { fileName, fileType, rawText, sections, positionId, companyId } = body as {
-        fileName: string
-        fileType: string
-        rawText: string
-        sections: { title: string; content: string }[]
-        positionId?: string
-        companyId?: string
-      }
-
-      if (!fileName || !rawText) {
-        return NextResponse.json({ error: 'fileName и rawText обязательны' }, { status: 400 })
-      }
-      if (!positionId) {
-        return NextResponse.json(
-          { error: 'Для сохранения ДИ требуется привязка к должности (positionId)' },
-          { status: 400 }
-        )
-      }
+      const { fileName, fileType, rawText, sections, positionId, companyId } =
+        await parseBody(request, diUploadSaveSchema)
 
       // Проверяем существование должности.
       const position = await db.position.findUnique({ where: { id: positionId } })
@@ -90,9 +85,11 @@ export async function POST(request: NextRequest) {
       }
 
       // Сохраняем в UploadedDocument + создаём ArchiveDI (статус imported).
+      // Санитизация имени файла, пришедшего от клиента, перед записью в БД.
+      const safeFileName = sanitizeFileName(fileName)
       const created = await db.uploadedDocument.create({
         data: {
-          fileName,
+          fileName: safeFileName,
           fileType: fileType || 'unknown',
           rawText,
           parsedSections: JSON.stringify(sections || []),
@@ -103,13 +100,13 @@ export async function POST(request: NextRequest) {
       })
 
       // Создаём ArchiveDI для использования в генерации (как reference).
-      const title = `ДИ — ${position.title} (импорт: ${fileName})`
+      const title = `ДИ — ${position.title} (импорт: ${safeFileName})`
       const archiveDI = await db.archiveDI.create({
         data: {
           title,
           content: rawText,
           positionId,
-          fileName,
+          fileName: safeFileName,
         },
       })
 

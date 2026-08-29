@@ -78,3 +78,51 @@ describe('assertAuthConfigured (fail-closed в production)', () => {
     expect(mod.isAuthEnabled()).toBe(false)
   })
 })
+
+describe('Cookie security flags (Фаза 3, шаг 3.2)', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('в production: secure=true, httpOnly=true, sameSite=lax для sessionToken', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AUTH_SECRET', 'test-secret-1234567890abcdef1234567890')
+    const mod = await import('@/lib/auth/auth-options')
+    const opts = mod.authOptions
+    expect(opts.useSecureCookies).toBe(true)
+    const sessionToken = opts.cookies!.sessionToken!
+    expect(sessionToken.options.httpOnly).toBe(true)
+    expect(sessionToken.options.secure).toBe(true)
+    expect(sessionToken.options.sameSite).toBe('lax')
+  })
+
+  it('в dev: secure=false (нет TLS), httpOnly и sameSite сохраняются', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('AUTH_SECRET', 'dev-secret-1234567890abcdef1234567890')
+    const mod = await import('@/lib/auth/auth-options')
+    const opts = mod.authOptions
+    expect(opts.useSecureCookies).toBe(false)
+    const sessionToken = opts.cookies!.sessionToken!
+    // httpOnly и sameSite обязательны всегда; secure только в prod.
+    expect(sessionToken.options.httpOnly).toBe(true)
+    expect(sessionToken.options.secure).toBe(false)
+    expect(sessionToken.options.sameSite).toBe('lax')
+  })
+
+  it('все cookie-типы имеют защищённые флаги в production', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AUTH_SECRET', 'test-secret-1234567890abcdef1234567890')
+    const mod = await import('@/lib/auth/auth-options')
+    const cookies = mod.authOptions.cookies!
+    for (const key of ['sessionToken', 'csrfToken', 'callbackUrl', 'pkceCodeVerifier']) {
+      const c = cookies[key as keyof typeof cookies]!
+      expect(c.options.httpOnly, `${key} httpOnly`).toBe(true)
+      expect(c.options.secure, `${key} secure`).toBe(true)
+      expect(c.options.sameSite, `${key} sameSite`).toBe('lax')
+    }
+  })
+})

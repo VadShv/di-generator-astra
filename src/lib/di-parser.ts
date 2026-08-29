@@ -16,6 +16,11 @@ export interface DIExtractResult {
   fileName: string
 }
 
+// Защита от zip-bomb / огромных распакованных документов (Фаза 3, шаг 3.3).
+// 5 МБ распакованного текста — более чем достаточно для любой должностной
+// инструкции; превышение считается злоупотреблением и отклоняется.
+const MAX_EXTRACTED_TEXT_LENGTH = 5 * 1024 * 1024
+
 // Типовые заголовки секций должностной инструкции (варианты написания).
 // Ключ — каноническое название секции, значение — массив regex-паттернов.
 const SECTION_PATTERNS: Record<string, RegExp[]> = {
@@ -175,6 +180,13 @@ export async function extractDI(
 
   if (!rawText || rawText.trim().length === 0) {
     throw new Error('Не удалось извлечь текст из файла (возможно, файл пуст или это скан)')
+  }
+  // Защита от zip-bomb: отклоняем слишком большой распакованный текст.
+  if (rawText.length > MAX_EXTRACTED_TEXT_LENGTH) {
+    throw new Error(
+      `Извлечённый текст слишком велик (${Math.round(rawText.length / 1024 / 1024)} МБ). ` +
+        'Максимум 5 МБ — возможно, файл поврежден или это zip-bomb.'
+    )
   }
 
   const sections = splitDISections(rawText)

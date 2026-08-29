@@ -6,6 +6,14 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     globals: false,
+    // Zod v4 экспортирует `z` через namespace-агрегацию ESM-модулей.
+    // В SSR-режиме vitest ломает этот интероп (`z` становится undefined).
+    // Инлайн zod в бандл тестов, чтобы ESM-экспорты резолвились корректно.
+    server: {
+      deps: {
+        inline: ['zod'],
+      },
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],

@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { requireAuth, requirePermission } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
+import {
+  createArchiveDISchema,
+  updateArchiveDISchema,
+  deleteArchiveDISchema,
+} from '@/lib/validation/schemas'
 import {
   listArchiveDIs,
   createArchiveDI,
@@ -30,7 +35,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     await requirePermission('archive', 'write')
-    const body = await request.json()
+    const body = await parseBody(request, createArchiveDISchema)
     const archiveDI = await createArchiveDI(body)
     return NextResponse.json(archiveDI, { status: 201 })
   } catch (error) {
@@ -43,7 +48,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     await requirePermission('archive', 'write')
-    const body = await request.json()
+    const body = await parseBody(request, updateArchiveDISchema)
     const updated = await updateArchiveDI(body)
     return NextResponse.json(updated)
   } catch (error) {
@@ -56,7 +61,7 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     await requirePermission('archive', 'write')
-    const body = await request.json()
+    const body = await parseBody(request, deleteArchiveDISchema)
     const result = await deleteArchiveDI(body.id)
     return NextResponse.json(result)
   } catch (error) {

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, requirePermission } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
+import {
+  createCompanySchema,
+  updateCompanySchema,
+  deleteCompanySchema,
+} from '@/lib/validation/schemas'
 import {
   listCompanies,
   createCompany,
@@ -23,7 +28,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     await requirePermission('staff-schedule', 'write')
-    const body = await request.json()
+    const body = await parseBody(request, createCompanySchema)
     const company = await createCompany(body)
     return NextResponse.json(company, { status: 201 })
   } catch (error) {
@@ -36,7 +41,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     await requirePermission('staff-schedule', 'write')
-    const body = await request.json()
+    const body = await parseBody(request, updateCompanySchema)
     const company = await updateCompany(body)
     return NextResponse.json(company)
   } catch (error) {
@@ -49,7 +54,7 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     await requirePermission('staff-schedule', 'write')
-    const body = await request.json()
+    const body = await parseBody(request, deleteCompanySchema)
     const result = await deleteCompany(body.id)
     return NextResponse.json(result)
   } catch (error) {

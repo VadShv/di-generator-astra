@@ -35,6 +35,11 @@ export interface ParseResult {
   columnMapping: Record<string, string>
 }
 
+// Защита от zip-bomb / чрезмерно больших таблиц (Фаза 3, шаг 3.3).
+// 10000 строк — разумный потолок для штатного расписания; превышение
+// считается злоупотреблением и прерывает обработку.
+const MAX_EXCEL_ROWS = 10000
+
 // Возможные варианты названий колонок (lowercase, без пробелов) для каждого поля.
 const COLUMN_ALIASES: Record<string, string[]> = {
   departmentName: [
@@ -87,6 +92,19 @@ export function parseStaffingExcel(buffer: ArrayBuffer): ParseResult {
 
   if (raw.length === 0) {
     return { rows: [], errors: [{ rowNumber: 0, message: 'Лист пуст' }], detectedHeaders: [], columnMapping: {} }
+  }
+
+  // Защита от zip-bomb: отклоняем слишком большие таблицы.
+  if (raw.length > MAX_EXCEL_ROWS + 1) {
+    return {
+      rows: [],
+      errors: [{
+        rowNumber: 0,
+        message: `Слишком много строк в файле (${raw.length}). Максимум ${MAX_EXCEL_ROWS}.`,
+      }],
+      detectedHeaders: [],
+      columnMapping: {},
+    }
   }
 
   // Первая строка — заголовки.

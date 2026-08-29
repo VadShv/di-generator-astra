@@ -98,3 +98,147 @@ export const massGenerateSchema = z
 export const batchDeleteSchema = z.object({
   ids: idArraySchema,
 })
+
+// ─────────────────────────────────────────────
+// Схемы роутов companies/* (Фаза 3, шаг 3.4)
+// ─────────────────────────────────────────────
+
+/** Общие поля компании (опциональные в update, обязательные в create). */
+const companyFields = {
+  shortName: z.string().trim().optional(),
+  type: z.string().trim().optional(),
+  director: z.string().trim().optional(),
+  description: z.string().trim().optional(),
+  inn: z
+    .string()
+    .trim()
+    .regex(/^\d{10,12}$/, 'ИНН должен содержать 10–12 цифр')
+    .optional(),
+  ogrn: z
+    .string()
+    .trim()
+    .regex(/^\d{13,15}$/, 'ОГРН должен содержать 13–15 цифр')
+    .optional(),
+  kpp: z
+    .string()
+    .trim()
+    .regex(/^\d{9}$/, 'КПП должен содержать 9 цифр')
+    .optional(),
+  legalAddress: z.string().trim().optional(),
+  actualAddress: z.string().trim().optional(),
+}
+
+/** POST /api/companies */
+export const createCompanySchema = z.object({
+  name: nonEmptyString.max(500, 'Слишком длинное название'),
+  code: nonEmptyString.max(100, 'Слишком длинный код'),
+  ...companyFields,
+})
+
+/** PUT /api/companies */
+export const updateCompanySchema = z
+  .object({
+    id: idSchema,
+    name: nonEmptyString.max(500).optional(),
+    code: nonEmptyString.max(100).optional(),
+    ...companyFields,
+  })
+  .refine((data) => Object.keys(data).length > 1, {
+    message: 'Укажите хотя бы одно поле для обновления',
+  })
+
+/** DELETE /api/companies */
+export const deleteCompanySchema = z.object({ id: idSchema })
+
+// ─────────────────────────────────────────────
+// Схемы роутов archive-di/* (Фаза 3, шаг 3.4)
+// ─────────────────────────────────────────────
+
+/** POST /api/archive-di */
+export const createArchiveDISchema = z.object({
+  title: nonEmptyString.max(500, 'Слишком длинный заголовок'),
+  content: nonEmptyString.max(5 * 1024 * 1024, 'Содержимое слишком велико'),
+  positionId: z.string().optional(),
+  fileName: z.string().trim().max(255).optional(),
+})
+
+/** PUT /api/archive-di */
+export const updateArchiveDISchema = z
+  .object({
+    id: idSchema,
+    title: nonEmptyString.max(500).optional(),
+    content: nonEmptyString.max(5 * 1024 * 1024).optional(),
+    positionId: z.string().nullable().optional(),
+    fileName: z.string().trim().max(255).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 1, {
+    message: 'Укажите хотя бы одно поле для обновления',
+  })
+
+/** DELETE /api/archive-di */
+export const deleteArchiveDISchema = z.object({ id: idSchema })
+
+// ─────────────────────────────────────────────
+// Схемы роутов di-upload (save) и staffing-upload (import) (Фаза 3, шаг 3.4)
+// ─────────────────────────────────────────────
+
+/** POST /api/di-upload?mode=save */
+export const diUploadSaveSchema = z.object({
+  fileName: nonEmptyString.max(255),
+  fileType: z.string().trim().max(50).optional().default('unknown'),
+  rawText: nonEmptyString.max(5 * 1024 * 1024, 'Текст слишком велик'),
+  sections: z
+    .array(
+      z.object({
+        title: z.string().trim().max(500),
+        content: z.string().max(5 * 1024 * 1024),
+      })
+    )
+    .max(500, 'Слишком много секций')
+    .optional()
+    .default([]),
+  positionId: idSchema,
+  companyId: z.string().optional(),
+})
+
+/** Одна строка штатного расписания для импорта. */
+export const staffingRowSchema = z.object({
+  departmentName: nonEmptyString.max(500),
+  departmentCode: z.string().trim().max(100).nullable().optional(),
+  positionTitle: nonEmptyString.max(500),
+  positionCode: z.string().trim().max(100).nullable().optional(),
+  headcount: z.number().positive('Количество ставок должно быть положительным'),
+  category: z.string().trim().max(200).nullable().optional(),
+  grade: z.string().trim().max(100).nullable().optional(),
+  rowNumber: z.number().int().nonnegative(),
+})
+
+/** POST /api/staffing-upload?mode=import */
+export const staffingImportSchema = z.object({
+  companyId: z.string().optional(),
+  rows: z.array(staffingRowSchema).min(1, 'Нет строк для импорта').max(10000, 'Слишком много строк'),
+})
+
+// ─────────────────────────────────────────────
+// Схема смены пароля (Фаза 3, шаг 3.5)
+// ─────────────────────────────────────────────
+
+/**
+ * POST /api/auth/change-password
+ * Минимум 8 символов, обязательны буква и цифра, максимум 128,
+ * новый пароль не должен совпадать с текущим.
+ */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: nonEmptyString.max(128, 'Слишком длинный пароль'),
+    newPassword: z
+      .string()
+      .min(8, 'Пароль должен быть не менее 8 символов')
+      .max(128, 'Слишком длинный пароль')
+      .regex(/[A-Za-zА-Яа-яЁё]/, 'Пароль должен содержать букву')
+      .regex(/\d/, 'Пароль должен содержать цифру'),
+  })
+  .refine((data) => data.newPassword !== data.currentPassword, {
+    message: 'Новый пароль не должен совпадать с текущим',
+    path: ['newPassword'],
+  })

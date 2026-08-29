@@ -51,6 +51,23 @@ export function assertAuthConfigured(): void {
 // Проверка при загрузке модуля: fail-closed в production.
 assertAuthConfigured()
 
+const isProduction = process.env.NODE_ENV === 'production'
+
+/**
+ * Параметры cookie next-auth (Фаза 3, шаг 3.2 — Cookie security flags).
+ *   httpOnly: true  — cookie недоступен из JS, защита от кражи сессии через XSS.
+ *   sameSite: 'lax' — cookie не отправляется при cross-site запросах (CSRF).
+ *   secure: true только в production — в dev нет TLS, secure-cookie не установится.
+ * Имена cookies оставлены стандартными (без __Secure- префикса), чтобы не
+ * инвалидировать уже выданные сессии при развёртывании.
+ */
+const cookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  path: '/',
+  secure: isProduction,
+}
+
 export const authOptions: NextAuthOptions = {
   secret: getAuthSecret(),
   session: {
@@ -59,6 +76,25 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: '/login',
+  },
+  useSecureCookies: isProduction,
+  cookies: {
+    sessionToken: {
+      name: 'next-auth.session-token',
+      options: cookieOptions,
+    },
+    csrfToken: {
+      name: 'next-auth.csrf-token',
+      options: cookieOptions,
+    },
+    callbackUrl: {
+      name: 'next-auth.callback-url',
+      options: cookieOptions,
+    },
+    pkceCodeVerifier: {
+      name: 'next-auth.pkce.code-verifier',
+      options: cookieOptions,
+    },
   },
   providers: [
     CredentialsProvider({

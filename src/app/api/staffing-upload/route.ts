@@ -7,7 +7,10 @@
 //      bulk insert: создаёт недостающие Department/Position и записи StaffingTable.
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { parseStaffingExcel, type ParsedStaffingRow } from '@/lib/staffing-parser'
+import { parseStaffingExcel } from '@/lib/staffing-parser'
+import { parseBody } from '@/lib/api-utils'
+import { staffingImportSchema } from '@/lib/validation/schemas'
+import { validateFileType } from '@/lib/file-type'
 import { requireAuth, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
@@ -50,8 +53,8 @@ export async function POST(request: NextRequest) {
       if (!file || !(file instanceof File)) {
         return NextResponse.json({ error: 'Файл не передан' }, { status: 400 })
       }
-      const fileName = file.name.toLowerCase()
-      if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+      const ext = file.name.toLowerCase().split('.').pop() || ''
+      if (ext !== 'xlsx' && ext !== 'xls') {
         return NextResponse.json(
           { error: 'Поддерживаются только файлы .xlsx и .xls' },
           { status: 400 }
@@ -65,6 +68,13 @@ export async function POST(request: NextRequest) {
       }
 
       const buffer = await file.arrayBuffer()
+      // Проверка по magic bytes: расширение может быть подменено.
+      if (!validateFileType(buffer, ext)) {
+        return NextResponse.json(
+          { error: 'Содержимое файла не соответствует заявленному типу' },
+          { status: 400 }
+        )
+      }
       const result = parseStaffingExcel(buffer)
 
       if (result.rows.length === 0 && result.errors.length > 0) {
@@ -93,12 +103,8 @@ export async function POST(request: NextRequest) {
 
     // ===== РЕЖИМ IMPORT: принимаем JSON с подтверждёнными строками =====
     if (mode === 'import') {
-      const body = await request.json()
-      const { companyId, rows } = body as { companyId?: string; rows: ParsedStaffingRow[] }
-
-      if (!Array.isArray(rows) || rows.length === 0) {
-        return NextResponse.json({ error: 'Нет строк для импорта' }, { status: 400 })
-      }
+      const { companyId, rows } = await parseBody(request, staffingImportSchema)
+      // rows уже провалидированы zod-схемой (типы, лимиты, количество).
 
       // Проверка компании, если указана.
       if (companyId) {

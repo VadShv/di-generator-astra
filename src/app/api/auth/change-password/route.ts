@@ -1,27 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAppSession } from '@/lib/auth/session'
+import { requireAuth } from '@/lib/auth/session'
 import { verifyPassword, hashPassword } from '@/lib/auth/password'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { errorResponse, parseBody } from '@/lib/api-utils'
+import { checkRateLimit } from '@/lib/rate-limit'
+import { changePasswordSchema } from '@/lib/validation/schemas'
 
 // POST /api/auth/change-password — смена пароля текущим пользователем
+// Защита (Фаза 3, шаг 3.5):
+//   - auth-gate через requireAuth() (консистентность с остальными роутами);
+//   - Zod-валидация: минимум 8 символов, буква + цифра, отличие от текущего;
+//   - rate-limit 5 попыток/час по пользователю — защита от brute-force
+//     текущего пароля.
 export async function POST(request: NextRequest) {
   try {
-    const session = await getAppSession()
+    const session = await requireAuth()
+    // В режиме без auth (dev) смена пароля бессмысленна — нет пользователя.
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Требуется аутентификация' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { currentPassword, newPassword } = body
+    // Rate-limit по пользователю: 5 попыток/час. Брутфорс текущего пароля
+    // не должен позволить перебрать его за разумное время.
+    checkRateLimit(request, 'change-password', 5, 60 * 60 * 1000, session.user.id)
 
-    if (!currentPassword || !newPassword) {
-      return NextResponse.json({ error: 'Текущий и новый пароль обязательны' }, { status: 400 })
-    }
-
-    if (newPassword.length < 6) {
-      return NextResponse.json({ error: 'Новый пароль должен быть не менее 6 символов' }, { status: 400 })
-    }
+    const { currentPassword, newPassword } = await parseBody(request, changePasswordSchema)
 
     const user = await db.user.findUnique({
       where: { id: session.user.id },
@@ -44,8 +47,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error changing password:', error)
-    return NextResponse.json({ error: 'Ошибка смены пароля' }, { status: 500 })
+    // Единая обработка: errorResponse корректно форматирует ApiError (429
+    // rate-limit, 401/403 auth) и ZodError (400 validation), логируя детали.
+    return errorResponse(error, undefined, 'change-password')
   }
 }
