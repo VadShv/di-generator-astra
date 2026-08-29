@@ -17,6 +17,11 @@ import type {
 } from '../types'
 import { AIProviderError, classifyError, isRetryable } from '../errors'
 import { withRetry } from '../retry'
+import { sanitizeProviderMessage } from '../errors'
+import { createLogger } from '../../logger'
+import { getProviderSemaphore } from '../semaphore'
+
+const log = createLogger('yandex-provider')
 
 const YANDEX_ENDPOINT =
   'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
@@ -52,6 +57,11 @@ export class YandexCloudProvider implements AIProviderClient {
   constructor(config: AIProviderConfig) {
     this.name = config.name
     this.config = config
+  }
+
+  /** Глобальный семафор по id провайдера (разделяется всеми job'ами). */
+  private get semaphore() {
+    return getProviderSemaphore(this.config.id)
   }
 
   /** Получить IAM-токен из OAuth-токена (apiKey), с кэшированием. */
@@ -155,9 +165,18 @@ export class YandexCloudProvider implements AIProviderClient {
 
     const timeoutMs = request.timeoutMs ?? this.config.config.timeoutMs ?? 60000
 
+    // Глобальный семафор: ограничивает конкурентность по провайдеру.
+    return this.semaphore.run(async () => {
+      // Если внешний сигнал уже абортирован (job timeout) — выходим сразу.
+      if (request.signal?.aborted) {
+        throw new AIProviderError('Запрос отменён до начала (job timeout)', 'timeout', undefined, false)
+      }
     return withRetry(async () => {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), timeoutMs)
+      // Связываем внешний сигнал отмены с локальным контроллером.
+      const onExternalAbort = () => controller.abort()
+      request.signal?.addEventListener('abort', onExternalAbort, { once: true })
       try {
         const res = await fetch(YANDEX_ENDPOINT, {
           method: 'POST',
@@ -205,8 +224,10 @@ export class YandexCloudProvider implements AIProviderClient {
         }
       } finally {
         clearTimeout(timer)
+        request.signal?.removeEventListener('abort', onExternalAbort)
       }
     })
+    }) // конец semaphore.run
   }
 
   async testConnection(): Promise<TestConnectionResult> {
@@ -228,9 +249,25 @@ export class YandexCloudProvider implements AIProviderClient {
         sampleResponse: response.content,
       }
     } catch (e) {
+      // Санитизация: детали ошибки провайдера — только в логи.
+      if (e instanceof AIProviderError) {
+        log.error('testConnection failed', {
+          code: e.code,
+          status: e.status,
+          retryable: e.retryable,
+          detail: e.message,
+        })
+      } else {
+        log.error('testConnection failed', {
+          detail: e instanceof Error ? e.message : String(e),
+        })
+      }
       return {
         ok: false,
-        message: e instanceof Error ? e.message : String(e),
+        message:
+          e instanceof AIProviderError
+            ? sanitizeProviderMessage(e.code)
+            : 'Не удалось подключиться к провайдеру',
         latencyMs: Date.now() - start,
       }
     }

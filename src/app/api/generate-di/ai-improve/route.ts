@@ -24,8 +24,8 @@ const PRESET_PROMPTS: Record<z.infer<typeof magicWandPresetSchema>, string> = {
 
 // POST /api/generate-di/ai-improve - Improve existing section content with AI
 export const POST = withErrorHandler(async (request: Request) => {
-  await requireAuth()
-  checkRateLimit(request, 'ai-improve', 20)
+  const session = await requireAuth()
+  checkRateLimit(request, 'ai-improve', 20, 60_000, session?.user?.id)
   const body = await parseBody(request, aiImproveSchema)
   const { sectionId, instruction, preset } = body
 

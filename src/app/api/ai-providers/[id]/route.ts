@@ -5,7 +5,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { encryptApiKey, maskApiKey } from '@/lib/ai-connector'
-import { requireRole, requireAuth } from '@/lib/auth/session'
+import { validateProviderUrl } from '@/lib/ai-connector/url-validator'
+import { requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
 function toDto(row: {
@@ -47,10 +48,10 @@ function toDto(row: {
 
 type Params = { params: Promise<{ id: string }> }
 
-// GET — получить одного провайдера
+// GET — получить одного провайдера (только admin: ресурс содержит API-ключи).
 export async function GET(_request: Request, { params }: Params) {
   try {
-    await requireAuth()
+    await requireRole('admin')
     const { id } = await params
     const provider = await db.aIProvider.findUnique({ where: { id } })
     if (!provider) {
@@ -77,16 +78,25 @@ export async function PATCH(request: Request, { params }: Params) {
       return NextResponse.json({ error: 'Провайдер не найден' }, { status: 404 })
     }
 
-   const validTypes = ['openai_compatible', 'yandex_cloud', 'cloud', 'klad', 'ollama', 'zai']
-   if (type && !validTypes.includes(type)) {
-      return NextResponse.json({ error: `Недопустимый тип: ${type}` }, { status: 400 })
-    }
-    if (type === 'yandex_cloud' && !folderId && !existing.folderId) {
-      return NextResponse.json(
-        { error: 'folder_id обязателен для Yandex Cloud' },
-        { status: 400 }
-      )
-    }
+  const validTypes = ['openai_compatible', 'yandex_cloud', 'cloud', 'klad', 'ollama', 'zai']
+  if (type && !validTypes.includes(type)) {
+     return NextResponse.json({ error: `Недопустимый тип: ${type}` }, { status: 400 })
+   }
+   // SSRF-защита: валидация baseUrl при обновлении (если передан).
+   if (baseUrl !== undefined && baseUrl) {
+     try {
+       await validateProviderUrl(baseUrl)
+     } catch (e) {
+       const msg = e instanceof Error ? e.message : 'Некорректный baseUrl'
+       return NextResponse.json({ error: msg }, { status: 400 })
+     }
+   }
+   if (type === 'yandex_cloud' && !folderId && !existing.folderId) {
+     return NextResponse.json(
+       { error: 'folder_id обязателен для Yandex Cloud' },
+       { status: 400 }
+     )
+   }
 
     // Если ставим isDefault — снимаем с остальных.
     if (isDefault && !existing.isDefault) {

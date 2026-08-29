@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server'
+import { requireRole } from '@/lib/auth/session'
+import { errorResponse } from '@/lib/api-utils'
 
 /**
  * GET /api/docs — Swagger UI для API документации.
  * Отдаёт HTML-страницу со встроенным Swagger UI (CDN),
  * подключающуюся к /openapi.yaml.
+ * Доступ только для админов (раскрывает структуру API).
  */
 export async function GET() {
+  try {
+    await requireRole('admin')
+  } catch (error) {
+    return errorResponse(error)
+  }
   const html = `<!DOCTYPE html>
 <html lang="ru">
 <head>

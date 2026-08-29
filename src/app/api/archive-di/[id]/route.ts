@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireRole } from '@/lib/auth/session'
+import { requirePermission, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
-// GET /api/archive-di/[id] - Get single archive DI with full content
+// GET /api/archive-di/[id] - Get single archive DI with full content.
+// Ресурс общекорпоративный (без per-user owner) — доступ регулируется
+// матрицей прав: requirePermission('archive', 'read').
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth()
+    await requirePermission('archive', 'read')
     const { id } = await params
 
     const archiveDI = await db.archiveDI.findUnique({

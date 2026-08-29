@@ -16,8 +16,8 @@ const log = createLogger('generate-di/ai-section')
 // 1. Existing DI: { generatedDIId, sectionOrder, customPrompt }
 // 2. Manual mode: { positionId, sectionTitle, sectionOrder, promptGuidance, manualMode: true }
 export const POST = withErrorHandler(async (request: Request) => {
-  await requireAuth()
-  checkRateLimit(request, 'ai-section', 20)
+  const session = await requireAuth()
+  checkRateLimit(request, 'ai-section', 20, 60_000, session?.user?.id)
   const body = await parseBody(request, aiSectionSchema)
   const { generatedDIId, sectionOrder, customPrompt, manualMode, positionId, sectionTitle, promptGuidance } = body
 

@@ -54,6 +54,8 @@ export interface GenerateRequest {
   maxTokens?: number
   /** Таймаут запроса (опционально). */
   timeoutMs?: number
+  /** Сигнал отмены (опционально) — для per-job таймаута массовой генерации. */
+  signal?: AbortSignal
 }
 
 /** Ответ генерации. */

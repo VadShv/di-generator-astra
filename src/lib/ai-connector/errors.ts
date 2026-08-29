@@ -24,6 +24,49 @@ export class AIProviderError extends Error {
 }
 
 /**
+ * Generic-сообщение для клиента: детали провайдера (URL, текст ответа,
+ * статус) не должны утекать наружу. Полные детали логируются вызывающим кодом.
+ */
+export const PROVIDER_ERROR_GENERIC = 'Ошибка ИИ-провайдера'
+
+/**
+ * Сопоставить код ошибки провайдера с HTTP-статусом для ответа клиенту.
+ * Внутренние детали провайдера не транслируются напрямую в статус клиента —
+ * используется обобщённый 502, кроме rate_limit (429) и timeout (504).
+ */
+export function providerErrorStatus(code: AIErrorCode): number {
+  switch (code) {
+    case 'rate_limit':
+      return 429
+    case 'timeout':
+      return 504
+    default:
+      return 502
+  }
+}
+
+/**
+ * Безопасное для клиента сообщение об ошибке провайдера.
+ * Не содержит деталей (message провайдера, URL, тело ответа).
+ */
+export function sanitizeProviderMessage(code: AIErrorCode): string {
+  switch (code) {
+    case 'rate_limit':
+      return 'Слишком много запросов к ИИ-провайдеру. Повторите позже.'
+    case 'timeout':
+      return 'Превышено время ожидания ответа от ИИ-провайдера.'
+    case 'auth':
+      return 'Ошибка авторизации ИИ-провайдера.'
+    case 'network':
+      return 'Сетевая ошибка при обращении к ИИ-провайдеру.'
+    case 'empty_response':
+      return 'ИИ-провайдер вернул пустой ответ.'
+    default:
+      return PROVIDER_ERROR_GENERIC
+  }
+}
+
+/**
  * Классифицировать ошибку HTTP-запроса к провайдеру.
  * @param status HTTP-статус ответа (если есть)
  * @param isAbort был ли abort (таймаут)

@@ -14,8 +14,8 @@ const log = createLogger('generate-di/mass-generate')
 // Создаёт запись GenerationJob и запускает фоновую обработку.
 // Возвращает 202 с { jobId } — клиент опрашивает статус через GET ?jobId=.
 export const POST = withErrorHandler(async (request: Request) => {
-  await requireAuth()
-  checkRateLimit(request, 'mass-generate', 5)
+  const session = await requireAuth()
+  checkRateLimit(request, 'mass-generate', 5, 60_000, session?.user?.id)
   const body = await parseBody(request, massGenerateSchema)
   const { departmentIds, companyIds, positionIds, templateId, masterPromptId, providerId } = body
 

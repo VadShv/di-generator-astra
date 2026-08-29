@@ -12,8 +12,8 @@ import { checkRateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
   try {
-    await requireRole('admin')
-    checkRateLimit(request, 'ai-providers-generate', 20)
+    const session = await requireRole('admin')
+    checkRateLimit(request, 'ai-providers-generate', 20, 60_000, session?.user?.id)
     const body = await request.json()
     const { providerId, messages, temperature, maxTokens } = body
 

@@ -29,6 +29,12 @@ const POLL_INTERVAL_MS = 2000
 const MAX_CONCURRENT_JOBS = 3
 /** Размер пакета должностей для параллельной обработки. */
 const BATCH_SIZE = 5
+/** Per-job таймаут (мс). По умолчанию 10 минут (env JOB_TIMEOUT_MS). */
+const JOB_TIMEOUT_MS = (() => {
+  const raw = process.env.JOB_TIMEOUT_MS
+  const n = raw ? Number(raw) : 10 * 60 * 1000
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 10 * 60 * 1000
+})()
 
 let activeJobs = 0
 let pollTimer: ReturnType<typeof setTimeout> | null = null
@@ -62,7 +68,15 @@ export async function runJob(jobId: string): Promise<void> {
 
   activeJobs++
   try {
-    await processJob(jobId)
+    // Per-job таймаут с активной отменой через AbortController.
+    // При превышении — прерываем запросы к провайдеру и помечаем job как failed.
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), JOB_TIMEOUT_MS)
+    try {
+      await processJob(jobId, controller.signal)
+    } finally {
+      clearTimeout(timeout)
+    }
   } catch (error) {
     log.error(`Job ${jobId} failed unexpectedly`, { message: error instanceof Error ? error.message : String(error) })
     await db.generationJob
@@ -77,7 +91,7 @@ export async function runJob(jobId: string): Promise<void> {
 }
 
 /** Обработка одной job: выборка должностей и генерация. */
-async function processJob(jobId: string): Promise<void> {
+async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
   const job = await db.generationJob.findUnique({ where: { id: jobId } })
   if (!job) {
     log.warn(`Job ${jobId} not found`)
@@ -184,6 +198,7 @@ async function processJob(jobId: string): Promise<void> {
         archiveDIs: archiveRefs,
         extraContext: lineageContext || undefined,
         errorPlaceholder: '[Ошибка генерации. Повторите для данной должности.]',
+        signal,
       })
 
       const aiCulturePrompt = await resolveAiCulturePrompt({
@@ -193,7 +208,7 @@ async function processJob(jobId: string): Promise<void> {
       })
       if (aiCulturePrompt) {
         const cultureSystem = renderPrompt(aiCulturePrompt.content, buildContextFromPosition(position))
-        const cultureSection = await generateAiCultureSection(client, aiCulturePrompt, cultureSystem)
+        const cultureSection = await generateAiCultureSection(client, aiCulturePrompt, cultureSystem, signal)
         if (cultureSection) {
           generatedSections.push({ ...cultureSection, order: generatedSections.length })
         }
@@ -320,12 +335,12 @@ export function startQueuePoller(): void {
       .updateMany({
         where: {
           status: 'running',
-          startedAt: { lt: new Date(Date.now() - 30 * 60 * 1000) },
+          startedAt: { lt: new Date(Date.now() - JOB_TIMEOUT_MS) },
         },
         data: {
           status: 'failed',
           finishedAt: new Date(),
-          results: JSON.stringify([{ status: 'error', message: 'Таймаут задачи (превышен лимит 30 мин)' }]),
+          results: JSON.stringify([{ status: 'error', message: `Таймаут задачи (превышен лимит ${Math.ceil(JOB_TIMEOUT_MS / 60000)} мин)` }]),
         },
       })
       .catch(() => {})

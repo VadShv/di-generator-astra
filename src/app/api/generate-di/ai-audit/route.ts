@@ -215,8 +215,8 @@ ${diText}
 // GET /api/generate-di/ai-audit - List audit results for a DI
 export async function GET(request: Request) {
   try {
-  await requireAuth()
-  checkRateLimit(request, 'ai-audit', 20)
+  const session = await requireAuth()
+  checkRateLimit(request, 'ai-audit', 20, 60_000, session?.user?.id)
     const { searchParams } = new URL(request.url)
     const generatedDIId = searchParams.get('generatedDIId')
 

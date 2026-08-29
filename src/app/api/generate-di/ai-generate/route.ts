@@ -15,8 +15,8 @@ const log = createLogger('generate-di/ai-generate')
 
 // POST /api/generate-di/ai-generate - Full AI generation of DI
 export const POST = withErrorHandler(async (request: Request) => {
-  await requireAuth()
-  checkRateLimit(request, 'ai-generate', 20)
+  const session = await requireAuth()
+  checkRateLimit(request, 'ai-generate', 20, 60_000, session?.user?.id)
   const body = await parseBody(request, aiGenerateSchema)
   const { positionId, templateId, masterPromptId, archiveDIId, useArchiveAsReference } = body
 

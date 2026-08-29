@@ -13,7 +13,12 @@ import type {
   TestConnectionResult,
 } from '../types'
 import { classifyError, isRetryable, AIProviderError } from '../errors'
-import { Semaphore, getDefaultConcurrency } from '../semaphore'
+import { Semaphore, getProviderSemaphore } from '../semaphore'
+import { validateProviderUrlSync } from '../url-validator'
+import { createLogger } from '../../logger'
+import { sanitizeProviderMessage } from '../errors'
+
+const log = createLogger('openai-provider')
 
 /** Конфигурация retry. */
 const MAX_RETRIES = 3
@@ -65,7 +70,13 @@ export class OpenAICompatibleProvider implements AIProviderClient {
     this.name = config.name
     this.config = config
     this.type = config.type
-    this.semaphore = new Semaphore(getDefaultConcurrency())
+    // Глобальный семафор по id провайдера: все job'ы с одним провайдером
+    // разделяют общий лимит конкурентности (защита от DoS провайдера).
+    this.semaphore = getProviderSemaphore(config.id)
+    // SSRF-защита: валидация baseUrl при создании провайдера.
+    if (this.config.baseUrl) {
+      validateProviderUrlSync(this.config.baseUrl)
+    }
   }
 
   protected get endpoint(): string {
@@ -99,20 +110,45 @@ export class OpenAICompatibleProvider implements AIProviderClient {
   /**
    * Выполнить HTTP-запрос с retry и экспоненциальным backoff.
    * Ретраит только ретряемые ошибки (timeout, 429, 5xx, network).
+   * @param externalSignal — сигнал отмены от per-job таймаута массовой генерации.
    */
-  protected async doFetch(body: Record<string, unknown>, timeoutMs: number): Promise<OpenAIResponse> {
+  protected async doFetch(
+    body: Record<string, unknown>,
+    timeoutMs: number,
+    externalSignal?: AbortSignal
+  ): Promise<OpenAIResponse> {
     return this.semaphore.run(async () => {
+      // Если внешний сигнал уже абортирован — выходим сразу.
+      if (externalSignal?.aborted) {
+        throw new AIProviderError('Запрос отменён до начала (job timeout)', 'timeout', undefined, false)
+      }
       let lastError: unknown = null
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         const controller = new AbortController()
         const timer = setTimeout(() => controller.abort(), timeoutMs)
+        // Связываем внешний сигнал отмены с локальным контроллером:
+        // при abort внешнего сигнала прерываем текущий fetch.
+        const onExternalAbort = () => controller.abort()
+        externalSignal?.addEventListener('abort', onExternalAbort, { once: true })
         try {
           const res = await fetch(this.endpoint, {
             method: 'POST',
             headers: this.headers,
             body: JSON.stringify(body),
             signal: controller.signal,
+            // SSRF-защита: не следовать редиректам автоматически.
+            redirect: 'manual',
           })
+          // Блокируем редиректы: провайдер не должен перенаправлять запрос
+          // (включая возможный редирект на внутренние адреса).
+          if (res.status >= 300 && res.status < 400) {
+            throw new AIProviderError(
+              `Провайдер вернул редирект (статус ${res.status}). Редиректы запрещены в целях безопасности.`,
+              'bad_request',
+              res.status,
+              false
+            )
+          }
           const text = await res.text()
           if (!res.ok) {
             let detail = text
@@ -161,6 +197,7 @@ export class OpenAICompatibleProvider implements AIProviderClient {
           throw e
         } finally {
           clearTimeout(timer)
+          externalSignal?.removeEventListener('abort', onExternalAbort)
         }
       }
       // Исчерпаны попытки.
@@ -171,7 +208,7 @@ export class OpenAICompatibleProvider implements AIProviderClient {
 
   async generate(request: GenerateRequest): Promise<GenerateResponse> {
     const timeoutMs = request.timeoutMs ?? this.config.config.timeoutMs ?? 60000
-    const data = await this.doFetch(this.buildBody(request), timeoutMs)
+    const data = await this.doFetch(this.buildBody(request), timeoutMs, request.signal)
 
     const content = data.choices?.[0]?.message?.content ?? ''
     if (!content) {
@@ -212,9 +249,26 @@ export class OpenAICompatibleProvider implements AIProviderClient {
         sampleResponse: response.content,
       }
     } catch (e) {
+      // Санитизация: детали ошибки провайдера (URL, тело ответа) — только в логи,
+      // клиенту возвращаем generic-сообщение.
+      if (e instanceof AIProviderError) {
+        log.error('testConnection failed', {
+          code: e.code,
+          status: e.status,
+          retryable: e.retryable,
+          detail: e.message,
+        })
+      } else {
+        log.error('testConnection failed', {
+          detail: e instanceof Error ? e.message : String(e),
+        })
+      }
       return {
         ok: false,
-        message: e instanceof Error ? e.message : String(e),
+        message:
+          e instanceof AIProviderError
+            ? sanitizeProviderMessage(e.code)
+            : 'Не удалось подключиться к провайдеру',
         latencyMs: Date.now() - start,
       }
     }

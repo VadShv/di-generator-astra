@@ -37,6 +37,8 @@ export interface GenerateSectionsParams {
   onProgress?: (done: number, total: number) => void
   /** Текст-заглушка при ошибке генерации секции. */
   errorPlaceholder?: string
+  /** Сигнал отмены — для per-job таймаута массовой генерации. */
+  signal?: AbortSignal
 }
 
 /**
@@ -55,6 +57,7 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
     legalContext,
     onProgress,
     errorPlaceholder = '[Ошибка генерации секции. Пожалуйста, повторите генерацию.]',
+    signal,
   } = params
 
   const archiveContext = buildArchiveContext(archiveDIs)
@@ -72,6 +75,7 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
+        signal,
       })
       // Fire-and-forget: сохраняем использование токенов
       if (result.usage) {
@@ -115,7 +119,8 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
 export async function generateAiCultureSection(
   client: AIProviderClient,
   aiCulturePrompt: { id: string; name: string; content: string } | null,
-  renderedCulturePrompt: string | null
+  renderedCulturePrompt: string | null,
+  signal?: AbortSignal
 ): Promise<GeneratedSectionResult | null> {
   if (!aiCulturePrompt || !renderedCulturePrompt) return null
   try {
@@ -128,6 +133,7 @@ export async function generateAiCultureSection(
             'Сгенерируй содержание раздела «Взаимодействие с системами ИИ» для данной должности: обязанности, ограничения и ответственность при работе с ИИ.',
         },
       ],
+      signal,
     })
     // Fire-and-forget: сохраняем использование токенов
     if (cultureResult.usage) {

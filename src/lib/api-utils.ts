@@ -7,6 +7,11 @@ import { ZodError } from 'zod'
 import type { AppLogger } from './logger'
 import { createLogger } from './logger'
 import { isSentryEnabled } from './sentry'
+import {
+  AIProviderError,
+  providerErrorStatus,
+  sanitizeProviderMessage,
+} from './ai-connector/errors'
 
 const defaultLogger = createLogger('api')
 
@@ -40,6 +45,28 @@ export function errorResponse(
     return NextResponse.json(
       { error: error.message, code: error.code ?? null },
       { status: error.status }
+    )
+  }
+
+  // Ошибки ИИ-провайдера: клиенту — generic-сообщение, детали — в логи/Sentry.
+  if (error instanceof AIProviderError) {
+    const status = providerErrorStatus(error.code)
+    const safeMessage = sanitizeProviderMessage(error.code)
+    logger.error(`${scope ?? 'request'}: provider error`, {
+      code: error.code,
+      status: error.status,
+      retryable: error.retryable,
+      detail: error.message, // полные детали только в логи
+    })
+    captureSentry(error, {
+      scope,
+      providerCode: error.code,
+      providerStatus: error.status,
+      detail: error.message,
+    })
+    return NextResponse.json(
+      { error: safeMessage, code: 'ai_provider_error' },
+      { status }
     )
   }
 
