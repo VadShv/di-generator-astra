@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -358,6 +359,7 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
         <Button onClick={() => onEdit(currentDI)} className="bg-cyan-600 hover:bg-cyan-700"><Pencil className="h-4 w-4 mr-1.5" /> Редактировать</Button>
         <Button variant="outline" onClick={handleExport} disabled={exporting}>{exporting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />} DOCX</Button>
         <Button variant="outline" onClick={() => window.open(`/api/export-di/pdf?id=${currentDI.id}`, '_blank')}><FileText className="h-4 w-4 mr-1.5" /> PDF</Button>
+        <Button variant="outline" onClick={() => setPreviewOpen(true)}><FileText className="h-4 w-4 mr-1.5" /> Превью</Button>
         <Button variant="outline" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" /> Печать</Button>
         <Button variant="outline" onClick={onCompare}><GitCompare className="h-4 w-4 mr-1.5" /> Сравнить</Button>
         <Button variant="outline" onClick={handleCopyText}><Copy className="h-4 w-4 mr-1.5" /> Копировать</Button>
@@ -804,6 +806,16 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
           })()}
         </TabsContent>
       </Tabs>
+
+      {/* E1 — Preview modal */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Предпросмотр ДИ</DialogTitle>
+          </DialogHeader>
+          <iframe src={`/api/export-di/pdf?id=${currentDI.id}`} className="w-full h-[70vh] border rounded-lg" title="Предпросмотр" />
+        </DialogContent>
+      </Dialog>
 
       {/* 2.5 — Keyboard hint */}
       <div className="fixed bottom-4 right-4 text-[10px] text-muted-foreground/60 hidden lg:flex items-center gap-2">

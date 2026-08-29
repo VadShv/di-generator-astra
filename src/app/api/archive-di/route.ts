@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth, requireRole } from '@/lib/auth/session'
+import { requireAuth, requirePermission } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 import {
   listArchiveDIs,
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await requireAuth()
+    await requirePermission('archive', 'write')
     const body = await request.json()
     const archiveDI = await createArchiveDI(body)
     return NextResponse.json(archiveDI, { status: 201 })
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    await requireAuth()
+    await requirePermission('archive', 'write')
     const body = await request.json()
     const updated = await updateArchiveDI(body)
     return NextResponse.json(updated)
@@ -55,7 +55,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    await requireRole('admin')
+    await requirePermission('archive', 'write')
     const body = await request.json()
     const result = await deleteArchiveDI(body.id)
     return NextResponse.json(result)

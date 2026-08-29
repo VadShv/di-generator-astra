@@ -6,7 +6,7 @@ import {
   extractVariables,
   PROMPT_CATEGORIES,
 } from '@/lib/master-prompt'
-import { requireAuth, requireRole } from '@/lib/auth/session'
+import { requireAuth, requirePermission } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // Допустимые категории промптов (соответствуют PROMPT_CATEGORIES в src/lib/master-prompt.ts).
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
 // Принимает расширенный набор полей (Фаза 21): tags, companyId, positionId, estimatedTokens.
 export async function POST(request: Request) {
   try {
-    await requireAuth()
+    await requirePermission('master-prompts', 'write')
     const body = await request.json()
     const {
       name,
@@ -215,7 +215,7 @@ export async function POST(request: Request) {
 // Принимает расширенный набор полей (Фаза 21).
 export async function PUT(request: Request) {
   try {
-    await requireAuth()
+    await requirePermission('master-prompts', 'write')
     const body = await request.json()
     const {
       id,
@@ -313,7 +313,7 @@ export async function PUT(request: Request) {
 // DELETE /api/master-prompts — удаление мастер-промпта.
 export async function DELETE(request: Request) {
   try {
-    await requireRole('admin')
+    await requirePermission('master-prompts', 'write')
     const body = await request.json()
     const { id } = body
 

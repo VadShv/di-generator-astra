@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth, requireRole } from '@/lib/auth/session'
+import { requireAuth, requirePermission } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 import {
   listDepartments,
@@ -22,7 +22,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth()
+    await requirePermission('staff-schedule', 'write')
     const body = await request.json()
     const department = await createDepartment(body)
     return NextResponse.json(department, { status: 201 })
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    await requireAuth()
+    await requirePermission('staff-schedule', 'write')
     const body = await request.json()
     const department = await updateDepartment(body)
     return NextResponse.json(department)
@@ -48,7 +48,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    await requireRole('admin')
+    await requirePermission('staff-schedule', 'write')
     const body = await request.json()
     const result = await deleteDepartment(body.id)
     return NextResponse.json(result)

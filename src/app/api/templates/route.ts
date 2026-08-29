@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireRole } from '@/lib/auth/session'
+import { requireAuth, requirePermission } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/templates - List all templates with sections
@@ -26,7 +26,7 @@ export async function GET() {
 // POST /api/templates - Create template with sections
 export async function POST(request: Request) {
   try {
-    await requireAuth()
+    await requirePermission('templates', 'write')
     const body = await request.json()
     const { name, description, sections, isPrimary } = body
 
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
 // PUT /api/templates - Update template (including isPrimary)
 export async function PUT(request: Request) {
   try {
-    await requireAuth()
+    await requirePermission('templates', 'write')
     const body = await request.json()
     const { id, name, description, isActive, isPrimary, sections } = body
 
@@ -157,7 +157,7 @@ export async function PUT(request: Request) {
 // DELETE /api/templates - Delete template
 export async function DELETE(request: Request) {
   try {
-    await requireRole('admin')
+    await requirePermission('templates', 'write')
     const body = await request.json()
     const { id } = body
 

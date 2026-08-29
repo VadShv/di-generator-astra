@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth/session'
+import { requireAuth, requirePermission } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 import {
   listGeneratedDIs,
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: Request) {
   try {
-    await requireAuth()
+    await requirePermission('generation', 'write')
     const body = await request.json()
     const generatedDI = await createGeneratedDI(body)
     return NextResponse.json(generatedDI, { status: 201 })
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    await requireAuth()
+    await requirePermission('generation', 'write')
     const body = await request.json()
     const finalDI = await updateGeneratedDI(body)
     return NextResponse.json(finalDI)
@@ -52,7 +52,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    await requireAuth()
+    await requirePermission('generation', 'write')
     const body = await request.json()
     const result = await deleteGeneratedDI(body.id)
     return NextResponse.json(result)

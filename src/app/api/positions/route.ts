@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth, requireRole } from '@/lib/auth/session'
+import { requireAuth, requirePermission } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 import {
   listPositions,
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth()
+    await requirePermission('staff-schedule', 'write')
     const body = await request.json()
     const position = await createPosition(body)
     return NextResponse.json(position, { status: 201 })
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    await requireAuth()
+    await requirePermission('staff-schedule', 'write')
     const body = await request.json()
     const position = await updatePosition(body)
     return NextResponse.json(position)
@@ -54,7 +54,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    await requireRole('admin')
+    await requirePermission('staff-schedule', 'write')
     const body = await request.json()
     const result = await deletePosition(body.id)
     return NextResponse.json(result)
