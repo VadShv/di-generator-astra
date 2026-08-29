@@ -9,6 +9,7 @@ export interface RetryOptions {
   initialBackoffMs?: number
   backoffMultiplier?: number
   backoffMaxMs?: number
+  jitterRatio?: number
 }
 
 const DEFAULT_RETRY: Required<RetryOptions> = {
@@ -16,10 +17,25 @@ const DEFAULT_RETRY: Required<RetryOptions> = {
   initialBackoffMs: 1000,
   backoffMultiplier: 2,
   backoffMaxMs: 8000,
+  // Jitter ±25%: размывает задержки, чтобы параллельные ретраи не
+  // «синхронизировались» (thundering herd) при общей ошибке провайдера.
+  jitterRatio: 0.25,
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Применить случайный jitter к базовой задержке: равномерный множитель в
+ * диапазоне [1 - jitterRatio, 1 + jitterRatio]. При jitterRatio=0 jitter
+ * отсутствует (детерминированный backoff — удобно для тестов).
+ */
+function applyJitter(baseMs: number, jitterRatio: number): number {
+  if (jitterRatio <= 0) return baseMs
+  // Равномерное распределение множителя в [1 - jitterRatio, 1 + jitterRatio].
+  const factor = 1 + (Math.random() * 2 - 1) * jitterRatio
+  return Math.max(0, baseMs * factor)
 }
 
 /** Классифицировать произвольную ошибку в AIErrorCode. */
@@ -57,7 +73,8 @@ export async function withRetry<T>(fn: () => Promise<T>, opts?: RetryOptions): P
         )
       }
       lastError = e
-      await sleep(Math.min(o.initialBackoffMs * o.backoffMultiplier ** attempt, o.backoffMaxMs))
+      const baseBackoff = Math.min(o.initialBackoffMs * o.backoffMultiplier ** attempt, o.backoffMaxMs)
+      await sleep(applyJitter(baseBackoff, o.jitterRatio))
     }
   }
   if (lastError instanceof AIProviderError) throw lastError

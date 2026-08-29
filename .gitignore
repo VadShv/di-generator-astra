@@ -1,4 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# See https://help.github.com/articles/ignoring-files/ for about ignoring files.
 
 # dependencies
 node_modules
@@ -44,23 +44,30 @@ next-env.d.ts
 local-*
 .claude
 .z-ai-config
+
+# logs
 *.log
-dev.log
 dev.out.log
+
+# temporary / scratch
 test
 prompt
+*.bak
 
-server.log
 # Skills directory
 /skills/
 
-# Database
+# Database (локальная — не в git)
 /db/
 
-# Uploads
+# Uploads (загруженные пользователями файлы)
 /upload/
 
-# Screenshots
+# Downloads (runtime)
+/download/
+
+# Screenshots — корневые скриншоты, но НЕ ассеты в public/
+/*.png
 screenshot*.png
 
 # Mini services runtime
@@ -71,11 +78,6 @@ screenshot*.png
 
 # Work artifacts
 worklog.md
-# Local artifacts (sandbox)
-3100
-dev.log
-server.log
-*.bak
 
 # AstraCode config
 .astracode/
@@ -87,5 +89,4 @@ server.log
 /vendor/pg-debs/
 
 # Дампы БД (pg_dump — не в git)
-/backups/
 /backups/
