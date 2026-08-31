@@ -1,9 +1,11 @@
-// Fallback-провайдер на базе встроенного z-ai-web-dev-sdk (Фаза 2 + Фаза 4)
+// Fallback-провайдер на базе встроенного z-ai-web-dev-sdk (Фаза 2 + Фаза 4 + Фаза 6)
 // Используется, когда в БД нет настроенного AIProvider или выбран тип 'zai'.
 // Сохраняет обратную совместимость с существующими ИИ-роутами.
 // ВАЖНО: исправляет баг старых роутов — role: 'assistant' для system-сообщения
 // заменено на корректную роль 'system'.
 // Фаза 4: вызов SDK обёрнут в withRetry для устойчивости к сбоям.
+// Фаза 6, шаг 6.6: добавлен таймаут через Promise.race + AbortController,
+// чтобы зависание SDK не блокировало воркер массовой генерации.
 
 import type {
   AIProviderClient,
@@ -35,6 +37,8 @@ interface ZAIClient {
 interface ZAIModule {
   create: () => Promise<ZAIClient>
 }
+
+const ZAI_DEFAULT_TIMEOUT_MS = 60_000
 
 export class ZaiProvider implements AIProviderClient {
   readonly name: string
@@ -68,17 +72,66 @@ export class ZaiProvider implements AIProviderClient {
     return ZAI.create()
   }
 
+  /**
+   * Обернуть промис в таймаут через Promise.race.
+   * Если SDK не отвечает за timeoutMs — бросаем AIProviderError('timeout').
+   * @param signal внешний сигнал отмены (от job-level AbortController).
+   */
+  private withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    signal?: AbortSignal
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new AIProviderError(`Таймаут запроса (${timeoutMs}мс)`, 'timeout', undefined, false))
+      }, timeoutMs)
+
+      // Пробрасываем внешний сигнал отмены (job-level abort).
+      const onAbort = () => {
+        clearTimeout(timer)
+        reject(new AIProviderError('Запрос отменён', 'timeout', undefined, false))
+      }
+      if (signal) {
+        if (signal.aborted) {
+          clearTimeout(timer)
+          reject(new AIProviderError('Запрос отменён', 'timeout', undefined, false))
+          return
+        }
+        signal.addEventListener('abort', onAbort, { once: true })
+      }
+
+      promise
+        .then((result) => {
+          clearTimeout(timer)
+          if (signal) signal.removeEventListener('abort', onAbort)
+          resolve(result)
+        })
+        .catch((err) => {
+          clearTimeout(timer)
+          if (signal) signal.removeEventListener('abort', onAbort)
+          reject(err)
+        })
+    })
+  }
+
   async generate(request: GenerateRequest): Promise<GenerateResponse> {
     // Создаём клиент один раз; retry применяется только к вызову completion.
     const zai = await this.getZai()
 
+    // Таймаут: из запроса, из конфига, или дефолт 60 сек.
+    const timeoutMs = request.timeoutMs ?? this.config.config.timeoutMs ?? ZAI_DEFAULT_TIMEOUT_MS
+
     const completion = await withRetry(async () => {
       // z-ai-web-dev-sdk использует свою сигнатуру. thinking отключаем для скорости.
       // Используем корректную роль 'system' (раньше в коде был баг с 'assistant').
-      return zai.chat.completions.create({
+      const promise = zai.chat.completions.create({
         messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
         thinking: { type: 'disabled' },
       })
+      // Оборачиваем в таймаут — SDK может не поддерживать signal напрямую,
+      // поэтому используем Promise.race (см. withTimeout).
+      return this.withTimeout(promise, timeoutMs, request.signal)
     })
 
     const content = completion.choices?.[0]?.message?.content ?? ''

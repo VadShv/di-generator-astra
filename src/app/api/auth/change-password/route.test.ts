@@ -20,11 +20,23 @@ vi.mock('@/lib/auth/password', () => ({
 }))
 vi.mock('@/lib/db', () => ({
   db: {
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      const db = {
+        user: {
+          findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
+          update: (...args: unknown[]) => mockUserUpdate(...args),
+        },
+      }
+      return fn(db)
+    },
     user: {
       findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
       update: (...args: unknown[]) => mockUserUpdate(...args),
     },
   },
+}))
+vi.mock('@/lib/auth/auth-options', () => ({
+  invalidateUserStatusCache: vi.fn(),
 }))
 
 import { POST } from './route'

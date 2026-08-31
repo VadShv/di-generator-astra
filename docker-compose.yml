@@ -21,10 +21,17 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Caddy ходит к app изнутри сети — доверяем его заголовкам x-forwarded-for.
       TRUSTED_PROXY_IP: ${TRUSTED_PROXY_IP:-caddy}
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
+   depends_on:
+     db:
+       condition: service_healthy
+   restart: unless-stopped
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3001/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   db:
     image: postgres:16-alpine
@@ -57,9 +64,10 @@ services:
     environment:
       # Домен для HTTPS-сертификата Let's Encrypt; задайте в .env.
       SITE_ADDRESS: ${SITE_ADDRESS:?SITE_ADDRESS required (e.g. di.example.com)}
-    depends_on:
-      - app
-    restart: unless-stopped
+   depends_on:
+      app:
+        condition: service_healthy
+   restart: unless-stopped
 
 volumes:
   pgdata:

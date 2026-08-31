@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { getAppSession } from '@/lib/auth/session'
+import { updateUserSchema } from '@/lib/validation/schemas'
 
 // PUT /api/users/[id] — обновление пользователя (только admin)
 export async function PUT(
@@ -12,8 +13,7 @@ export async function PUT(
   try {
     await requireRole('admin')
     const { id } = await params
-    const body = await request.json()
-    const { name, role, permissions, isActive } = body
+    const { name, role, permissions, isActive } = await parseBody(request, updateUserSchema)
 
     const existing = await db.user.findUnique({ where: { id } })
     if (!existing) {

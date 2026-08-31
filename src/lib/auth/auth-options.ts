@@ -5,6 +5,10 @@
 // Аутентификация активируется только если задан AUTH_SECRET.
 // Без AUTH_SECRET next-auth бросит ошибку при инициализации — это намеренно:
 // в dev-окружении без секрета доступ остаётся открытым (middleware гейтит по env).
+//
+// Фаза 6: isActive + passwordChangedAt проверяются на каждый вызов jwt callback
+// (с TTL-кэшем 60 сек), чтобы деактивированные пользователи и старые сессии
+// после смены пароля отзывались в течение минуты, а не 7 дней.
 
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
@@ -52,6 +56,58 @@ export function assertAuthConfigured(): void {
 assertAuthConfigured()
 
 const isProduction = process.env.NODE_ENV === 'production'
+
+/**
+ * TTL-кэш для per-user проверки isActive/passwordChangedAt.
+ * Избегает DB-запроса на каждый запрос — обновляется раз в 60 секунд.
+ * Фаза 6, шаг 6.2: деактивированный пользователь теряет доступ в течение TTL,
+ * а не через 7 дней (maxAge JWT).
+ */
+const USER_STATUS_TTL_MS = 60_000
+interface UserStatus {
+  isActive: boolean
+  passwordChangedAt: number | null
+  role: string
+  permissions: string | null
+}
+const userStatusCache = new Map<string, { status: UserStatus; expiresAt: number }>()
+
+/**
+ * Получить актуальный статус пользователя с TTL-кэшем.
+ * @returns null если пользователь не найден (был удалён).
+ */
+async function getUserStatus(userId: string): Promise<UserStatus | null> {
+  const cached = userStatusCache.get(userId)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.status
+  }
+  const fresh = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      role: true,
+      isActive: true,
+      permissions: true,
+      passwordChangedAt: true,
+    },
+  })
+  if (!fresh) return null
+  const status: UserStatus = {
+    isActive: fresh.isActive,
+    passwordChangedAt: fresh.passwordChangedAt ? fresh.passwordChangedAt.getTime() : null,
+    role: fresh.role,
+    permissions: fresh.permissions,
+  }
+  userStatusCache.set(userId, { status, expiresAt: Date.now() + USER_STATUS_TTL_MS })
+  return status
+}
+
+/**
+ * Инвалидировать кэш статуса пользователя (вызывается при смене пароля,
+ * деактивации и т.п. — чтобы отзыв вступил в силу мгновенно, а не через TTL).
+ */
+export function invalidateUserStatusCache(userId: string): void {
+  userStatusCache.delete(userId)
+}
 
 /**
  * Параметры cookie next-auth (Фаза 3, шаг 3.2 — Cookie security flags).
@@ -146,25 +202,36 @@ export const authOptions: NextAuthOptions = {
  callbacks: {
  async jwt({ token, user, trigger }) {
     // Первичный логин: берём роль/права из объекта user (только что проверены).
+    // Записываем issuedAt — время создания токена (для сравнения с passwordChangedAt).
     if (user) {
       token.id = (user as unknown as { id: string }).id
       token.role = (user as unknown as { role: string }).role
       token.permissions = (user as unknown as { permissions: Permissions }).permissions
+      token.issuedAt = Date.now()
     }
-    // Обновление токена (trigger='update' или ротация): перечитываем
-    // role/isActive/permissions из БД, чтобы отзыв прав вступал в силу
-    // без ожидания истечения maxAge (7 дней).
-    if (trigger === 'update' && token.id) {
-      const fresh = await db.user.findUnique({
-        where: { id: token.id as string },
-        select: { role: true, isActive: true, permissions: true },
-      })
-      if (!fresh || !fresh.isActive) {
-        // Пользователь деактивирован — инвалидируем токен.
+
+    // Проверка на каждый вызов jwt callback (а не только при trigger='update'):
+    // перечитываем isActive/passwordChangedAt из БД с TTL-кэшем 60 сек.
+    // Фаза 6, шаги 6.2 + 6.3.
+    if (token.id) {
+      const status = await getUserStatus(token.id as string)
+
+      // Пользователь удалён или деактивирован — инвалидируем токен.
+      if (!status || !status.isActive) {
         return { ...token, role: undefined, permissions: undefined } as typeof token
       }
-      token.role = fresh.role
-      token.permissions = parsePermissions(fresh.role, fresh.permissions)
+
+      // Смена пароля после выдачи токена → отзыв старых сессий.
+      const issuedAt = (token.issuedAt as number | undefined) ?? 0
+      if (status.passwordChangedAt && status.passwordChangedAt > issuedAt) {
+        return { ...token, role: undefined, permissions: undefined } as typeof token
+      }
+
+      // При trigger='update' — принудительно перечитываем роль/права (минуя кэш).
+      if (trigger === 'update') {
+        token.role = status.role
+        token.permissions = parsePermissions(status.role, status.permissions)
+      }
     }
     return token
   },

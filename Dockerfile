@@ -24,12 +24,32 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Создаём non-root пользователя для безопасности (Фаза 6, шаг 6.8).
+# RCE-уязвимость в приложении не должна давать root-доступ к контейнеру.
+RUN addgroup --system --gid 1001 app && \
+    adduser --system --uid 1001 --gid 1001 app
+
 # Копируем standalone-сборку
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 
+# Prisma engine + CLI для migrate deploy в entrypoint (Фаза 6, шаг 6.9).
+# В standalone-сборке node_modules урезан, поэтому копируем только нужное.
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+
+# Entrypoint: применяет миграции (без потери данных), затем запускает сервер.
+COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Передаём владение non-root пользователю
+RUN chown -R app:app /app
+
+USER app
+
 EXPOSE 3001
 
-CMD ["bun", ".next/standalone/server.js"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

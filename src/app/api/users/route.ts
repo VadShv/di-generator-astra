@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { hashPassword } from '@/lib/auth/password'
 import { getPresetForRole, ALL_TABS, type Permissions } from '@/lib/auth/permissions'
+import { createUserSchema } from '@/lib/validation/schemas'
 
 // GET /api/users — список пользователей (только admin)
 export async function GET(request: NextRequest) {
@@ -34,12 +35,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     await requireRole('admin')
-    const body = await request.json()
-    const { email, name, password, role, permissions } = body
-
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email и пароль обязательны' }, { status: 400 })
-    }
+    const { email, name, password, role, permissions } = await parseBody(request, createUserSchema)
 
     const existing = await db.user.findUnique({ where: { email: email.toLowerCase() } })
     if (existing) {
@@ -47,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     const passwordHash = await hashPassword(password)
-    const finalRole = role || 'user'
+    const finalRole = role
 
     // Если permissions не переданы — используем preset для роли
     let permissionsJson: string | null = null

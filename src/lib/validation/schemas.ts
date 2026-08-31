@@ -37,14 +37,14 @@ export const aiSectionSchema = z
     manualMode: z.boolean().optional(),
     positionId: z.string().optional(),
     generatedDIId: z.string().optional(),
-    sectionOrder: z.number().int().nonnegative().optional(),
-    sectionTitle: z.string().optional(),
-    promptGuidance: z.string().optional(),
-    customPrompt: z.string().optional(),
-  })
-  .refine((data) => data.manualMode || data.generatedDIId, {
-    message: 'Требуется либо manualMode+positionId, либо generatedDIId',
-  })
+   sectionOrder: z.number().int().nonnegative().optional(),
+   sectionTitle: z.string().trim().max(2000, 'Слишком длинный заголовок секции').optional(),
+   promptGuidance: z.string().trim().max(5000, 'Слишком длинные указания').optional(),
+   customPrompt: z.string().trim().max(5000, 'Слишком длинный пользовательский промпт').optional(),
+ })
+ .refine((data) => data.manualMode || data.generatedDIId, {
+   message: 'Требуется либо manualMode+positionId, либо generatedDIId',
+ })
 
 /** Пресеты Magic Wand Toolbar. */
 export const magicWandPresetSchema = z.enum([
@@ -58,9 +58,9 @@ export const magicWandPresetSchema = z.enum([
 
 /** POST /api/generate-di/ai-improve */
 export const aiImproveSchema = z.object({
-  sectionId: idSchema,
-  instruction: z.string().trim().optional(),
-  preset: magicWandPresetSchema.optional(),
+ sectionId: idSchema,
+ instruction: z.string().trim().max(5000, 'Слишком длинная инструкция').optional(),
+ preset: magicWandPresetSchema.optional(),
 }).refine((data) => data.instruction || data.preset, {
   message: 'Требуется либо instruction, либо preset',
 })
@@ -238,7 +238,92 @@ export const changePasswordSchema = z
       .regex(/[A-Za-zА-Яа-яЁё]/, 'Пароль должен содержать букву')
       .regex(/\d/, 'Пароль должен содержать цифру'),
   })
-  .refine((data) => data.newPassword !== data.currentPassword, {
-    message: 'Новый пароль не должен совпадать с текущим',
-    path: ['newPassword'],
-  })
+ .refine((data) => data.newPassword !== data.currentPassword, {
+   message: 'Новый пароль не должен совпадать с текущим',
+   path: ['newPassword'],
+ })
+ 
+ // ─────────────────────────────────────────────
+ // Схемы роутов users/* (Фаза 6, шаг 6.1 — защита от mass assignment)
+ // ─────────────────────────────────────────────
+ 
+ /**
+  * POST /api/users — создание пользователя.
+  * role валидируется против whitelist; permissions — record из известных вкладок.
+  */
+ export const createUserSchema = z.object({
+   email: z
+     .string()
+     .trim()
+     .toLowerCase()
+     .min(1, 'Email обязателен')
+     .email('Некорректный email')
+     .max(254, 'Слишком длинный email'),
+   name: z.string().trim().max(200, 'Слишком длинное имя').optional(),
+   password: z
+     .string()
+     .min(8, 'Пароль должен быть не менее 8 символов')
+     .max(128, 'Слишком длинный пароль')
+     .regex(/[A-Za-zА-Яа-яЁё]/, 'Пароль должен содержать букву')
+     .regex(/\d/, 'Пароль должен содержать цифру'),
+   role: z.enum(['admin', 'kdp', 'user']).optional().default('user'),
+   permissions: z
+     .record(
+       z.enum([
+         'dashboard',
+         'staff-schedule',
+         'dictionaries',
+         'archive',
+         'templates',
+         'master-prompts',
+         'ai-providers',
+         'generation',
+         'mass-generation',
+         'tracking',
+         'version-history',
+         'ai-audit',
+         'instructions',
+         'tech-stack',
+         'profile',
+       ]),
+       z.enum(['read', 'write', 'none'])
+     )
+     .optional(),
+ })
+ 
+ /**
+  * PUT /api/users/[id] — обновление пользователя.
+  * Все поля опциональны; role и permissions валидируются при наличии.
+  */
+ export const updateUserSchema = z
+   .object({
+     name: z.string().trim().max(200, 'Слишком длинное имя').optional(),
+     role: z.enum(['admin', 'kdp', 'user']).optional(),
+     permissions: z
+       .record(
+         z.enum([
+           'dashboard',
+           'staff-schedule',
+           'dictionaries',
+           'archive',
+           'templates',
+           'master-prompts',
+           'ai-providers',
+           'generation',
+           'mass-generation',
+           'tracking',
+           'version-history',
+           'ai-audit',
+           'instructions',
+           'tech-stack',
+           'profile',
+         ]),
+         z.enum(['read', 'write', 'none'])
+       )
+       .nullable()
+       .optional(),
+     isActive: z.boolean().optional(),
+   })
+   .refine((data) => Object.keys(data).length > 0, {
+     message: 'Укажите хотя бы одно поле для обновления',
+   })
