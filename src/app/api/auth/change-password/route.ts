@@ -17,27 +17,28 @@ import { invalidateUserStatusCache } from '@/lib/auth/auth-options'
 //   - passwordChangedAt инвалидирует все ранее выданные JWT.
 export async function POST(request: NextRequest) {
   try {
-    const session = await requireAuth()
-    // В режиме без auth (dev) смена пароля бессмысленна — нет пользователя.
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Требуется аутентификация' }, { status: 401 })
-    }
+   const session = await requireAuth()
+   // В режиме без auth (dev) смена пароля бессмысленна — нет пользователя.
+   if (!session?.user?.id) {
+     return NextResponse.json({ error: 'Требуется аутентификация' }, { status: 401 })
+   }
+    const userId = session.user.id
 
     // Rate-limit по пользователю: 5 попыток/час. Брутфорс текущего пароля
     // не должен позволить перебрать его за разумное время.
-    checkRateLimit(request, 'change-password', 5, 60 * 60 * 1000, session.user.id)
+    checkRateLimit(request, 'change-password', 5, 60 * 60 * 1000, userId)
 
     const { currentPassword, newPassword } = await parseBody(request, changePasswordSchema)
 
     // Транзакция: проверка текущего пароля + обновление — защита от TOCTOU.
     // passwordChangedAt инвалидирует все ранее выданные JWT (Фаза 6, шаг 6.3):
     // jwt callback сравнивает token.issuedAt с passwordChangedAt.
-    let passwordError = false
-    await db.$transaction(async (tx) => {
-      const current = await tx.user.findUnique({
-        where: { id: session.user.id },
-        select: { passwordHash: true },
-      })
+   let passwordError = false
+   await db.$transaction(async (tx) => {
+     const current = await tx.user.findUnique({
+        where: { id: userId },
+       select: { passwordHash: true },
+     })
       if (!current) {
         throw new Error('Пользователь не найден')
       }
@@ -46,22 +47,22 @@ export async function POST(request: NextRequest) {
         passwordError = true
         return
       }
-      await tx.user.update({
-        where: { id: session.user.id },
-        data: {
-          passwordHash: await hashPassword(newPassword),
-          passwordChangedAt: new Date(),
-        },
-      })
-    })
+     await tx.user.update({
+        where: { id: userId },
+       data: {
+         passwordHash: await hashPassword(newPassword),
+         passwordChangedAt: new Date(),
+       },
+     })
+   })
 
-    if (passwordError) {
-      return NextResponse.json({ error: 'Неверный текущий пароль' }, { status: 400 })
-    }
+   if (passwordError) {
+     return NextResponse.json({ error: 'Неверный текущий пароль' }, { status: 400 })
+   }
 
-    // Мгновенная инвалидация кэша статуса — чтобы отзыв сессий вступил в силу
-    // без ожидания TTL (60 сек).
-    invalidateUserStatusCache(session.user.id)
+   // Мгновенная инвалидация кэша статуса — чтобы отзыв сессий вступил в силу
+   // без ожидания TTL (60 сек).
+    invalidateUserStatusCache(userId)
 
     return NextResponse.json({ success: true })
   } catch (error) {
