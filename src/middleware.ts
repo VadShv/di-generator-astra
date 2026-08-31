@@ -88,6 +88,10 @@ export async function middleware(request: NextRequest) {
   // Публичные API (auth-эндпоинты next-auth).
   if (PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next()
 
+  // Liveness-проверка /api/health — публичная (для k8s liveness probe и Caddy).
+  // readiness /api/health/ready — остаётся за auth (раскрывает детали БД/памяти).
+  if (pathname === '/api/health') return NextResponse.next()
+
   // Публичные страницы (login).
   if (PUBLIC_PAGES.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next()
