@@ -621,7 +621,7 @@ model User {
   role         String   @default("user") // admin | kdp | user
   permissions  String?  // JSON: {"tab-id": "read"|"write"|"none"} — null = полный доступ (admin)
  passwordHash String
- passwordChangedAt DateTime? @default(now())
+ passwordChangedAt DateTime?
  isActive     Boolean  @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
