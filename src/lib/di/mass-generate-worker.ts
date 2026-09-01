@@ -214,25 +214,30 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
         }
       }
 
-      const generatedDI = await db.generatedDI.create({
-        data: {
-          positionId: position.id,
-          templateId,
-          title: `ДИ — ${position.title}`,
-          status: 'draft',
-          currentVersion: 1,
-          signedByEmployee: false,
-          sections: { create: generatedSections },
-        },
-      })
+      // Создание ДИ и начальной версии — атомарно (TOCTOU-защита).
+      const generatedDI = await db.$transaction(async (tx) => {
+        const di = await tx.generatedDI.create({
+          data: {
+            positionId: position.id,
+            templateId,
+            title: `ДИ — ${position.title}`,
+            status: 'draft',
+            currentVersion: 1,
+            signedByEmployee: false,
+            sections: { create: generatedSections },
+          },
+        })
 
-      await createInitialVersion(
-        generatedDI.id,
-        generatedDI.title,
-        generatedSections.map((s) => ({ title: s.sectionTitle, content: s.sectionContent })),
-        'ai-mass-generate',
-        'Начальная AI-генерация (массовая)'
-      )
+        await createInitialVersion(
+          di.id,
+          di.title,
+          generatedSections.map((s) => ({ title: s.sectionTitle, content: s.sectionContent })),
+          'ai-mass-generate',
+          'Начальная AI-генерация (массовая)',
+          tx
+        )
+        return di
+      })
 
       return { positionId: position.id, positionTitle: position.title, diId: generatedDI.id, title: generatedDI.title, status: 'success' }
     } catch (error) {
@@ -362,4 +367,23 @@ export function startQueuePoller(): void {
   }
   pollTimer = setTimeout(tick, POLL_INTERVAL_MS)
   log.info('Queue poller started')
+}
+
+/**
+ * Остановить queue poller (graceful shutdown).
+ * Останавливает таймер опроса; активные job завершаются сами.
+ * @returns количество активных job (для ожидания).
+ */
+export function stopQueuePoller(): number {
+  if (pollTimer) {
+    clearTimeout(pollTimer)
+    pollTimer = null
+    log.info('Queue poller stopped')
+  }
+  return activeJobs
+}
+
+/** Текущее количество активных job (для graceful shutdown). */
+export function getActiveJobsCount(): number {
+  return activeJobs
 }

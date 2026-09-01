@@ -12,6 +12,27 @@ import { getAppSession } from '@/lib/auth/session'
 import { getClientIp } from '@/lib/rate-limit'
 import { createLogger } from '@/lib/logger'
 
+/** Ключи, значения которых не должны попадать в audit-лог в открытом виде. */
+const SENSITIVE_KEYS = /^(api[_-]?key|secret|password|passwd|token|authorization|auth[_-]?header|private[_-]?key)$/i
+
+/**
+ * Рекурсивно маскирует sensitive-поля в metadata перед сериализацией.
+ * Защищает от случайной утечки API-ключей, паролей и токенов в audit-лог.
+ */
+function sanitizeMetadata(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value
+  if (Array.isArray(value)) return value.map(sanitizeMetadata)
+  const result: Record<string, unknown> = {}
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (SENSITIVE_KEYS.test(key)) {
+      result[key] = '[REDACTED]'
+    } else {
+      result[key] = sanitizeMetadata(val)
+    }
+  }
+  return result
+}
+
 const auditLogger = createLogger('audit')
 
 /**
@@ -45,7 +66,7 @@ export function logAudit(
           path,
           entityType: entityType || null,
           entityId: entityId || null,
-          metadata: metadata ? JSON.stringify(metadata) : null,
+          metadata: metadata ? JSON.stringify(sanitizeMetadata(metadata)) : null,
           // unknown приходит из getClientIp, если заголовков нет; храним как есть.
           ip: ip === 'unknown' ? null : ip,
         },

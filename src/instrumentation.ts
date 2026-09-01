@@ -17,5 +17,9 @@ export async function register() {
     // Запуск опросчика очереди массовой генерации
     const { startQueuePoller } = await import('./lib/di/mass-generate-worker')
     startQueuePoller()
+
+    // Graceful shutdown: обработчики SIGTERM/SIGINT
+    const { registerShutdownHandlers } = await import('./lib/shutdown')
+    registerShutdownHandlers()
   }
 }

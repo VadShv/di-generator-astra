@@ -118,10 +118,12 @@ export const POST = withErrorHandler(async (request: Request) => {
   }
 
   // g) Create the GeneratedDI in the database
-  const generatedDI = await db.generatedDI.create({
-    data: {
-      positionId,
-      templateId,
+  // Создание ДИ и начальной версии — атомарно (TOCTOU-защита).
+  const generatedDI = await db.$transaction(async (tx) => {
+    const di = await tx.generatedDI.create({
+      data: {
+        positionId,
+        templateId,
       ...(selectedArchiveDI ? { sourceArchiveId: selectedArchiveDI.id } : {}),
       title: `ДИ — ${position.title}`,
       status: 'draft',
@@ -130,23 +132,26 @@ export const POST = withErrorHandler(async (request: Request) => {
       sections: {
         create: generatedSections,
       },
-    },
-    include: {
-      position: { include: { department: { include: { company: true } }, businessFunction: true, project: true } },
-      template: true,
-      sourceArchive: true,
-      sections: { orderBy: { order: 'asc' } },
-    },
-  })
+      },
+      include: {
+        position: { include: { department: { include: { company: true } }, businessFunction: true, project: true } },
+        template: true,
+        sourceArchive: true,
+        sections: { orderBy: { order: 'asc' } },
+      },
+    })
 
-  // Create initial version record v1
-  await createInitialVersion(
-    generatedDI.id,
-    generatedDI.title,
-    generatedDI.sections.map((s) => ({ title: s.sectionTitle, content: s.sectionContent })),
-    'ai-generate',
-    'Начальная AI-генерация'
-  )
+    // Create initial version record v1 (атомарно с созданием ДИ)
+    await createInitialVersion(
+      di.id,
+      di.title,
+      di.sections.map((s) => ({ title: s.sectionTitle, content: s.sectionContent })),
+      'ai-generate',
+      'Начальная AI-генерация',
+      tx
+    )
+    return di
+  })
 
   log.info('DI generated', { diId: generatedDI.id, positionId, sections: generatedSections.length })
   return NextResponse.json(generatedDI, { status: 201 })

@@ -85,6 +85,20 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
+  // Body size limit: защищает от oversize-запросов (DoS).
+  // Upload-роуты имеют отдельный, чуть больший лимит (multipart overhead).
+  if (pathname.startsWith('/api/')) {
+    const isUpload = pathname.startsWith('/api/di-upload') || pathname.startsWith('/api/staffing-upload')
+    const maxBytes = isUpload ? 12 * 1024 * 1024 : 10 * 1024 * 1024
+    const contentLength = parseInt(request.headers.get('content-length') || '0', 10)
+    if (contentLength > maxBytes) {
+      return NextResponse.json(
+        { error: 'Тело запроса слишком большое' },
+        { status: 413 }
+      )
+    }
+  }
+
   // Публичные API (auth-эндпоинты next-auth).
   if (PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next()
 

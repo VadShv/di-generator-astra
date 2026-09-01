@@ -98,13 +98,7 @@ export async function PATCH(request: Request, { params }: Params) {
      )
    }
 
-    // Если ставим isDefault — снимаем с остальных.
-    if (isDefault && !existing.isDefault) {
-      await db.aIProvider.updateMany({
-        where: { isDefault: true, NOT: { id } },
-        data: { isDefault: false },
-      })
-    }
+    // Обновление провайдера + снятие isDefault — атомарно (race condition).
 
     // Шифруем новый ключ, если передан. Пустая строка = очистить ключ.
     let apiKeyEncrypted: string | null | undefined = undefined
@@ -112,9 +106,16 @@ export async function PATCH(request: Request, { params }: Params) {
       apiKeyEncrypted = apiKey ? encryptApiKey(apiKey) : null
     }
 
-    const updated = await db.aIProvider.update({
-      where: { id },
-      data: {
+    const updated = await db.$transaction(async (tx) => {
+      if (isDefault && !existing.isDefault) {
+        await tx.aIProvider.updateMany({
+          where: { isDefault: true, NOT: { id } },
+          data: { isDefault: false },
+        })
+      }
+      return tx.aIProvider.update({
+        where: { id },
+        data: {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(type !== undefined ? { type } : {}),
         ...(baseUrl !== undefined ? { baseUrl: baseUrl || null } : {}),
@@ -127,6 +128,7 @@ export async function PATCH(request: Request, { params }: Params) {
           ? { config: typeof config === 'string' ? config : JSON.stringify(config) }
           : {}),
       },
+      })
     })
     return NextResponse.json(toDto(updated))
   } catch (error) {

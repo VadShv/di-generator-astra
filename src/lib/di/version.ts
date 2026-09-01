@@ -1,7 +1,11 @@
 // Утилиты работы с версиями ДИ (Фаза 2).
 // Вынесено из роутов generate-di/* (дублировалось в ai-generate и mass-generate).
 
-import { db } from '../db'
+ import { PrismaClient } from '@prisma/client'
+ import { db } from '../db'
+
+/** Тип БД-клиента: основной или транзакционный. */
+ type DbClient = PrismaClient | Parameters<Parameters<PrismaClient['$transaction']>[0]>[0]
 
 export interface SectionForVersion {
   title: string
@@ -27,15 +31,17 @@ export function serializeDiVersion(title: string, sections: SectionForVersion[])
  * @param uploadedBy автор (по умолчанию 'ai-generate')
  * @param changeDescription описание изменения
  */
-export async function createInitialVersion(
-  generatedDIId: string,
-  title: string,
-  sections: SectionForVersion[],
-  uploadedBy = 'ai-generate',
-  changeDescription = 'Начальная AI-генерация'
-): Promise<void> {
-  const content = serializeDiVersion(title, sections)
-  await db.dIVersion.create({
+ export async function createInitialVersion(
+   generatedDIId: string,
+   title: string,
+   sections: SectionForVersion[],
+   uploadedBy = 'ai-generate',
+   changeDescription = 'Начальная AI-генерация',
+   tx?: DbClient
+ ): Promise<void> {
+   const content = serializeDiVersion(title, sections)
+   const client = tx ?? db
+   await client.dIVersion.create({
     data: {
       generatedDIId,
       content,

@@ -269,14 +269,16 @@ export class OpenAICompatibleProvider implements AIProviderClient {
           detail: e instanceof Error ? e.message : String(e),
         })
       }
-      return {
-        ok: false,
-        message:
+     return {
+       ok: false,
+       message:
           e instanceof AIProviderError
-            ? sanitizeProviderMessage(e.code)
+            ? e.code === 'auth'
+              ? 'Неверный API-ключ. Проверьте ключ в настройках провайдера.'
+              : sanitizeProviderMessage(e.code)
             : 'Не удалось подключиться к провайдеру',
-        latencyMs: Date.now() - start,
-      }
+       latencyMs: Date.now() - start,
+     }
     }
   }
 }

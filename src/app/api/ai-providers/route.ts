@@ -112,12 +112,12 @@ export async function POST(request: Request) {
     // Шифруем ключ, если задан.
     const apiKeyEncrypted = apiKey ? encryptApiKey(apiKey) : null
 
-    // Если новый провайдер — isDefault, снимаем флаг с остальных.
-    if (isDefault) {
-      await db.aIProvider.updateMany({ where: { isDefault: true }, data: { isDefault: false } })
-    }
-
-    const created = await db.aIProvider.create({
+    // Создание провайдера + снятие isDefault — атомарно (race condition).
+    const created = await db.$transaction(async (tx) => {
+      if (isDefault) {
+        await tx.aIProvider.updateMany({ where: { isDefault: true }, data: { isDefault: false } })
+      }
+      return tx.aIProvider.create({
       data: {
         name: name.trim(),
         type,
@@ -129,6 +129,7 @@ export async function POST(request: Request) {
         isDefault: isDefault ?? false,
         config: typeof config === 'string' ? config : JSON.stringify(config ?? {}),
       },
+      })
     })
     return NextResponse.json(toDto(created), { status: 201 })
   } catch (error) {

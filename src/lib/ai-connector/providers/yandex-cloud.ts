@@ -262,14 +262,16 @@ export class YandexCloudProvider implements AIProviderClient {
           detail: e instanceof Error ? e.message : String(e),
         })
       }
-      return {
-        ok: false,
-        message:
-          e instanceof AIProviderError
-            ? sanitizeProviderMessage(e.code)
-            : 'Не удалось подключиться к провайдеру',
-        latencyMs: Date.now() - start,
-      }
+     return {
+       ok: false,
+       message:
+         e instanceof AIProviderError
+            ? e.code === 'auth'
+              ? 'Неверный API-ключ. Проверьте ключ в настройках провайдера.'
+              : sanitizeProviderMessage(e.code)
+           : 'Не удалось подключиться к провайдеру',
+       latencyMs: Date.now() - start,
+     }
     }
   }
 }

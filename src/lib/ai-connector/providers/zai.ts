@@ -16,6 +16,10 @@ import type {
 } from '../types'
 import { AIProviderError } from '../errors'
 import { withRetry } from '../retry'
+import { sanitizeProviderMessage } from '../errors'
+import { createLogger } from '../../logger'
+
+const log = createLogger('zai-provider')
 
 // Тип модуля z-ai-web-dev-sdk (упрощённое описание нужного API).
 interface ZAICompletion {
@@ -171,12 +175,29 @@ export class ZaiProvider implements AIProviderClient {
         latencyMs: Date.now() - start,
         sampleResponse: response.content,
       }
-    } catch (e) {
-      return {
-        ok: false,
-        message: e instanceof Error ? e.message : String(e),
-        latencyMs: Date.now() - start,
+   } catch (e) {
+      if (e instanceof AIProviderError) {
+        log.error('testConnection failed', {
+          code: e.code,
+          status: e.status,
+          retryable: e.retryable,
+          detail: e.message,
+        })
+      } else {
+        log.error('testConnection failed', {
+          detail: e instanceof Error ? e.message : String(e),
+        })
       }
+     return {
+       ok: false,
+        message:
+          e instanceof AIProviderError
+            ? e.code === 'auth'
+              ? 'Неверный API-ключ. Проверьте ключ в настройках провайдера.'
+              : sanitizeProviderMessage(e.code)
+            : 'Не удалось подключиться к провайдеру',
+       latencyMs: Date.now() - start,
+     }
     }
   }
 }
