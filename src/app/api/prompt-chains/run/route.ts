@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import {
-  resolveMasterPrompt,
+  resolveMasterPromptWithDetails,
   renderPrompt,
   buildContextFromPosition,
   type PromptCategory,
@@ -109,29 +109,30 @@ export async function POST(request: NextRequest) {
       const step = steps[i]
       const category = (step.category || 'generation') as PromptCategory
 
-      // Резолвим промпт для текущей категории и критериев.
-      const resolved = await resolveMasterPrompt(category, resolveCriteria)
+      // Резолвим промпт через единый scoring-алгоритм.
+      const resolvedResult = await resolveMasterPromptWithDetails(category, resolveCriteria)
 
-      if (!resolved) {
-        const errorMsg = `Не найден активный промпт категории "${category}"`
-        results.push({
-          step: i + 1,
-          category,
-          promptId: null,
-          promptName: null,
-          content: '',
-          durationMs: 0,
-          error: errorMsg,
-        })
-        if (step.stopOnError !== false) {
-          break
-        }
-        continue
-      }
+      if (!resolvedResult) {
+       const errorMsg = `Не найден активный промпт категории "${category}"`
+       results.push({
+         step: i + 1,
+         category,
+         promptId: null,
+         promptName: null,
+         content: '',
+         durationMs: 0,
+         error: errorMsg,
+       })
+       if (step.stopOnError !== false) {
+         break
+       }
+       continue
+     }
 
-      // Рендерим промпт с подстановкой переменных + результата предыдущего шага.
-      const fullContext = { ...positionContext, предыдущий_результат: previousOutput || null }
-      const renderedPrompt = renderPrompt(resolved.content, fullContext)
+      const resolved = resolvedResult.prompt
+     // Рендерим промпт с подстановкой переменных + результата предыдущего шага.
+     const fullContext = { ...positionContext, предыдущий_результат: previousOutput || null }
+     const renderedPrompt = renderPrompt(resolved.content, fullContext)
 
       const messages: ChatMessage[] = [
         { role: 'system', content: renderedPrompt },
@@ -190,7 +191,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
     log.error('PromptChains run error:', { error })
-    const message = error instanceof Error ? error.message : 'Ошибка запуска цепочки промптов'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return errorResponse(error, log, 'prompt-chains/run')
   }
 }

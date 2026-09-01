@@ -1,126 +1,92 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
- import { PROMPT_CATEGORIES, type PromptCategory } from '@/lib/master-prompt'
+import {
+  PROMPT_CATEGORIES,
+  type PromptCategory,
+  resolveMasterPromptWithDetails,
+} from '@/lib/master-prompt'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('master-prompts-resolve')
 
+// POST /api/master-prompts/resolve — resolve the best-matching active prompt
+// for a given position using the UNIFIED scoring algorithm (same one used by
+// generate-di routes). Returns prompt + resolution details for the UI.
 export async function POST(request: NextRequest) {
   try {
     await requireAuth()
     const body = await request.json()
-     const { positionId, category } = body
+    const { positionId, category } = body
 
-    if (!positionId) {
+    if (!positionId || typeof positionId !== 'string') {
       return NextResponse.json({ error: 'ID должности обязателен' }, { status: 400 })
     }
 
     const position = await db.position.findUnique({
       where: { id: positionId },
-      include: { department: true, businessFunction: true, project: true },
+      include: {
+        department: { include: { company: true } },
+        businessFunction: true,
+      },
     })
 
     if (!position) {
       return NextResponse.json({ error: 'Должность не найдена' }, { status: 404 })
     }
 
-     // Опциональная фильтрация по категории (generation/audit/improvement/ai_culture).
-     const validCategory: PromptCategory | null =
-       typeof category === 'string' && category in PROMPT_CATEGORIES ? (category as PromptCategory) : null
+    // Optional category filter (generation/audit/improvement/ai_culture).
+    const validCategory: PromptCategory | null =
+      typeof category === 'string' && category in PROMPT_CATEGORIES
+        ? (category as PromptCategory)
+        : null
 
-     // Получаем все активные промпты (с фильтром по категории, если задана).
-    const activePrompts = await db.masterPrompt.findMany({
-       where: {
-         isActive: true,
-         ...(validCategory ? { category: validCategory } : {}),
-       },
-      include: { department: true, businessFunction: true },
-    })
-
-    if (activePrompts.length === 0) {
-      return NextResponse.json({ prompt: null, resolution: null })
+    // Build criteria from position — matches what generate-di routes pass.
+    const criteria = {
+      positionId: position.id,
+      companyId: position.department?.companyId || null,
+      departmentId: position.departmentId,
+      businessFunctionId: position.businessFunctionId,
+      grade: position.grade,
+      functionType: position.functions || null,
     }
 
-    // Priority logic: departmentId match > businessFunctionId match > grade match > functionType match > global
-    // Score each prompt based on how specifically it matches the position
-    const scored = activePrompts.map((prompt) => {
-      let score = 0
-      const matchDetails: string[] = []
-
-      // Department match (highest priority)
-      if (prompt.departmentId === position.departmentId) {
-        score += 1000
-        matchDetails.push('Подразделение')
-      } else if (prompt.departmentId !== null) {
-        // Prompt has a department requirement that doesn't match
-        return { prompt, score: -1, matchDetails: [] }
+    if (validCategory) {
+      const result = await resolveMasterPromptWithDetails(validCategory, criteria)
+      if (!result) {
+        return NextResponse.json({ prompt: null, resolution: null })
       }
-
-      // Business function match
-      if (prompt.businessFunctionId && position.businessFunctionId && prompt.businessFunctionId === position.businessFunctionId) {
-        score += 100
-        matchDetails.push('Бизнес-функция')
-      } else if (prompt.businessFunctionId !== null && prompt.businessFunctionId !== position.businessFunctionId) {
-        return { prompt, score: -1, matchDetails: [] }
-      }
-
-      // Grade match
-      if (prompt.grade && position.grade && prompt.grade === position.grade) {
-        score += 10
-        matchDetails.push('Грейд')
-      } else if (prompt.grade !== null && prompt.grade !== position.grade) {
-        return { prompt, score: -1, matchDetails: [] }
-      }
-
-      // Function type match
-      if (prompt.functionType && position.functions) {
-        try {
-          const positionFunctions = JSON.parse(position.functions) as string[]
-          if (positionFunctions.includes(prompt.functionType)) {
-            score += 1
-            matchDetails.push('Функция')
-          } else {
-            return { prompt, score: -1, matchDetails: [] }
-          }
-        } catch {
-          // If functions can't be parsed, try string comparison
-          if (position.functions.includes(prompt.functionType)) {
-            score += 1
-            matchDetails.push('Функция')
-          } else {
-            return { prompt, score: -1, matchDetails: [] }
-          }
-        }
-      } else if (prompt.functionType !== null) {
-        // Prompt has a function requirement but position has no functions
-        return { prompt, score: -1, matchDetails: [] }
-      }
-
-      return { prompt, score, matchDetails }
-    })
-
-    // Filter out non-matching prompts and find the best match
-    const matching = scored.filter((s) => s.score >= 0)
-
-    if (matching.length === 0) {
-      return NextResponse.json({ prompt: null, resolution: null })
+      return NextResponse.json({
+        prompt: result.prompt,
+        resolution: {
+          score: result.resolution.score,
+          matchDetails: result.resolution.matchDetails,
+          position: {
+            id: position.id,
+            title: position.title,
+            departmentId: position.departmentId,
+            departmentName: position.department?.name,
+            businessFunctionId: position.businessFunctionId,
+            businessFunctionName: position.businessFunction?.name,
+            grade: position.grade,
+            functions: position.functions,
+          },
+          evaluatedPrompts: result.resolution.evaluatedPrompts,
+        },
+      })
     }
 
-    // Sort by score descending, then by version descending (prefer latest version)
-    matching.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score
-      return b.prompt.version - a.prompt.version
-    })
-
-    const bestMatch = matching[0]
-
+    // No category specified — try generation first, then return first match.
+    const result = await resolveMasterPromptWithDetails('generation', criteria)
+    if (!result) {
+      return NextResponse.json({ prompt: null, resolution: null })
+    }
     return NextResponse.json({
-      prompt: bestMatch.prompt,
+      prompt: result.prompt,
       resolution: {
-        score: bestMatch.score,
-        matchDetails: bestMatch.matchDetails,
+        score: result.resolution.score,
+        matchDetails: result.resolution.matchDetails,
         position: {
           id: position.id,
           title: position.title,
@@ -131,13 +97,7 @@ export async function POST(request: NextRequest) {
           grade: position.grade,
           functions: position.functions,
         },
-        evaluatedPrompts: matching.map((m) => ({
-          id: m.prompt.id,
-          name: m.prompt.name,
-          version: m.prompt.version,
-          score: m.score,
-          matchDetails: m.matchDetails,
-        })),
+        evaluatedPrompts: result.resolution.evaluatedPrompts,
       },
     })
   } catch (error) {

@@ -9,6 +9,8 @@ import {
   type PromptCategory,
   type PromptContext,
   type PromptCriteria,
+  type ResolvedPrompt,
+  type PromptResolution,
   extractVariables,
   renderPrompt,
   buildContextFromPosition,
@@ -21,6 +23,8 @@ export {
   type PromptCategory,
   type PromptContext,
   type PromptCriteria,
+  type ResolvedPrompt,
+  type PromptResolution,
   extractVariables,
   renderPrompt,
   buildContextFromPosition,
@@ -140,6 +144,184 @@ export async function resolveMasterPrompt(
   }
 
   return null
+}
+
+/**
+ * Score a single prompt against position criteria (unified algorithm).
+ * Returns { score, matchDetails } or { score: -1 } if hard-mismatch.
+ * This is the SINGLE source of truth for prompt matching — used by both
+ * /api/master-prompts/resolve (UI resolver) and generate-di routes.
+ */
+function scorePromptAgainstCriteria(
+  prompt: {
+    departmentId: string | null
+    businessFunctionId: string | null
+    grade: string | null
+    functionType: string | null
+    companyId: string | null
+    positionId: string | null
+  },
+  criteria: PromptCriteria,
+): { score: number; matchDetails: string[] } {
+  let score = 0
+  const matchDetails: string[] = []
+
+  // Company match (highest priority — scope isolation)
+  if (prompt.companyId && criteria.companyId) {
+    if (prompt.companyId === criteria.companyId) {
+      score += 10000
+      matchDetails.push('Юр. лицо')
+    } else {
+      return { score: -1, matchDetails: [] }
+    }
+  } else if (prompt.companyId !== null && criteria.companyId !== prompt.companyId) {
+    return { score: -1, matchDetails: [] }
+  }
+
+  // Position match (most specific)
+  if (prompt.positionId && criteria.positionId) {
+    if (prompt.positionId === criteria.positionId) {
+      score += 5000
+      matchDetails.push('Должность')
+    } else {
+      return { score: -1, matchDetails: [] }
+    }
+  } else if (prompt.positionId !== null && criteria.positionId !== prompt.positionId) {
+    return { score: -1, matchDetails: [] }
+  }
+
+  // Department match
+  if (prompt.departmentId && criteria.departmentId) {
+    if (prompt.departmentId === criteria.departmentId) {
+      score += 1000
+      matchDetails.push('Подразделение')
+    } else {
+      return { score: -1, matchDetails: [] }
+    }
+  } else if (prompt.departmentId !== null && criteria.departmentId !== prompt.departmentId) {
+    return { score: -1, matchDetails: [] }
+  }
+
+  // Business function match
+  if (prompt.businessFunctionId && criteria.businessFunctionId) {
+    if (prompt.businessFunctionId === criteria.businessFunctionId) {
+      score += 100
+      matchDetails.push('Бизнес-функция')
+    } else {
+      return { score: -1, matchDetails: [] }
+    }
+  } else if (prompt.businessFunctionId !== null && criteria.businessFunctionId !== prompt.businessFunctionId) {
+    return { score: -1, matchDetails: [] }
+  }
+
+  // Grade match
+  if (prompt.grade && criteria.grade) {
+    if (prompt.grade === criteria.grade) {
+      score += 10
+      matchDetails.push('Грейд')
+    } else {
+      return { score: -1, matchDetails: [] }
+    }
+  } else if (prompt.grade !== null && criteria.grade !== null && prompt.grade !== criteria.grade) {
+    return { score: -1, matchDetails: [] }
+  }
+
+  // Function type match: prompt.functionType is a single string,
+  // criteria.functionType can be a single string or JSON array.
+  if (prompt.functionType && criteria.functionType) {
+    let matches = false
+    try {
+      const parsed = JSON.parse(criteria.functionType)
+      if (Array.isArray(parsed)) {
+        matches = parsed.includes(prompt.functionType)
+      } else {
+        matches = prompt.functionType === criteria.functionType
+      }
+    } catch {
+      matches = prompt.functionType === criteria.functionType
+    }
+    if (matches) {
+      score += 1
+      matchDetails.push('Функция')
+    } else {
+      return { score: -1, matchDetails: [] }
+    }
+  } else if (prompt.functionType !== null && !criteria.functionType) {
+    return { score: -1, matchDetails: [] }
+  }
+
+  return { score, matchDetails }
+}
+
+/**
+ * Unified prompt resolver: returns the best-matching active prompt plus
+ * resolution details (score, matchDetails, evaluated list).
+ * This replaces the divergent scoring in /api/master-prompts/resolve.
+ */
+export async function resolveMasterPromptWithDetails(
+  category: PromptCategory,
+  criteria: PromptCriteria = {},
+): Promise<{ prompt: ResolvedPrompt; resolution: PromptResolution } | null> {
+  const where: Record<string, unknown> = { isActive: true, category }
+  if (criteria.positionId) where.positionId = criteria.positionId
+  if (criteria.companyId) where.companyId = criteria.companyId
+
+  const active = await db.masterPrompt.findMany({
+    where,
+    select: {
+      id: true,
+      name: true,
+      content: true,
+      category: true,
+      isAiCulture: true,
+      version: true,
+      departmentId: true,
+      businessFunctionId: true,
+      grade: true,
+      functionType: true,
+      companyId: true,
+      positionId: true,
+    },
+    orderBy: { version: 'desc' },
+  })
+
+  if (active.length === 0) return null
+
+  const scored = active.map((p) => {
+    const { score, matchDetails } = scorePromptAgainstCriteria(p, criteria)
+    return { prompt: p, score, matchDetails }
+  })
+
+  const matching = scored.filter((s) => s.score >= 0)
+  if (matching.length === 0) return null
+
+  matching.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return b.prompt.version - a.prompt.version
+  })
+
+  const best = matching[0]
+  return {
+    prompt: {
+      id: best.prompt.id,
+      name: best.prompt.name,
+      content: best.prompt.content,
+      category: best.prompt.category,
+      isAiCulture: best.prompt.isAiCulture,
+      version: best.prompt.version,
+    },
+    resolution: {
+      score: best.score,
+      matchDetails: best.matchDetails,
+      evaluatedPrompts: matching.map((m) => ({
+        id: m.prompt.id,
+        name: m.prompt.name,
+        version: m.prompt.version,
+        score: m.score,
+        matchDetails: m.matchDetails,
+      })),
+    },
+  }
 }
 
 /**

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import {
-  savePromptVersion,
   estimateTokens,
   extractVariables,
   PROMPT_CATEGORIES,
@@ -169,40 +168,46 @@ export async function POST(request: Request) {
     const version = 1
     const estimatedTokensValue = estimateTokens(content)
 
-    const prompt = await db.masterPrompt.create({
-      data: {
-        name: name.trim(),
-        content: content.trim(),
-        version,
-        category: resolvedCategory,
-        isActive: isActive !== undefined ? isActive : true,
-        isAiCulture: isAiCulture === true,
-        variables: variablesJson,
-        tags: normalizeTags(tags),
-        estimatedTokens: estimatedTokensValue,
-        departmentId: departmentId || null,
-        businessFunctionId: businessFunctionId || null,
-        grade: grade || null,
-        functionType: functionType || null,
-        companyId: companyId || null,
-        positionId: positionId || null,
-        description: description?.trim() || null,
-      },
-      include: {
-        department: true,
-        businessFunction: true,
-        company: true,
-        position: true,
-      },
-    })
+    const prompt = await db.$transaction(async (tx) => {
+      const created = await tx.masterPrompt.create({
+        data: {
+          name: name.trim(),
+          content: content.trim(),
+          version,
+          category: resolvedCategory,
+          isActive: isActive !== undefined ? isActive : true,
+          isAiCulture: isAiCulture === true,
+          variables: variablesJson,
+          tags: normalizeTags(tags),
+          estimatedTokens: estimatedTokensValue,
+          departmentId: departmentId || null,
+          businessFunctionId: businessFunctionId || null,
+          grade: grade || null,
+          functionType: functionType || null,
+          companyId: companyId || null,
+          positionId: positionId || null,
+          description: description?.trim() || null,
+        },
+        include: {
+          department: true,
+          businessFunction: true,
+          company: true,
+          position: true,
+        },
+      })
 
-    // Сохраняем snapshot в историю версий.
-    await savePromptVersion({
-      masterPromptId: prompt.id,
-      version: prompt.version,
-      content: prompt.content,
-      description: prompt.description,
-      createdBy: 'api-create',
+      // Сохраняем snapshot в историю версий.
+      await tx.masterPromptVersion.create({
+        data: {
+          masterPromptId: created.id,
+          version: created.version,
+          content: created.content,
+          description: created.description,
+          createdBy: 'api-create',
+        },
+      })
+
+      return created
     })
 
     return NextResponse.json(prompt, { status: 201 })
@@ -282,28 +287,34 @@ export async function PUT(request: Request) {
       updateData.version = existing.version + 1
     }
 
-    const prompt = await db.masterPrompt.update({
-      where: { id },
-      data: updateData,
-      include: {
-        department: true,
-        businessFunction: true,
-        company: true,
-        position: true,
-      },
-    })
-
-    // При изменении контента сохраняем snapshot новой версии.
-    if (contentChanged) {
-      await savePromptVersion({
-        masterPromptId: prompt.id,
-        version: prompt.version,
-        content: prompt.content,
-        description: changeDescription?.trim() || prompt.description,
-        createdBy: 'api-update',
-        diff: changeDescription || null,
+    // Атомарно обновляем промпт + создаём snapshot версии (защита от race condition).
+    const prompt = await db.$transaction(async (tx) => {
+      const updated = await tx.masterPrompt.update({
+        where: { id },
+        data: updateData,
+        include: {
+          department: true,
+          businessFunction: true,
+          company: true,
+          position: true,
+        },
       })
-    }
+
+      if (contentChanged) {
+        await tx.masterPromptVersion.create({
+          data: {
+            masterPromptId: updated.id,
+            version: updated.version,
+            content: updated.content,
+            description: changeDescription?.trim() || updated.description,
+            createdBy: 'api-update',
+            diff: changeDescription || null,
+          },
+        })
+      }
+
+      return updated
+    })
 
     return NextResponse.json(prompt)
   } catch (error) {

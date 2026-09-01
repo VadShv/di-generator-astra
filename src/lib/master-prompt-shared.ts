@@ -101,3 +101,22 @@ export interface PromptCriteria {
   functionType?: string | null
   positionId?: string | null
 }
+export interface ResolvedPrompt {
+  id: string
+  name: string
+  content: string
+  category: string
+  isAiCulture: boolean
+  version: number
+}
+export interface PromptResolution {
+  score: number
+  matchDetails: string[]
+  evaluatedPrompts: Array<{
+    id: string
+    name: string
+    version: number
+    score: number
+    matchDetails: string[]
+  }>
+}
