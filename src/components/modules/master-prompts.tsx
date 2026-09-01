@@ -97,10 +97,11 @@ export function MasterPromptsModule() {
   const [testPositionId, setTestPositionId] = useState('')
   const [testResult, setTestResult] = useState<{ content: string; durationMs: number; providerName: string; modelName: string; testResultId: string } | null>(null)
   const [testLoading, setTestLoading] = useState(false)
-  const [chainForm, setChainForm] = useState<{ id: string | null; name: string; description: string; steps: Array<{ category: string; order: number; stopOnError: boolean }> }>({ id: null, name: '', description: '', steps: [] })
+  const [chainForm, setChainForm] = useState<{ id: string | null; name: string; description: string; steps: Array<{ category: string; order: number; stopOnError: boolean }>; isActive: boolean }>({ id: null, name: '', description: '', steps: [], isActive: false })
   const [chainRunId, setChainRunId] = useState('')
   const [chainRunPositionId, setChainRunPositionId] = useState('')
   const [chainRunResult, setChainRunResult] = useState<{ results: Array<{ step: number; category: string; content: string; error: string | null }>; finalOutput: string } | null>(null)
+  const [deletingChain, setDeletingChain] = useState<PromptChain | null>(null)
   const [chainRunLoading, setChainRunLoading] = useState(false)
   const [resolverPositionId, setResolverPositionId] = useState('')
   const [resolverResult, setResolverResult] = useState<{ prompt: MasterPrompt | null; resolution: { score: number; matchDetails: string[] } | null } | null>(null)
@@ -152,9 +153,9 @@ export function MasterPromptsModule() {
 
  useEffect(() => { fetchPrompts() }, [fetchPrompts])
  useEffect(() => { fetchDepartments(); fetchBusinessFunctions(); fetchPositions(); fetchCompanies(); fetchProviders(); fetchChains() }, [fetchDepartments, fetchBusinessFunctions, fetchPositions, fetchCompanies, fetchProviders, fetchChains])
-  useEffect(() => {
-    fetch('/api/master-prompts/conflicts').then(r => r.ok ? r.json() : null).then(d => { if (d?.conflicts) setConflicts(d.conflicts) }).catch(() => {})
-  }, [prompts])
+ useEffect(() => {
+    fetch('/api/master-prompts/conflicts').then(r => r.ok ? r.json() : null).then(d => { if (d?.conflicts) setConflicts(d.conflicts) }).catch((err) => { console.warn('Failed to load prompt conflicts:', err) })
+ }, [prompts])
 
  const groupedPrompts = useMemo(() => {
     const groups: Record<string, MasterPrompt[]> = {}
@@ -350,12 +351,19 @@ export function MasterPromptsModule() {
       const items = JSON.parse(await file.text())
       if (!Array.isArray(items)) throw new Error('Неверный формат')
       let imported = 0
+      let failed = 0
+      const validCategories = Object.keys(PROMPT_CATEGORIES)
       for (const item of items) {
-        if (!item.name || !item.content) continue
-        await fetch('/api/master-prompts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: item.name, content: item.content, description: item.description, category: item.category, isAiCulture: item.isAiCulture, tags: item.tags }) })
-        imported++
+        if (!item.name || !item.content) { failed++; continue }
+        const category = item.isAiCulture ? 'ai_culture' : (validCategories.includes(item.category) ? item.category : 'generation')
+        const tagsArray = Array.isArray(item.tags) ? item.tags.map(String) : []
+        try {
+          const res = await fetch('/api/master-prompts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: String(item.name), content: String(item.content), description: item.description ? String(item.description) : undefined, category, isAiCulture: !!item.isAiCulture, tags: tagsArray }) })
+          if (!res.ok) { failed++; continue }
+          imported++
+        } catch { failed++ }
       }
-      toast({ title: 'Успешно', description: `Импортировано промптов: ${imported}` })
+      toast({ title: imported > 0 ? 'Успешно' : 'Импорт не выполнен', description: `Импортировано: ${imported}${failed > 0 ? `, пропущено: ${failed}` : ''}` })
       fetchPrompts()
     } catch (err) {
       toast({ title: 'Ошибка импорта', description: err instanceof Error ? err.message : 'Неверный формат файла', variant: 'destructive' })
@@ -371,7 +379,7 @@ export function MasterPromptsModule() {
     if (!chainForm.name.trim()) { toast({ title: 'Ошибка', description: 'Название обязательно', variant: 'destructive' }); return }
     try {
       const method = chainForm.id ? 'PUT' : 'POST'
-      const res = await fetch('/api/prompt-chains', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: chainForm.id, name: chainForm.name, description: chainForm.description, steps: chainForm.steps, isActive: false }) })
+      const res = await fetch('/api/prompt-chains', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: chainForm.id, name: chainForm.name, description: chainForm.description, steps: chainForm.steps, isActive: chainForm.isActive }) })
       if (!res.ok) throw new Error()
       toast({ title: 'Успешно', description: chainForm.id ? 'Цепочка обновлена' : 'Цепочка создана' })
       setChainDialogOpen(false); fetchChains()
@@ -391,11 +399,14 @@ export function MasterPromptsModule() {
     }
   }
 
-  const handleDeleteChain = async (id: string) => {
+  const handleDeleteChain = async () => {
+    if (!deletingChain) return
+    const id = deletingChain.id
     try {
       const res = await fetch('/api/prompt-chains', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
       if (!res.ok) throw new Error()
       toast({ title: 'Успешно', description: 'Цепочка удалена' })
+      setDeletingChain(null)
       fetchChains()
     } catch {
       toast({ title: 'Ошибка', description: 'Не удалось удалить', variant: 'destructive' })
@@ -552,7 +563,7 @@ export function MasterPromptsModule() {
 
         <TabsContent value="chains" className="space-y-4">
           <div className="flex justify-end">
-            <Button size="sm" onClick={() => { setChainForm({ id: null, name: '', description: '', steps: [] }); setChainDialogOpen(true) }}><Plus className="h-4 w-4 mr-1" /> Создать цепочку</Button>
+            <Button size="sm" onClick={() => { setChainForm({ id: null, name: '', description: '', steps: [], isActive: false }); setChainDialogOpen(true) }}><Plus className="h-4 w-4 mr-1" /> Создать цепочку</Button>
           </div>
           {chains.length === 0 ? (
             <Card><CardContent className="p-8 text-center text-muted-foreground">
@@ -584,8 +595,8 @@ export function MasterPromptsModule() {
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" title="Активация" onClick={() => handleToggleChain(c)}>{c.isActive ? <XCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" title="Запустить" onClick={() => { setChainRunId(c.id); setChainRunResult(null); setChainRunDialogOpen(true) }}><Play className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Редактировать" onClick={() => { setChainForm({ id: c.id, name: c.name, description: c.description || '', steps: c.steps.map(s => ({ ...s, stopOnError: s.stopOnError ?? true })) }); setChainDialogOpen(true) }}><Pencil className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Удалить" onClick={() => handleDeleteChain(c.id)}><Trash2 className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Редактировать" onClick={() => { setChainForm({ id: c.id, name: c.name, description: c.description || '', steps: c.steps.map(s => ({ ...s, stopOnError: s.stopOnError ?? true })), isActive: c.isActive }); setChainDialogOpen(true) }}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Удалить" onClick={() => setDeletingChain(c)}><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -682,7 +693,7 @@ export function MasterPromptsModule() {
                 <div><Label className="text-xs">Подразделение</Label><Select value={formDepartmentId} onValueChange={setFormDepartmentId}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Все" /></SelectTrigger><SelectContent>{departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select></div>
                 <div><Label className="text-xs">Бизнес-функция</Label><Select value={formBusinessFunctionId} onValueChange={setFormBusinessFunctionId}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Все" /></SelectTrigger><SelectContent>{businessFunctions.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
                 <div><Label className="text-xs">Должность</Label><Select value={formPositionId} onValueChange={setFormPositionId}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Все" /></SelectTrigger><SelectContent>{positions.map(p => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}</SelectContent></Select></div>
-                <div><Label className="text-xs">Грейд</Label><Input value={formGrade} onChange={e => setFormGrade(e.target.value)} placeholder="линейная, руководитель..." className="h-8 text-xs" /></div>
+                <div><Label className="text-xs">Грейд</Label><Select value={formGrade} onValueChange={setFormGrade}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Все" /></SelectTrigger><SelectContent><SelectItem value="линейная">Линейная</SelectItem><SelectItem value="руководитель">Руководитель</SelectItem></SelectContent></Select></div>
                 <div><Label className="text-xs">Тип функции</Label><Input value={formFunctionType} onChange={e => setFormFunctionType(e.target.value)} placeholder="Разработка, Аналитика..." className="h-8 text-xs" /></div>
               </div>
             </div>
@@ -814,6 +825,10 @@ export function MasterPromptsModule() {
               )}
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="chainActive" checked={chainForm.isActive} onChange={e => setChainForm(prev => ({ ...prev, isActive: e.target.checked }))} className="rounded" />
+            <Label htmlFor="chainActive" className="text-sm cursor-pointer">Сделать активной (снимет активность с остальных)</Label>
+          </div>
           <DialogFooter><Button variant="outline" onClick={() => setChainDialogOpen(false)}>Отмена</Button><Button onClick={handleSaveChain}>Сохранить</Button></DialogFooter>
         </DialogContent>
       </Dialog>
@@ -842,6 +857,19 @@ export function MasterPromptsModule() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Chain Delete Confirmation */}
+      <AlertDialog open={!!deletingChain} onOpenChange={(open) => { if (!open) setDeletingChain(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить цепочку?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <p className="text-sm text-muted-foreground">Цепочка «{deletingChain?.name}» будет удалена безвозвратно.</p>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteChain} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Удалить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

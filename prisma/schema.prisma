@@ -536,10 +536,31 @@ model PromptChain {
   description String?  // Описание
   steps       String   @default("[]") // JSON: [{category, order, stopOnError}]
   isActive    Boolean  @default(false) // Активная цепочка
+  runResults  PromptChainRunResult[] // Результаты запуска (Фаза 3)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([isActive])
+}
+
+// ==========================================
+// Результаты запуска цепочки промптов (Фаза 3)
+// ==========================================
+model PromptChainRunResult {
+  id          String   @id @default(cuid())
+  chainId     String
+  chain       PromptChain @relation(fields: [chainId], references: [id], onDelete: Cascade)
+  positionId  String?  // Должность, на которой запускали (null = без позиции)
+  providerId  String?  // Использованный ИИ-провайдер
+  provider    AIProvider?  @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  totalSteps  Int      // Всего шагов в цепочке
+  completedSteps Int   // Выполнено успешно
+  results     String   @default("[]") // JSON: [{step, category, promptId, content, durationMs, error}]
+  finalOutput String?  // Итоговый результат последнего шага
+  createdAt   DateTime @default(now())
+
+  @@index([chainId])
+  @@index([positionId])
 }
 
 // ==========================================
@@ -551,6 +572,7 @@ model PromptTestResult {
   masterPrompt    MasterPrompt @relation(fields: [masterPromptId], references: [id], onDelete: Cascade)
   positionId      String?  // Должность, на которой тестировали
   providerId      String?  // Использованный ИИ-провайдер
+  provider        AIProvider?  @relation(fields: [providerId], references: [id], onDelete: SetNull)
   response        String   // Ответ модели
   durationMs      Int      // Время генерации (мс)
   rating          Int?     // Оценка пользователя (1–5)
@@ -579,6 +601,8 @@ model AIProvider {
   lastTestStatus  String?  // ok | error
   lastTestMessage String?  // Сообщение теста
   generationJobs  GenerationJob[] // Задачи массовой генерации через этот провайдер (Фаза 22)
+  testResults     PromptTestResult[] // Результаты тестирования промптов (Фаза 3)
+  chainRunResults PromptChainRunResult[] // Результаты запуска цепочек (Фаза 3)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

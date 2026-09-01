@@ -88,10 +88,13 @@ export async function POST(request: NextRequest) {
 
     // Получаем клиент ИИ.
     let client
+    let resolvedProviderId: string | null = null
     try {
       client = providerId ? await getProviderClient(providerId) : await getProviderClient()
+      resolvedProviderId = providerId || null
     } catch {
       client = getZaiFallbackClient()
+      resolvedProviderId = null
     }
 
     // Выполняем шаги последовательно, накапливая результат.
@@ -187,6 +190,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Сохраняем результат запуска цепочки в БД для истории (Фаза 3).
+    let runResultId: string | null = null
+    try {
+      const saved = await db.promptChainRunResult.create({
+        data: {
+          chainId: chain.id,
+          positionId: positionId || null,
+          providerId: resolvedProviderId,
+          totalSteps: steps.length,
+          completedSteps: results.filter(r => !r.error).length,
+          results: JSON.stringify(results),
+          finalOutput: previousOutput || null,
+        },
+      })
+      runResultId = saved.id
+    } catch (saveErr) {
+      log.error('Failed to save chain run result:', { error: saveErr })
+    }
+
     return NextResponse.json({
       chainId: chain.id,
       chainName: chain.name,
@@ -194,6 +216,7 @@ export async function POST(request: NextRequest) {
       completedSteps: results.length,
       results,
       finalOutput: previousOutput,
+      runResultId,
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
