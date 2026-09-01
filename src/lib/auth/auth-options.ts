@@ -159,28 +159,43 @@ export const authOptions: NextAuthOptions = {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Пароль', type: 'password' },
       },
-    async authorize(credentials) {
-      const email = credentials?.email?.trim().toLowerCase().normalize('NFC')
-      const password = credentials?.password
-       if (!email || !password) return null
+      async authorize(credentials) {
+        const email = credentials?.email?.trim().toLowerCase().normalize('NFC')
+        const password = credentials?.password
+        if (!email || !password) return null
 
-      // Brute-force-защита: лимит на email+10 мин (5 попыток).
-      // Без раскрытия факта lockout — возвращаем null как при неверном пароле.
-      // Ленивый импорт:避免 загрузки тяжёлого графа модулей (api-utils →
-      // ai-connector/errors) при инициализации auth-options, что замедляет
-      // динамический re-import в тестах с vi.resetModules().
-      const { rateLimit } = await import('@/lib/rate-limit')
-      const { ok: loginAllowed } = rateLimit(`login:${email}`, 5, 10 * 60 * 1000)
-      if (!loginAllowed) return null
+        // Brute-force-защита: лимит на email+10 мин (5 попыток).
+        // Без раскрытия факта lockout — возвращаем null как при неверном пароле.
+        // Ленивый импорт: избегаем загрузки тяжёлого графа модулей (api-utils →
+        // ai-connector/errors) при инициализации auth-options, что замедляет
+        // динамический re-import в тестах с vi.resetModules().
+        const { rateLimit } = await import('@/lib/rate-limit')
+        const { ok: loginAllowed } = rateLimit(`login:${email}`, 5, 10 * 60 * 1000)
+        if (!loginAllowed) {
+          db.auditLog.create({
+            data: { userId: null, userEmail: email, action: 'login_failed', method: 'POST', path: '/api/auth/callback/credentials', entityType: 'user', entityId: null, metadata: JSON.stringify({ reason: 'rate_limited' }), ip: null },
+          }).catch(() => {})
+          return null
+        }
 
-       const user = await db.user.findUnique({
+        const user = await db.user.findUnique({
           where: { email },
           select: { id: true, email: true, name: true, role: true, passwordHash: true, isActive: true, permissions: true },
         })
-        if (!user || !user.isActive) return null
+        if (!user || !user.isActive) {
+          db.auditLog.create({
+            data: { userId: user?.id ?? null, userEmail: email, action: 'login_failed', method: 'POST', path: '/api/auth/callback/credentials', entityType: 'user', entityId: user?.id ?? null, metadata: JSON.stringify({ reason: user ? 'inactive' : 'user_not_found' }), ip: null },
+          }).catch(() => {})
+          return null
+        }
 
         const ok = await verifyPassword(password, user.passwordHash)
-        if (!ok) return null
+        if (!ok) {
+          db.auditLog.create({
+            data: { userId: user.id, userEmail: email, action: 'login_failed', method: 'POST', path: '/api/auth/callback/credentials', entityType: 'user', entityId: user.id, metadata: JSON.stringify({ reason: 'wrong_password' }), ip: null },
+          }).catch(() => {})
+          return null
+        }
 
         // Обновляем время последнего входа (fire-and-forget).
         db.user
@@ -199,43 +214,79 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
- callbacks: {
- async jwt({ token, user, trigger }) {
-    // Первичный логин: берём роль/права из объекта user (только что проверены).
-    // Записываем issuedAt — время создания токена (для сравнения с passwordChangedAt).
-    if (user) {
-      token.id = (user as unknown as { id: string }).id
-      token.role = (user as unknown as { role: string }).role
-      token.permissions = (user as unknown as { permissions: Permissions }).permissions
-      token.issuedAt = Date.now()
-    }
-
-    // Проверка на каждый вызов jwt callback (а не только при trigger='update'):
-    // перечитываем isActive/passwordChangedAt из БД с TTL-кэшем 60 сек.
-    // Фаза 6, шаги 6.2 + 6.3.
-    if (token.id) {
-      const status = await getUserStatus(token.id as string)
-
-      // Пользователь удалён или деактивирован — инвалидируем токен.
-      if (!status || !status.isActive) {
-        return { ...token, role: undefined, permissions: undefined } as typeof token
-      }
-
-      // Смена пароля после выдачи токена → отзыв старых сессий.
-      const issuedAt = (token.issuedAt as number | undefined) ?? 0
-      if (status.passwordChangedAt && status.passwordChangedAt > issuedAt) {
-        return { ...token, role: undefined, permissions: undefined } as typeof token
-      }
-
-      // При trigger='update' — принудительно перечитываем роль/права (минуя кэш).
-      if (trigger === 'update') {
-        token.role = status.role
-        token.permissions = parsePermissions(status.role, status.permissions)
-      }
-    }
-    return token
+  events: {
+    // Успешный вход: записываем в AuditLog.
+    async signIn(message) {
+      const user = message.user as { id?: string; email?: string } | undefined
+      db.auditLog.create({
+        data: {
+          userId: user?.id ?? null,
+          userEmail: user?.email ?? null,
+          action: 'login',
+          method: 'POST',
+          path: '/api/auth/callback/credentials',
+          entityType: 'user',
+          entityId: user?.id ?? null,
+          metadata: JSON.stringify({ source: 'credentials' }),
+          ip: null,
+        },
+      }).catch(() => {})
+    },
+    // Выход: записываем в AuditLog.
+    async signOut(message) {
+      const token = message.token as { id?: string; email?: string } | undefined
+      db.auditLog.create({
+        data: {
+          userId: token?.id ?? null,
+          userEmail: token?.email ?? null,
+          action: 'logout',
+          method: 'POST',
+          path: '/api/auth/signout',
+          entityType: 'user',
+          entityId: token?.id ?? null,
+          metadata: JSON.stringify({ source: 'signout' }),
+          ip: null,
+        },
+      }).catch(() => {})
+    },
   },
-   async session({ session, token }) {
+  callbacks: {
+    async jwt({ token, user, trigger }) {
+      // Первичный логин: берём роль/права из объекта user (только что проверены).
+      // Записываем issuedAt — время создания токена (для сравнения с passwordChangedAt).
+      if (user) {
+        token.id = (user as unknown as { id: string }).id
+        token.role = (user as unknown as { role: string }).role
+        token.permissions = (user as unknown as { permissions: Permissions }).permissions
+        token.issuedAt = Date.now()
+      }
+
+      // Проверка на каждый вызов jwt callback (а не только при trigger='update'):
+      // перечитываем isActive/passwordChangedAt из БД с TTL-кэшем 60 сек.
+      // Фаза 6, шаги 6.2 + 6.3.
+      if (token.id) {
+        const status = await getUserStatus(token.id as string)
+
+        // Пользователь удалён или деактивирован — инвалидируем токен.
+        if (!status || !status.isActive) {
+          return { ...token, role: undefined, permissions: undefined } as typeof token
+        }
+
+        // Смена пароля после выдачи токена → отзыв старых сессий.
+        const issuedAt = (token.issuedAt as number | undefined) ?? 0
+        if (status.passwordChangedAt && status.passwordChangedAt > issuedAt) {
+          return { ...token, role: undefined, permissions: undefined } as typeof token
+        }
+
+        // При trigger='update' — принудительно перечитываем роль/права (минуя кэш).
+        if (trigger === 'update') {
+          token.role = status.role
+          token.permissions = parsePermissions(status.role, status.permissions)
+        }
+      }
+      return token
+    },
+    async session({ session, token }) {
       if (token && session.user) {
         ;(session.user as { id?: string }).id = token.id as string
         ;(session.user as { role?: string }).role = token.role as string

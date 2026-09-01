@@ -19,6 +19,7 @@ import { hasAccess, type Permissions } from '@/lib/auth/permissions'
 import { DashboardModule } from '@/components/modules/dashboard'
 import { GlobalSearch } from '@/components/global-search'
 import { NotificationBell } from '@/components/notification-bell'
+import { UserMenu } from '@/components/user-menu'
 
 const StaffScheduleModule = dynamic(() => import('@/components/modules/staff-schedule').then(m => m.StaffScheduleModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
 const ArchiveModule = dynamic(() => import('@/components/modules/archive').then(m => m.ArchiveModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
@@ -178,6 +179,7 @@ export default function HomePage() {
         <div className="p-6 max-w-[1600px] mx-auto">
           <div className="flex justify-end mb-2 items-center gap-2">
             <NotificationBell />
+            <UserMenu />
             <button
               onClick={() => setSearchOpen(true)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-muted/30 hover:bg-muted/50 text-sm text-muted-foreground transition-colors"

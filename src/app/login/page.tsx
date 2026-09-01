@@ -3,8 +3,9 @@
 // Страница входа. Вынесли useSearchParams в отдельный компонент с Suspense
 // для избежания BAILOUT_TO_CLIENT_SIDE_RENDERING в Next.js 15+.
 
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import { signIn } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,11 +26,29 @@ function SearchParamsReader({ children }: { children: (callbackUrl: string) => R
 
 function LoginForm({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter()
+  const { data: session } = useSession()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Если сессия уже активна — пользователь авторизован, редирект на главную.
+  // Двойная защита: middleware (server) + клиентский редирект (быстрая реакция).
+  useEffect(() => {
+    if (session) {
+      router.replace(callbackUrl)
+    }
+  }, [session, callbackUrl, router])
+
+  // Пока проверяем сессию — показываем спиннер (не форму входа).
+  if (session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
+      </div>
+    )
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

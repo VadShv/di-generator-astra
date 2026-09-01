@@ -108,6 +108,17 @@ export async function middleware(request: NextRequest) {
 
   // Публичные страницы (login).
   if (PUBLIC_PAGES.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+    // Авторизованный пользователь не должен видеть форму входа —
+    // редирект на главную (по callbackUrl или /).
+    if (await getValidSessionToken(request)) {
+      const homeUrl = request.nextUrl.clone()
+      const callbackUrl = request.nextUrl.searchParams.get('callbackUrl')
+      homeUrl.pathname = callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')
+        ? callbackUrl
+        : '/'
+      homeUrl.search = ''
+      return NextResponse.redirect(homeUrl)
+    }
     return NextResponse.next()
   }
 
