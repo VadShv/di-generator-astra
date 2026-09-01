@@ -8,6 +8,10 @@ import {
   deleteGeneratedDI,
 } from '@/services/generated-di-service'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('generate-di')
+
 export async function GET(request: NextRequest) {
   try {
     await requireAuth()
@@ -19,7 +23,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(generatedDIs)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('GenerateDI GET error:', error)
+    log.error('GenerateDI GET error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки сгенерированных ДИ' }, { status: 500 })
   }
 }
@@ -32,7 +36,7 @@ export async function POST(request: Request) {
     return NextResponse.json(generatedDI, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('GenerateDI POST error:', error)
+    log.error('GenerateDI POST error:', { error })
     return NextResponse.json({ error: 'Ошибка создания ДИ' }, { status: 500 })
   }
 }
@@ -45,7 +49,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(finalDI)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('GenerateDI PUT error:', error)
+    log.error('GenerateDI PUT error:', { error })
     return NextResponse.json({ error: 'Ошибка обновления ДИ' }, { status: 500 })
   }
 }
@@ -58,7 +62,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('GenerateDI DELETE error:', error)
+    log.error('GenerateDI DELETE error:', { error })
     return NextResponse.json({ error: 'Ошибка удаления ДИ' }, { status: 500 })
   }
 }

@@ -3,6 +3,9 @@ import { db } from '@/lib/db'
 import * as XLSX from 'xlsx'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('tracking-export')
 
 // GET /api/tracking/export — экспорт отчёта покрытия ДИ в Excel (.xlsx).
 // Параметры те же, что у /api/tracking/dashboard (companyId, departmentId).
@@ -104,7 +107,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Tracking export error:', error)
+    log.error('Tracking export error:', { error })
     return NextResponse.json({ error: 'Ошибка экспорта отчёта' }, { status: 500 })
   }
 }

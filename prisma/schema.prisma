@@ -201,12 +201,14 @@ model ArchiveDI {
   // Фаза 23: сгенерированные ДИ, созданные на базе этой архивной ДИ.
   derivedGeneratedDIs GeneratedDI[] @relation("DISourceArchive")
   fileName    String?    // Имя загруженного файла
+  deletedAt   DateTime?
   uploadedAt  DateTime @default(now())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([positionId])
   @@index([uploadedAt])
+  @@index([deletedAt])
 }
 
 // ==========================================
@@ -285,6 +287,7 @@ model GeneratedDI {
   currentVersion   Int      @default(1)        // Текущая версия ДИ
   signedByEmployee Boolean  @default(false)   // Подписана сотрудником
   signedAt         DateTime?                   // Дата подписания сотрудником
+  deletedAt        DateTime?
   sections         GeneratedDISection[]
   trackings        DITracking[]
   versions         DIVersion[]
@@ -298,6 +301,7 @@ model GeneratedDI {
   @@index([templateId])
   @@index([sourceArchiveId])
   @@index([createdAt])
+  @@index([deletedAt])
 }
 
 model GeneratedDISection {
@@ -620,15 +624,17 @@ model User {
   name         String?
   role         String   @default("user") // admin | kdp | user
   permissions  String?  // JSON: {"tab-id": "read"|"write"|"none"} — null = полный доступ (admin)
- passwordHash String
- passwordChangedAt DateTime?
- isActive     Boolean  @default(true)
+passwordHash String
+passwordChangedAt DateTime?
+isActive     Boolean  @default(true)
+  deletedAt      DateTime?
   lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([email])
   @@index([role])
+  @@index([deletedAt])
 }
 
 // ==========================================

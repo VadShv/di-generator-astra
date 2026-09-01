@@ -1,0 +1,26 @@
+[Unit]
+Description=DI Generator — Astra Group
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=user1
+WorkingDirectory=/home/user1/di-generator-astra
+EnvironmentFile=/home/user1/di-generator-astra/.env
+Environment=NODE_ENV=production
+Environment=PORT=3001
+ExecStart=/home/user1/.bun/bin/bun .next/standalone/server.js
+Restart=always
+RestartSec=5
+# Жёсткий лимит памяти: при превышении процесс будет убит (OOM-killed).
+MemoryMax=1G
+# Мягкий лимит: при превышении процесс попадает под давление памяти
+# (throttling) до достижения MemoryMax, что предотвращает резкий OOM-kill
+# и даёт время на graceful shutdown / освобождение памяти.
+MemoryHigh=800M
+# Дать процессу время на корректное завершение при SIGTERM (graceful shutdown).
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

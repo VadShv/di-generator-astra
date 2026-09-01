@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('audit-log')
 
 const DEFAULT_PAGE_SIZE = 50
 const MAX_PAGE_SIZE = 200
@@ -33,7 +36,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ items, total, page, pageSize })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error fetching audit log:', error)
+    log.error('Error fetching audit log:', { error })
     return NextResponse.json({ error: 'Ошибка получения журнала действий' }, { status: 500 })
   }
 }

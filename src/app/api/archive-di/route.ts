@@ -13,6 +13,10 @@ import {
   deleteArchiveDI,
 } from '@/services/archive-di-service'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('archive-di')
+
 export async function GET(request: Request) {
   try {
     await requireAuth()
@@ -27,7 +31,7 @@ export async function GET(request: Request) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('ArchiveDI GET error:', error)
+    log.error('ArchiveDI GET error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки архива ДИ' }, { status: 500 })
   }
 }
@@ -40,7 +44,7 @@ export async function POST(request: Request) {
     return NextResponse.json(archiveDI, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('ArchiveDI POST error:', error)
+    log.error('ArchiveDI POST error:', { error })
     return NextResponse.json({ error: 'Ошибка создания архивной ДИ' }, { status: 500 })
   }
 }
@@ -53,7 +57,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(updated)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('ArchiveDI PUT error:', error)
+    log.error('ArchiveDI PUT error:', { error })
     return NextResponse.json({ error: 'Ошибка обновления архивной ДИ' }, { status: 500 })
   }
 }
@@ -66,7 +70,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('ArchiveDI DELETE error:', error)
+    log.error('ArchiveDI DELETE error:', { error })
     return NextResponse.json({ error: 'Ошибка удаления архивной ДИ' }, { status: 500 })
   }
 }

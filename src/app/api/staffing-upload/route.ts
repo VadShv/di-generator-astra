@@ -14,6 +14,10 @@ import { validateFileType } from '@/lib/file-type'
 import { requireAuth, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('staffing-upload')
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 МБ
 
 // Нормализация названия подразделения для дедупликации.
@@ -237,7 +241,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Неизвестный режим: ${mode}` }, { status: 400 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('POST /api/staffing-upload error:', error)
+    log.error('POST /api/staffing-upload error:', { error })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Ошибка обработки файла' },
       { status: 500 }

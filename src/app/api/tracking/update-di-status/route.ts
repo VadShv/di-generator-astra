@@ -3,6 +3,9 @@ import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 import { createNotification } from '@/lib/notifications'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('tracking-update-di-status')
 
 // PUT /api/tracking/update-di-status - Update the GeneratedDI status
 export async function PUT(request: Request) {
@@ -68,7 +71,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(updated)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Update DI status error:', error)
+    log.error('Update DI status error:', { error })
     return NextResponse.json({ error: 'Ошибка обновления статуса ДИ' }, { status: 500 })
   }
 }

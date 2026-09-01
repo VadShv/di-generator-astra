@@ -5,6 +5,9 @@
 import type { AIProviderClient } from '@/lib/ai-connector'
 import { buildGenerationSystemPrompt, buildSectionUserPrompt, buildArchiveContext, type ArchiveDIRef, type PositionForContext } from '@/lib/di/prompts'
 import { db } from '@/lib/db'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('generate-core')
 
 /** Секция шаблона (минимальный набор для генерации). */
 export interface TemplateSectionForGen {
@@ -98,7 +101,7 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
       })
     } catch (aiError) {
       // Логируем, но продолжаем генерацию остальных секций.
-      console.error(`AI generation error for section "${section.title}":`, aiError)
+      log.error(`AI generation error for section "${section.title}":`, { error: aiError })
       results.push({
         sectionTitle: section.title,
         sectionContent: errorPlaceholder,
@@ -155,7 +158,7 @@ export async function generateAiCultureSection(
       aiGenerated: true,
     }
   } catch (cultureError) {
-    console.error('AI Culture section error:', cultureError)
+    log.error('AI Culture section error:', { error: cultureError })
     return null
   }
 }

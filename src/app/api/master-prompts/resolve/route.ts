@@ -3,6 +3,9 @@ import { db } from '@/lib/db'
  import { PROMPT_CATEGORIES, type PromptCategory } from '@/lib/master-prompt'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('master-prompts-resolve')
 
 export async function POST(request: NextRequest) {
   try {
@@ -139,7 +142,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error resolving master prompt:', error)
+    log.error('Error resolving master prompt:', { error })
     return NextResponse.json({ error: 'Ошибка при разрешении мастер-промпта' }, { status: 500 })
   }
 }

@@ -3,6 +3,10 @@ import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('compare-auto-save-original')
+
 // POST /api/compare/auto-save-original - Auto-save original generated DI as version
 export async function POST(request: Request) {
   try {
@@ -118,7 +122,7 @@ export async function POST(request: Request) {
     return NextResponse.json(version, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Auto-save-original POST error:', error)
+    log.error('Auto-save-original POST error:', { error })
     return NextResponse.json({ error: 'Ошибка автосохранения оригинала' }, { status: 500 })
   }
 }

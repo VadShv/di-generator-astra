@@ -20,6 +20,9 @@ export interface DIExtractResult {
 // 5 МБ распакованного текста — более чем достаточно для любой должностной
 // инструкции; превышение считается злоупотреблением и отклоняется.
 const MAX_EXTRACTED_TEXT_LENGTH = 5 * 1024 * 1024
+// Лимит на размер сырого буфера файла (defense-in-depth: даже если middleware
+// пропустит большой файл, парсер отклонит его до распаковки ZIP/PDF).
+const MAX_BUFFER_SIZE = 12 * 1024 * 1024
 
 // Типовые заголовки секций должностной инструкции (варианты написания).
 // Ключ — каноническое название секции, значение — массив regex-паттернов.
@@ -164,6 +167,12 @@ export async function extractDI(
   buffer: ArrayBuffer,
   fileName: string
 ): Promise<DIExtractResult> {
+  if (buffer.byteLength > MAX_BUFFER_SIZE) {
+    throw new Error(
+      `Файл слишком велик (${Math.round(buffer.byteLength / 1024 / 1024)} МБ). ` +
+        `Максимум ${Math.round(MAX_BUFFER_SIZE / 1024 / 1024)} МБ.`
+    )
+  }
   const ext = fileName.toLowerCase().split('.').pop() || ''
   let rawText: string
   let fileType: 'pdf' | 'docx'

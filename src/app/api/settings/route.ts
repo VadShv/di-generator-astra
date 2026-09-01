@@ -3,6 +3,10 @@ import { db } from '@/lib/db'
 import { requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('settings')
+
 // GET /api/settings — все системные настройки (только admin)
 export async function GET(request: NextRequest) {
   try {
@@ -15,7 +19,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error fetching settings:', error)
+    log.error('Error fetching settings:', { error })
     return NextResponse.json({ error: 'Ошибка получения настроек' }, { status: 500 })
   }
 }
@@ -41,7 +45,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, key, value: String(value) })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error updating settings:', error)
+    log.error('Error updating settings:', { error })
     return NextResponse.json({ error: 'Ошибка обновления настроек' }, { status: 500 })
   }
 }

@@ -3,6 +3,10 @@ import { getProviderClient } from '@/lib/ai-connector'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('compare-ai-text-diff')
+
 // POST /api/compare/ai-text-diff — универсальное ИИ-сравнение двух произвольных
 // текстов должностных инструкций (архивная, сгенерированная версия, согласованная и т.д.).
 // Принимает: { text1, text2, title1, title2, context }
@@ -90,7 +94,7 @@ ${norm2}
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('ai-text-diff error:', error)
+    log.error('ai-text-diff error:', { error })
     return NextResponse.json(
       { error: 'Ошибка ИИ-сравнения текстов' },
       { status: 500 },

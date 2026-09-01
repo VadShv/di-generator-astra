@@ -8,6 +8,9 @@ import {
 } from '@/lib/master-prompt'
 import { requireAuth, requirePermission } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('master-prompts')
 
 // Допустимые категории промптов (соответствуют PROMPT_CATEGORIES в src/lib/master-prompt.ts).
 const VALID_CATEGORIES = new Set<string>(Object.keys(PROMPT_CATEGORIES))
@@ -117,7 +120,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(prompts)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('MasterPrompts GET error:', error)
+    log.error('MasterPrompts GET error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки мастер-промптов' }, { status: 500 })
   }
 }
@@ -205,7 +208,7 @@ export async function POST(request: Request) {
     return NextResponse.json(prompt, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('MasterPrompts POST error:', error)
+    log.error('MasterPrompts POST error:', { error })
     return NextResponse.json({ error: 'Ошибка создания мастер-промпта' }, { status: 500 })
   }
 }
@@ -305,7 +308,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(prompt)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('MasterPrompts PUT error:', error)
+    log.error('MasterPrompts PUT error:', { error })
     return NextResponse.json({ error: 'Ошибка обновления мастер-промпта' }, { status: 500 })
   }
 }
@@ -331,7 +334,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('MasterPrompts DELETE error:', error)
+    log.error('MasterPrompts DELETE error:', { error })
     return NextResponse.json({ error: 'Ошибка удаления мастер-промпта' }, { status: 500 })
   }
 }

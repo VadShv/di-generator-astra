@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('business-functions')
 
 // GET: List all business functions, optionally filtered by isActive
 export async function GET(request: NextRequest) {
@@ -27,7 +30,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(businessFunctions)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error fetching business functions:', error)
+    log.error('Error fetching business functions:', { error })
     return NextResponse.json(
       { error: 'Ошибка при получении бизнес-функций' },
       { status: 500 }
@@ -75,7 +78,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(businessFunction, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error creating business function:', error)
+    log.error('Error creating business function:', { error })
     return NextResponse.json(
       { error: 'Ошибка при создании бизнес-функции' },
       { status: 500 }
@@ -134,7 +137,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(businessFunction)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error updating business function:', error)
+    log.error('Error updating business function:', { error })
     return NextResponse.json(
       { error: 'Ошибка при обновлении бизнес-функции' },
       { status: 500 }
@@ -180,7 +183,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error deleting business function:', error)
+    log.error('Error deleting business function:', { error })
     return NextResponse.json(
       { error: 'Ошибка при удалении бизнес-функции' },
       { status: 500 }

@@ -127,7 +127,7 @@ export async function POST(
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error generating RACI:', error)
+    log.error('Error generating RACI:', { error })
     return NextResponse.json({ error: 'Ошибка генерации RACI матрицы' }, { status: 500 })
   }
 }

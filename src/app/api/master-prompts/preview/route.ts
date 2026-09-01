@@ -9,6 +9,9 @@ import {
 } from '@/lib/master-prompt'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('master-prompts-preview')
 
 // POST /api/master-prompts/preview — предпросмотр рендера промпта с подставленными
 // переменными без обращения к ИИ-модели (Фаза 4/5).
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('MasterPrompts preview error:', error)
+    log.error('MasterPrompts preview error:', { error })
     return NextResponse.json({ error: 'Ошибка предпросмотра промпта' }, { status: 500 })
   }
 }

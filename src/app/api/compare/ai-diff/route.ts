@@ -4,6 +4,10 @@ import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('compare-ai-diff')
+
 // POST /api/compare/ai-diff - AI-powered comparison of two versions
 export async function POST(request: Request) {
   try {
@@ -136,7 +140,7 @@ ${text2}
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('AI-diff POST error:', error)
+    log.error('AI-diff POST error:', { error })
     return NextResponse.json({ error: 'Ошибка ИИ-сравнения версий' }, { status: 500 })
   }
 }

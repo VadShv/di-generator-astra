@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('tracking-tags')
 
 // GET /api/tracking-tags — список меток.
 // Фильтры: entityType, entityId, isResolved, assignee.
@@ -30,7 +33,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(tags)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('TrackingTag GET error:', error)
+    log.error('TrackingTag GET error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки меток' }, { status: 500 })
   }
 }
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(tag, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('TrackingTag POST error:', error)
+    log.error('TrackingTag POST error:', { error })
     return NextResponse.json({ error: 'Ошибка создания метки' }, { status: 500 })
   }
 }
@@ -106,7 +109,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(updated)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('TrackingTag PUT error:', error)
+    log.error('TrackingTag PUT error:', { error })
     return NextResponse.json({ error: 'Ошибка обновления метки' }, { status: 500 })
   }
 }
@@ -131,7 +134,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('TrackingTag DELETE error:', error)
+    log.error('TrackingTag DELETE error:', { error })
     return NextResponse.json({ error: 'Ошибка удаления метки' }, { status: 500 })
   }
 }

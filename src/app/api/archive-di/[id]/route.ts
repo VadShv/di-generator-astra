@@ -3,6 +3,10 @@ import { db } from '@/lib/db'
 import { requirePermission, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('archive-di')
+
 // GET /api/archive-di/[id] - Get single archive DI with full content.
 // Ресурс общекорпоративный (без per-user owner) — доступ регулируется
 // матрицей прав: requirePermission('archive', 'read').
@@ -35,7 +39,7 @@ export async function GET(
     return NextResponse.json(archiveDI)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('ArchiveDI GET [id] error:', error)
+    log.error('ArchiveDI GET [id] error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки архивной ДИ' }, { status: 500 })
   }
 }
@@ -59,7 +63,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('ArchiveDI DELETE [id] error:', error)
+    log.error('ArchiveDI DELETE [id] error:', { error })
     return NextResponse.json({ error: 'Ошибка удаления архивной ДИ' }, { status: 500 })
   }
 }

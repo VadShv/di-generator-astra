@@ -3,6 +3,10 @@ import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('generated-di')
+
 const DEFAULT_PAGE_SIZE = 50
 const MAX_PAGE_SIZE = 200
 
@@ -66,7 +70,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ items: withType, total, page, pageSize })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('GeneratedDI GET error:', error)
+    log.error('GeneratedDI GET error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки сгенерированных ДИ' }, { status: 500 })
   }
 }

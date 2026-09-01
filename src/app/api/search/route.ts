@@ -3,6 +3,10 @@ import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('search')
+
 // Глобальный поиск по должностям, подразделениям и должностным инструкциям
 // (сгенерированным и архивным). GET /api/search?q=<текст>&limit=<число>
 // Возвращает сгруппированные результаты с контекстом для перехода.
@@ -125,7 +129,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Search error:', error)
+    log.error('Search error:', { error })
     return NextResponse.json({ error: 'Ошибка поиска' }, { status: 500 })
   }
 }

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('position-lineages')
 
 // GET /api/position-lineages — список линеек
 export async function GET(request: NextRequest) {
@@ -22,7 +25,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(lineages)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error fetching lineages:', error)
+    log.error('Error fetching lineages:', { error })
     return NextResponse.json({ error: 'Ошибка получения линеек' }, { status: 500 })
   }
 }
@@ -59,7 +62,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(lineage, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error creating lineage:', error)
+    log.error('Error creating lineage:', { error })
     return NextResponse.json({ error: 'Ошибка создания линейки' }, { status: 500 })
   }
 }

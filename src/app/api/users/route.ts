@@ -5,6 +5,9 @@ import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { hashPassword } from '@/lib/auth/password'
 import { getPresetForRole, ALL_TABS, type Permissions } from '@/lib/auth/permissions'
 import { createUserSchema } from '@/lib/validation/schemas'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('users')
 
 // GET /api/users — список пользователей (только admin)
 export async function GET(request: NextRequest) {
@@ -26,7 +29,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(users)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error fetching users:', error)
+    log.error('Error fetching users:', { error })
     return NextResponse.json({ error: 'Ошибка получения списка пользователей' }, { status: 500 })
   }
 }
@@ -68,7 +71,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(user, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error creating user:', error)
+    log.error('Error creating user:', { error })
     return NextResponse.json({ error: 'Ошибка создания пользователя' }, { status: 500 })
   }
 }

@@ -39,6 +39,9 @@ export interface ParseResult {
 // 10000 строк — разумный потолок для штатного расписания; превышение
 // считается злоупотреблением и прерывает обработку.
 const MAX_EXCEL_ROWS = 10000
+// Лимит на размер сырого буфера файла (defense-in-depth: даже если middleware
+// пропустит большой файл, парсер отклонит его до распаковки XLSX).
+const MAX_BUFFER_SIZE = 12 * 1024 * 1024
 
 // Возможные варианты названий колонок (lowercase, без пробелов) для каждого поля.
 const COLUMN_ALIASES: Record<string, string[]> = {
@@ -80,6 +83,18 @@ function findColumnIndex(headers: string[], aliases: string[]): number {
  * @param buffer содержимое .xlsx файла
  */
 export function parseStaffingExcel(buffer: ArrayBuffer): ParseResult {
+  if (buffer.byteLength > MAX_BUFFER_SIZE) {
+    return {
+      rows: [],
+      errors: [{
+        rowNumber: 0,
+        message: `Файл слишком велик (${Math.round(buffer.byteLength / 1024 / 1024)} МБ). ` +
+          `Максимум ${Math.round(MAX_BUFFER_SIZE / 1024 / 1024)} МБ.`,
+      }],
+      detectedHeaders: [],
+      columnMapping: {},
+    }
+  }
   const workbook = XLSX.read(buffer, { type: 'array' })
   // Берём первый лист.
   const sheetName = workbook.SheetNames[0]

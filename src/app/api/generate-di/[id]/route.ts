@@ -3,6 +3,10 @@ import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 import { getGeneratedDIById } from '@/services/generated-di-service'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('generate-di')
+
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAuth()
@@ -11,7 +15,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json(di)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('GenerateDI GET by id error:', error)
+    log.error('GenerateDI GET by id error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки ДИ' }, { status: 500 })
   }
 }

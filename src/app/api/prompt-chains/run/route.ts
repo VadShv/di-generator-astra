@@ -10,6 +10,9 @@ import { getProviderClient, getZaiFallbackClient } from '@/lib/ai-connector/ai-p
 import type { GenerateRequest, ChatMessage } from '@/lib/ai-connector/types'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('prompt-chains-run')
 
 // POST /api/prompt-chains/run — запуск цепочки промптов с прогрессом.
 // Тело: { chainId, positionId?, providerId?, variables?: Record<string,string> }
@@ -186,7 +189,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('PromptChains run error:', error)
+    log.error('PromptChains run error:', { error })
     const message = error instanceof Error ? error.message : 'Ошибка запуска цепочки промптов'
     return NextResponse.json({ error: message }, { status: 500 })
   }

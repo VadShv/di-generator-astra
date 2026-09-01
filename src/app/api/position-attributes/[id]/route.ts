@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('position-attributes')
 
 // PUT /api/position-attributes/[id] — обновление признака
 export async function PUT(
@@ -47,7 +50,7 @@ export async function PUT(
     return NextResponse.json(updated)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error updating position attribute:', error)
+    log.error('Error updating position attribute:', { error })
     return NextResponse.json(
       { error: 'Ошибка при обновлении признака должности' },
       { status: 500 }
@@ -77,7 +80,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error deleting position attribute:', error)
+    log.error('Error deleting position attribute:', { error })
     return NextResponse.json(
       { error: 'Ошибка при удалении признака должности' },
       { status: 500 }

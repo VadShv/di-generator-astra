@@ -165,6 +165,25 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
     data: { total: positions.length },
   })
 
+  // Pre-fetch archive DIs for ALL positions in a single query (N+1 fix).
+  // Each position needs top-2 most recent archives; we fetch all at once and
+  // group them in-memory to avoid per-position DB round-trips.
+  const allArchiveDIs = await db.archiveDI.findMany({
+    where: { positionId: { in: positions.map((p) => p.id) } },
+    orderBy: { uploadedAt: 'desc' },
+    select: { id: true, positionId: true, title: true, content: true, uploadedAt: true },
+  })
+  const archiveByPosition = new Map<string, typeof allArchiveDIs>()
+  for (const ar of allArchiveDIs) {
+    if (!ar.positionId) continue
+    const arr = archiveByPosition.get(ar.positionId)
+    if (arr) {
+      if (arr.length < 2) arr.push(ar)
+    } else {
+      archiveByPosition.set(ar.positionId, [ar])
+    }
+  }
+
   const results: Array<{ positionId: string; positionTitle: string; diId: string; title: string; status: string; message?: string }> = []
   let completed = 0
   let failed = 0
@@ -183,11 +202,7 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
         ? renderPrompt(masterPrompt.content, buildContextFromPosition(position))
         : null
 
-      const archiveDIs = await db.archiveDI.findMany({
-        where: { positionId: position.id },
-        orderBy: { uploadedAt: 'desc' },
-        take: 2,
-      })
+      const archiveDIs = archiveByPosition.get(position.id) ?? []
       const archiveRefs: ArchiveDIRef[] = archiveDIs.map((di) => ({ title: di.title, content: di.content }))
 
       const generatedSections = await generateSectionsForPosition({

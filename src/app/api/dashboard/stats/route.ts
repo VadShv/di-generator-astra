@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('dashboard-stats')
 
 export async function GET() {
   try {
@@ -38,7 +41,7 @@ export async function GET() {
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Dashboard stats error:', error)
+    log.error('Dashboard stats error:', { error })
     return NextResponse.json(
       {
         departments: 0,

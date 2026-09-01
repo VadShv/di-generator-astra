@@ -12,6 +12,9 @@ import {
   updateCompany,
   deleteCompany,
 } from '@/services/company-service'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('companies')
 
 export async function GET() {
   try {
@@ -20,7 +23,7 @@ export async function GET() {
     return NextResponse.json(companies)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error fetching companies:', error)
+    log.error('Error fetching companies:', { error })
     return NextResponse.json({ error: 'Ошибка при получении компаний' }, { status: 500 })
   }
 }
@@ -33,7 +36,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(company, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error creating company:', error)
+    log.error('Error creating company:', { error })
     return NextResponse.json({ error: 'Ошибка при создании компании' }, { status: 500 })
   }
 }
@@ -46,7 +49,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(company)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error updating company:', error)
+    log.error('Error updating company:', { error })
     return NextResponse.json({ error: 'Ошибка при обновлении компании' }, { status: 500 })
   }
 }
@@ -59,7 +62,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error deleting company:', error)
+    log.error('Error deleting company:', { error })
     return NextResponse.json({ error: 'Ошибка при удалении компании' }, { status: 500 })
   }
 }

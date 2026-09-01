@@ -4,6 +4,9 @@ import { requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { getAppSession } from '@/lib/auth/session'
 import { updateUserSchema } from '@/lib/validation/schemas'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('users')
 
 // PUT /api/users/[id] — обновление пользователя (только admin)
 export async function PUT(
@@ -35,7 +38,7 @@ export async function PUT(
     return NextResponse.json(updated)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error updating user:', error)
+    log.error('Error updating user:', { error })
     return NextResponse.json({ error: 'Ошибка обновления пользователя' }, { status: 500 })
   }
 }
@@ -64,7 +67,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error deleting user:', error)
+    log.error('Error deleting user:', { error })
     return NextResponse.json({ error: 'Ошибка удаления пользователя' }, { status: 500 })
   }
 }

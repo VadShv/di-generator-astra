@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('tracking-dashboard')
 
 // GET /api/tracking/dashboard — агрегированный обзор покрытия ДИ.
 // Возвращает дерево: юр. лицо → подразделения → должности с расчётным статусом ДИ.
@@ -128,7 +131,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ overall, departments: filtered })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Tracking dashboard error:', error)
+    log.error('Tracking dashboard error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки дашборда отслеживания' }, { status: 500 })
   }
 }

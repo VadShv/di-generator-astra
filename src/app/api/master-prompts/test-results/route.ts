@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('master-prompts-test-results')
 
 // GET /api/master-prompts/test-results — история тестов промпта.
 // ?masterPromptId=... — фильтр по промпту.
@@ -25,7 +28,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(results)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('TestResults GET error:', error)
+    log.error('TestResults GET error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки результатов тестов' }, { status: 500 })
   }
 }
@@ -60,7 +63,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(updated)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('TestResults PUT error:', error)
+    log.error('TestResults PUT error:', { error })
     return NextResponse.json({ error: 'Ошибка обновления оценки' }, { status: 500 })
   }
 }

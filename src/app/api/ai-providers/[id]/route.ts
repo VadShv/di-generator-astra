@@ -8,6 +8,9 @@ import { encryptApiKey, maskApiKey } from '@/lib/ai-connector'
 import { validateProviderUrl } from '@/lib/ai-connector/url-validator'
 import { requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ai-providers')
 
 function toDto(row: {
   id: string
@@ -60,7 +63,7 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json(toDto(provider))
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('GET /api/ai-providers/[id] error:', error)
+    log.error('GET /api/ai-providers/[id] error:', { error })
     return NextResponse.json({ error: 'Ошибка получения провайдера' }, { status: 500 })
   }
 }
@@ -133,7 +136,7 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json(toDto(updated))
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('PATCH /api/ai-providers/[id] error:', error)
+    log.error('PATCH /api/ai-providers/[id] error:', { error })
     return NextResponse.json({ error: 'Ошибка обновления провайдера' }, { status: 500 })
   }
 }
@@ -151,7 +154,7 @@ export async function DELETE(_request: Request, { params }: Params) {
     return NextResponse.json({ ok: true })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('DELETE /api/ai-providers/[id] error:', error)
+    log.error('DELETE /api/ai-providers/[id] error:', { error })
     return NextResponse.json({ error: 'Ошибка удаления провайдера' }, { status: 500 })
   }
 }

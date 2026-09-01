@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAppSession } from '@/lib/auth/session'
+import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 import { createNotification } from '@/lib/notifications'
+
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('generate-di-status')
 
 // GET /api/generate-di/[id]/status — история смены статусов ДИ
 export async function GET(
@@ -10,10 +14,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getAppSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Требуется аутентификация' }, { status: 401 })
-    }
+    const session = await requireAuth()
+    const userId = session?.user?.id || null
+    const userEmail = session?.user?.email || null
 
     const { id } = await params
 
@@ -35,10 +38,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getAppSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Требуется аутентификация' }, { status: 401 })
-    }
+    const session = await requireAuth()
+    const userId = session?.user?.id || null
+    const userEmail = session?.user?.email || null
 
     const { id } = await params
     const body = await request.json()
@@ -71,8 +73,8 @@ export async function POST(
           fromStatus: di.status,
           toStatus,
           comment: comment || null,
-          userId: session.user.id || null,
-          userEmail: session.user.email || null,
+          userId,
+          userEmail,
         },
       }),
     ])
@@ -89,7 +91,7 @@ export async function POST(
     return NextResponse.json(updatedDi)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error changing DI status:', error)
+    log.error('Error changing DI status:', { error })
     return NextResponse.json({ error: 'Ошибка смены статуса' }, { status: 500 })
   }
 }

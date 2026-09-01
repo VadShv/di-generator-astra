@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('tracking')
 
 // GET /api/tracking - List all tracking entries with DI and position info
 export async function GET(request: Request) {
@@ -45,7 +48,7 @@ export async function GET(request: Request) {
     return NextResponse.json(trackings)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Tracking GET error:', error)
+    log.error('Tracking GET error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки отслеживаний' }, { status: 500 })
   }
 }
@@ -99,7 +102,7 @@ export async function POST(request: Request) {
     return NextResponse.json(tracking, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Tracking POST error:', error)
+    log.error('Tracking POST error:', { error })
     return NextResponse.json({ error: 'Ошибка создания записи отслеживания' }, { status: 500 })
   }
 }
@@ -151,7 +154,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(updated)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Tracking PUT error:', error)
+    log.error('Tracking PUT error:', { error })
     return NextResponse.json({ error: 'Ошибка обновления записи отслеживания' }, { status: 500 })
   }
 }
@@ -184,7 +187,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Tracking DELETE error:', error)
+    log.error('Tracking DELETE error:', { error })
     return NextResponse.json({ error: 'Ошибка удаления записи отслеживания' }, { status: 500 })
   }
 }

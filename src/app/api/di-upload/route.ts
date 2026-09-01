@@ -10,6 +10,10 @@ import { validateFileType, sanitizeFileName } from '@/lib/file-type'
 import { requireAuth, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('di-upload')
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 МБ
 
 // POST — обработка запроса (parse или save)
@@ -123,7 +127,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Неизвестный режим: ${mode}` }, { status: 400 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('POST /api/di-upload error:', error)
+    log.error('POST /api/di-upload error:', { error })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Ошибка обработки файла' },
       { status: 500 }
@@ -162,7 +166,7 @@ export async function GET() {
     )
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('GET /api/di-upload error:', error)
+    log.error('GET /api/di-upload error:', { error })
     return NextResponse.json({ error: 'Ошибка получения списка документов' }, { status: 500 })
   }
 }

@@ -3,6 +3,10 @@ import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('compare')
+
 // GET /api/compare/[id] - Get single version detail
 export async function GET(
   request: Request,
@@ -37,7 +41,7 @@ export async function GET(
     return NextResponse.json(version)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Compare GET [id] error:', error)
+    log.error('Compare GET [id] error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки версии' }, { status: 500 })
   }
 }

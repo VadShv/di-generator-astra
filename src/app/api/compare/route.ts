@@ -3,6 +3,10 @@ import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('compare')
+
 // GET /api/compare - Paginated list of DI versions (with DI info)
 // Параметры: generatedDIId, page, pageSize
 // Возвращает: { items, total, page, pageSize }
@@ -60,7 +64,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ items, total, page, pageSize })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Compare GET error:', error)
+    log.error('Compare GET error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки версий' }, { status: 500 })
   }
 }
@@ -125,7 +129,7 @@ export async function POST(request: Request) {
     return NextResponse.json(version, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Compare POST error:', error)
+    log.error('Compare POST error:', { error })
     return NextResponse.json({ error: 'Ошибка создания версии' }, { status: 500 })
   }
 }

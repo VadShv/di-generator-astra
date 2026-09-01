@@ -7,6 +7,9 @@ import {
   updatePosition,
   deletePosition,
 } from '@/services/position-service'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('positions')
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,7 +24,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(positions)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error fetching positions:', error)
+    log.error('Error fetching positions:', { error })
     return NextResponse.json({ error: 'Ошибка при получении должностей' }, { status: 500 })
   }
 }
@@ -34,7 +37,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(position, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error creating position:', error)
+    log.error('Error creating position:', { error })
     return NextResponse.json({ error: 'Ошибка при создании должности' }, { status: 500 })
   }
 }
@@ -47,7 +50,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(position)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error updating position:', error)
+    log.error('Error updating position:', { error })
     return NextResponse.json({ error: 'Ошибка при обновлении должности' }, { status: 500 })
   }
 }
@@ -60,7 +63,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error deleting position:', error)
+    log.error('Error deleting position:', { error })
     return NextResponse.json({ error: 'Ошибка при удалении должности' }, { status: 500 })
   }
 }

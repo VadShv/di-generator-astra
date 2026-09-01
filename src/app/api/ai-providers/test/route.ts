@@ -10,6 +10,9 @@ import { validateProviderUrl } from '@/lib/ai-connector/url-validator'
 import type { AIProviderConfig } from '@/lib/ai-connector'
 import { requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ai-providers-test')
 
 export async function POST(request: Request) {
   try {
@@ -85,7 +88,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('POST /api/ai-providers/test error:', error)
+    log.error('POST /api/ai-providers/test error:', { error })
     return NextResponse.json(
       {
         ok: false,

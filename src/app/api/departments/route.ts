@@ -7,6 +7,9 @@ import {
   updateDepartment,
   deleteDepartment,
 } from '@/services/department-service'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('departments')
 
 export async function GET() {
   try {
@@ -15,7 +18,7 @@ export async function GET() {
     return NextResponse.json(departments)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error fetching departments:', error)
+    log.error('Error fetching departments:', { error })
     return NextResponse.json({ error: 'Ошибка при получении подразделений' }, { status: 500 })
   }
 }
@@ -28,7 +31,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(department, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error creating department:', error)
+    log.error('Error creating department:', { error })
     return NextResponse.json({ error: 'Ошибка при создании подразделения' }, { status: 500 })
   }
 }
@@ -41,7 +44,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(department)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error updating department:', error)
+    log.error('Error updating department:', { error })
     return NextResponse.json({ error: 'Ошибка при обновлении подразделения' }, { status: 500 })
   }
 }
@@ -54,7 +57,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error deleting department:', error)
+    log.error('Error deleting department:', { error })
     return NextResponse.json({ error: 'Ошибка при удалении подразделения' }, { status: 500 })
   }
 }

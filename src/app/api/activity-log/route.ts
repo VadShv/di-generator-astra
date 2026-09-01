@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('activity-log')
 
 // GET /api/activity-log — ручные записи журнала.
 // Фильтры: entityType, entityId, tagId, generatedDIId.
@@ -31,7 +34,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(logs)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('ActivityLog GET error:', error)
+    log.error('ActivityLog GET error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки журнала' }, { status: 500 })
   }
 }
@@ -64,7 +67,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(log, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('ActivityLog POST error:', error)
+    log.error('ActivityLog POST error:', { error })
     return NextResponse.json({ error: 'Ошибка добавления записи' }, { status: 500 })
   }
 }
@@ -89,7 +92,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('ActivityLog DELETE error:', error)
+    log.error('ActivityLog DELETE error:', { error })
     return NextResponse.json({ error: 'Ошибка удаления записи' }, { status: 500 })
   }
 }

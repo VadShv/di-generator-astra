@@ -3,6 +3,10 @@ import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('token-usage')
+
 // GET /api/token-usage — агрегированная статистика потребления токенов
 export async function GET(request: Request) {
   try {
@@ -59,7 +63,7 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error fetching token usage:', error)
+    log.error('Error fetching token usage:', { error })
     return NextResponse.json({ error: 'Ошибка получения статистики токенов' }, { status: 500 })
   }
 }

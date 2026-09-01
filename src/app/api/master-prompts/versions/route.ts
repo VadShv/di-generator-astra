@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('master-prompts-versions')
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,7 +27,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(versions)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Error fetching prompt versions:', error)
+    log.error('Error fetching prompt versions:', { error })
     return NextResponse.json({ error: 'Ошибка при получении версий промпта' }, { status: 500 })
   }
 }

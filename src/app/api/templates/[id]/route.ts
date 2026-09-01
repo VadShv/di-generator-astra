@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requirePermission } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('templates')
 
 // GET /api/templates/[id] - Get single template with full sections.
 // Ресурс общекорпоративный (без per-user owner) — доступ регулируется
@@ -30,7 +33,7 @@ export async function GET(
     return NextResponse.json(template)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Template GET [id] error:', error)
+    log.error('Template GET [id] error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки шаблона' }, { status: 500 })
   }
 }

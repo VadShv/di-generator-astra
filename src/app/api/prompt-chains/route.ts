@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('prompt-chains')
 
 // GET /api/prompt-chains — список цепочек промптов.
 // ?active=true — только активные.
@@ -28,7 +31,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('PromptChains GET error:', error)
+    log.error('PromptChains GET error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки цепочек промптов' }, { status: 500 })
   }
 }
@@ -64,7 +67,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ...chain, steps: safeParseSteps(chain.steps) }, { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('PromptChains POST error:', error)
+    log.error('PromptChains POST error:', { error })
     return NextResponse.json({ error: 'Ошибка создания цепочки промптов' }, { status: 500 })
   }
 }
@@ -102,7 +105,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ ...chain, steps: safeParseSteps(chain.steps) })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('PromptChains PUT error:', error)
+    log.error('PromptChains PUT error:', { error })
     return NextResponse.json({ error: 'Ошибка обновления цепочки промптов' }, { status: 500 })
   }
 }
@@ -129,7 +132,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('PromptChains DELETE error:', error)
+    log.error('PromptChains DELETE error:', { error })
     return NextResponse.json({ error: 'Ошибка удаления цепочки промптов' }, { status: 500 })
   }
 }

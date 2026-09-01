@@ -9,6 +9,9 @@ import type { ChatMessage } from '@/lib/ai-connector'
 import { requireRole } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ai-providers-generate')
 
 export async function POST(request: Request) {
   try {
@@ -46,7 +49,7 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('POST /api/ai-providers/generate error:', error)
+    log.error('POST /api/ai-providers/generate error:', { error })
     const message = error instanceof Error ? error.message : 'Ошибка генерации'
     return NextResponse.json({ error: message }, { status: 500 })
   }

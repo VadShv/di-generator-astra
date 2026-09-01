@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAppSession } from '@/lib/auth/session'
+import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
 // GET /api/notifications — список уведомлений текущего пользователя
 export async function GET(request: NextRequest) {
   try {
-    const session = await getAppSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Требуется аутентификация' }, { status: 401 })
-    }
+    const session = await requireAuth()
+    const userId = session?.user?.id
 
     const { searchParams } = new URL(request.url)
     const unreadOnly = searchParams.get('unread') === 'true'
     const limit = Math.min(50, parseInt(searchParams.get('limit') || '20', 10))
 
     const where = {
-      OR: [{ userId: session.user.id }, { userId: null }],
+      OR: [{ userId }, { userId: null }],
       ...(unreadOnly ? { isRead: false } : {}),
     }
 
@@ -41,10 +39,8 @@ export async function GET(request: NextRequest) {
 // PUT /api/notifications — отметить как прочитанное
 export async function PUT(request: NextRequest) {
   try {
-    const session = await getAppSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Требуется аутентификация' }, { status: 401 })
-    }
+    const session = await requireAuth()
+    const userId = session?.user?.id
 
     const body = await request.json()
     const { id, markAll } = body
@@ -52,7 +48,7 @@ export async function PUT(request: NextRequest) {
     if (markAll) {
       await db.notification.updateMany({
         where: {
-          OR: [{ userId: session.user.id }, { userId: null }],
+          OR: [{ userId }, { userId: null }],
           isRead: false,
         },
         data: { isRead: true },
@@ -67,7 +63,7 @@ export async function PUT(request: NextRequest) {
       const result = await db.notification.updateMany({
         where: {
           id,
-          OR: [{ userId: session.user.id }, { userId: null }],
+          OR: [{ userId }, { userId: null }],
         },
         data: { isRead: true },
       })

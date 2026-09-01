@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('activity-feed')
 
 // GET /api/activity-feed — единая лента событий Журнала действий.
 //
@@ -18,7 +21,7 @@ import { ApiError, errorResponse } from '@/lib/api-utils'
 //   entityType — company | department | position (тогда лента фильтруется по этой сущности)
 //   entityId   — id сущности
 //   tagId      — только события конкретной метки
-//   limit      — макс. число событий (по умолчанию 100)
+//   limit      — макс. число событий (по умолч 100)
 //
 // Каждое событие приводится к единому формату:
 //   { id, type, title, description, author, createdAt, entityType, entityId,
@@ -99,15 +102,93 @@ export async function GET(request: NextRequest) {
 
     const events: FeedEvent[] = []
 
-    // 1. Создание/обновление ДИ.
+    // Build all where-clauses upfront, then execute all 7 queries in parallel
+    // to avoid sequential N+1 round-trips to the database.
     const diWhere: Record<string, unknown> = {}
     if (positionIds !== null) diWhere.positionId = { in: positionIds }
-    const generatedDIs = await db.generatedDI.findMany({
-      where: diWhere,
-      include: { position: { include: { department: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    })
+
+    const versionWhere: Record<string, unknown> = {}
+    if (positionIds !== null) {
+      versionWhere.generatedDI = { positionId: { in: positionIds } }
+    }
+
+    const auditWhere: Record<string, unknown> = {}
+    if (positionIds !== null) {
+      auditWhere.generatedDI = { positionId: { in: positionIds } }
+    }
+
+    const archiveWhere: Record<string, unknown> = {}
+    if (positionIds !== null) archiveWhere.positionId = { in: positionIds }
+
+    const trackingWhere: Record<string, unknown> = {}
+    if (positionIds !== null) trackingWhere.positionId = { in: positionIds }
+    else if (departmentIds !== null) trackingWhere.departmentId = { in: departmentIds }
+
+    const tagWhere: Record<string, unknown> = {}
+    if (entityType && entityId) {
+      tagWhere.entityType = entityType
+      tagWhere.entityId = entityId
+    }
+    if (tagId) tagWhere.id = tagId
+
+    const logWhere: Record<string, unknown> = {}
+    if (entityType && entityId) {
+      logWhere.OR = [
+        { entityType, entityId },
+        // Записи, привязанные к метке на этой сущности.
+        { tag: { entityType, entityId } },
+      ]
+    }
+    if (tagId) logWhere.tagId = tagId
+
+    // Параллельное выполнение всех 7 запросов — вместо последовательных
+    // round-trips к БД используется один Promise.all.
+    const [generatedDIs, versions, audits, archives, trackings, tags, logs] =
+      await Promise.all([
+        db.generatedDI.findMany({
+          where: diWhere,
+          include: { position: { include: { department: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        }),
+        db.dIVersion.findMany({
+          where: versionWhere,
+          include: { generatedDI: { include: { position: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        }),
+        db.dIAuditResult.findMany({
+          where: auditWhere,
+          include: { generatedDI: { include: { position: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        }),
+        db.archiveDI.findMany({
+          where: archiveWhere,
+          include: { position: true },
+          orderBy: { uploadedAt: 'desc' },
+          take: limit,
+        }),
+        db.dITracking.findMany({
+          where: trackingWhere,
+          include: { generatedDI: { include: { position: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        }),
+        db.trackingTag.findMany({
+          where: tagWhere,
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        }),
+        db.activityLog.findMany({
+          where: logWhere,
+          include: { tag: true },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        }),
+      ])
+
+    // 1. Создание/обновление ДИ.
     for (const di of generatedDIs) {
       events.push({
         id: `di-created-${di.id}`,
@@ -143,16 +224,6 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Версии ДИ.
-    const versionWhere: Record<string, unknown> = {}
-    if (positionIds !== null) {
-      versionWhere.generatedDI = { positionId: { in: positionIds } }
-    }
-    const versions = await db.dIVersion.findMany({
-      where: versionWhere,
-      include: { generatedDI: { include: { position: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    })
     for (const v of versions) {
       events.push({
         id: `version-${v.id}`,
@@ -171,16 +242,6 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. Аудиты ДИ.
-    const auditWhere: Record<string, unknown> = {}
-    if (positionIds !== null) {
-      auditWhere.generatedDI = { positionId: { in: positionIds } }
-    }
-    const audits = await db.dIAuditResult.findMany({
-      where: auditWhere,
-      include: { generatedDI: { include: { position: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    })
     for (const a of audits) {
       events.push({
         id: `audit-${a.id}`,
@@ -199,14 +260,6 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. Загрузка архивных ДИ.
-    const archiveWhere: Record<string, unknown> = {}
-    if (positionIds !== null) archiveWhere.positionId = { in: positionIds }
-    const archives = await db.archiveDI.findMany({
-      where: archiveWhere,
-      include: { position: true },
-      orderBy: { uploadedAt: 'desc' },
-      take: limit,
-    })
     for (const ar of archives) {
       events.push({
         id: `archive-${ar.id}`,
@@ -225,15 +278,6 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. Смена статусов согласования (DITracking).
-    const trackingWhere: Record<string, unknown> = {}
-    if (positionIds !== null) trackingWhere.positionId = { in: positionIds }
-    else if (departmentIds !== null) trackingWhere.departmentId = { in: departmentIds }
-    const trackings = await db.dITracking.findMany({
-      where: trackingWhere,
-      include: { generatedDI: { include: { position: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    })
     for (const t of trackings) {
       events.push({
         id: `tracking-${t.id}`,
@@ -252,17 +296,6 @@ export async function GET(request: NextRequest) {
     }
 
     // 6. Метки отслеживания.
-    const tagWhere: Record<string, unknown> = {}
-    if (entityType && entityId) {
-      tagWhere.entityType = entityType
-      tagWhere.entityId = entityId
-    }
-    if (tagId) tagWhere.id = tagId
-    const tags = await db.trackingTag.findMany({
-      where: tagWhere,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    })
     for (const tg of tags) {
       events.push({
         id: `tag-${tg.id}`,
@@ -281,21 +314,6 @@ export async function GET(request: NextRequest) {
     }
 
     // 7. Ручные записи журнала.
-    const logWhere: Record<string, unknown> = {}
-    if (entityType && entityId) {
-      logWhere.OR = [
-        { entityType, entityId },
-        // Записи, привязанные к метке на этой сущности.
-        { tag: { entityType, entityId } },
-      ]
-    }
-    if (tagId) logWhere.tagId = tagId
-    const logs = await db.activityLog.findMany({
-      where: logWhere,
-      include: { tag: true },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    })
     for (const lg of logs) {
       events.push({
         id: `log-${lg.id}`,
@@ -324,7 +342,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('Activity feed error:', error)
+    log.error('Activity feed error:', { error })
     return NextResponse.json({ error: 'Ошибка загрузки ленты действий' }, { status: 500 })
   }
 }

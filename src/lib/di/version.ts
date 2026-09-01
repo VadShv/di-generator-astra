@@ -5,7 +5,18 @@
  import { db } from '../db'
 
 /** Тип БД-клиента: основной или транзакционный. */
- type DbClient = PrismaClient | Parameters<Parameters<PrismaClient['$transaction']>[0]>[0]
+type DbClient = PrismaClient | Parameters<Parameters<PrismaClient['$transaction']>[0]>[0]
+type DbClientExtended = DbClient | typeof db
+// Минимальный интерфейс: клиент с доступом к dIVersion (основной extended-клиент
+// или транзакционный tx-клиент). Избегает конфликтов типов Prisma extension.
+interface DiVersionClient {
+  dIVersion: {
+    // any-параметр: контравариантность Prisma-генериков делает точную типизацию
+    // несовместимой между extended-клиентом и tx-клиентом. Runtime-контракт
+    // одинаковый — тип контролируется на стороне вызова.
+    create: (args: any) => Promise<any>
+  }
+}
 
 export interface SectionForVersion {
   title: string
@@ -34,16 +45,16 @@ export function serializeDiVersion(title: string, sections: SectionForVersion[])
  export async function createInitialVersion(
    generatedDIId: string,
    title: string,
-   sections: SectionForVersion[],
-   uploadedBy = 'ai-generate',
-   changeDescription = 'Начальная AI-генерация',
-   tx?: DbClient
- ): Promise<void> {
-   const content = serializeDiVersion(title, sections)
-   const client = tx ?? db
-   await client.dIVersion.create({
-    data: {
-      generatedDIId,
+  sections: SectionForVersion[],
+  uploadedBy = 'ai-generate',
+  changeDescription = 'Начальная AI-генерация',
+  tx?: DiVersionClient
+): Promise<void> {
+  const content = serializeDiVersion(title, sections)
+  const client = tx ?? db
+  await client.dIVersion.create({
+   data: {
+     generatedDIId,
       content,
       version: 1,
       isOriginal: true,

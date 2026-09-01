@@ -7,6 +7,9 @@ import { encryptApiKey, maskApiKey } from '@/lib/ai-connector'
 import { validateProviderUrl } from '@/lib/ai-connector/url-validator'
 import { requireRole, requireAuth } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('ai-providers')
 
 /** Преобразовать запись БД в безопасный DTO (без расшифрованного ключа). */
 function toDto(row: {
@@ -57,7 +60,7 @@ export async function GET() {
     return NextResponse.json(providers.map(toDto))
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('GET /api/ai-providers error:', error)
+    log.error('GET /api/ai-providers error:', { error })
     return NextResponse.json({ error: 'Ошибка получения списка провайдеров' }, { status: 500 })
   }
 }
@@ -134,7 +137,7 @@ export async function POST(request: Request) {
     return NextResponse.json(toDto(created), { status: 201 })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
-    console.error('POST /api/ai-providers error:', error)
+    log.error('POST /api/ai-providers error:', { error })
     return NextResponse.json({ error: 'Ошибка создания провайдера' }, { status: 500 })
   }
 }
