@@ -58,6 +58,17 @@ assertAuthConfigured()
 const isProduction = process.env.NODE_ENV === 'production'
 
 /**
+ * Cookie secure flag: true только если приложение доступно по HTTPS.
+ * В production за приложением обычно стоит reverse-proxy (Caddy/nginx) с TLS —
+ * тогда secure-cookик работают корректно. Но если прод работает по голому HTTP
+ * (без TLS-прокси), secure-cookie браузером отбрасываются и сессия не сохраняется.
+ * Переменная AUTH_COOKIE_SECURE позволяет явно управлять этим (по умолчанию = isProduction).
+ */
+const cookieSecure = process.env.AUTH_COOKIE_SECURE === undefined
+  ? isProduction
+  : process.env.AUTH_COOKIE_SECURE === 'true'
+
+/**
  * TTL-кэш для per-user проверки isActive/passwordChangedAt.
  * Избегает DB-запроса на каждый запрос — обновляется раз в 60 секунд.
  * Фаза 6, шаг 6.2: деактивированный пользователь теряет доступ в течение TTL,
@@ -113,7 +124,7 @@ export function invalidateUserStatusCache(userId: string): void {
  * Параметры cookie next-auth (Фаза 3, шаг 3.2 — Cookie security flags).
  *   httpOnly: true  — cookie недоступен из JS, защита от кражи сессии через XSS.
  *   sameSite: 'lax' — cookie не отправляется при cross-site запросах (CSRF).
- *   secure: true только в production — в dev нет TLS, secure-cookie не установится.
+ *   secure: true только если есть HTTPS (reverse-proxy с TLS) — см. cookieSecure.
  * Имена cookies оставлены стандартными (без __Secure- префикса), чтобы не
  * инвалидировать уже выданные сессии при развёртывании.
  */
@@ -121,7 +132,7 @@ const cookieOptions = {
   httpOnly: true,
   sameSite: 'lax' as const,
   path: '/',
-  secure: isProduction,
+  secure: cookieSecure,
 }
 
 export const authOptions: NextAuthOptions = {
@@ -133,7 +144,7 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/login',
   },
-  useSecureCookies: isProduction,
+  useSecureCookies: cookieSecure,
   cookies: {
     sessionToken: {
       name: 'next-auth.session-token',
