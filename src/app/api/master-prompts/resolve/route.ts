@@ -6,8 +6,10 @@ import {
   resolveMasterPromptWithDetails,
 } from '@/lib/master-prompt'
 import { requireAuth } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { createLogger } from '@/lib/logger'
+
+import { resolveMasterPromptSchema } from '@/lib/validation/schemas'
 
 const log = createLogger('master-prompts-resolve')
 
@@ -17,7 +19,7 @@ const log = createLogger('master-prompts-resolve')
 export async function POST(request: NextRequest) {
   try {
     await requireAuth()
-    const body = await request.json()
+    const body = await parseBody(request, resolveMasterPromptSchema)
     const { positionId, category } = body
 
     if (!positionId || typeof positionId !== 'string') {

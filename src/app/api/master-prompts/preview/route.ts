@@ -8,8 +8,10 @@ import {
   type PromptContext,
 } from '@/lib/master-prompt'
 import { requireAuth } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { createLogger } from '@/lib/logger'
+
+import { previewMasterPromptSchema } from '@/lib/validation/schemas'
 
 const log = createLogger('master-prompts-preview')
 
@@ -21,7 +23,7 @@ const log = createLogger('master-prompts-preview')
 export async function POST(request: NextRequest) {
   try {
     await requireAuth()
-    const body = await request.json()
+    const body = await parseBody(request, previewMasterPromptSchema)
     const { masterPromptId, content, positionId, variables } = body
 
     // Определяем исходный текст промпта.

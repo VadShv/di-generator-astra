@@ -324,6 +324,129 @@ export const changePasswordSchema = z
        .optional(),
      isActive: z.boolean().optional(),
    })
-   .refine((data) => Object.keys(data).length > 0, {
-     message: 'Укажите хотя бы одно поле для обновления',
-   })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'Укажите хотя бы одно поле для обновления',
+  })
+
+// ─────────────────────────────────────────────
+// Схемы роутов master-prompts/*
+// ─────────────────────────────────────────────
+
+const promptCategorySchema = z.enum(['generation', 'audit', 'improvement', 'ai_culture'])
+
+/** POST /api/master-prompts */
+export const createMasterPromptSchema = z.object({
+  name: nonEmptyString.max(500, 'Название слишком длинное'),
+  content: nonEmptyString.max(100_000, 'Содержимое слишком длинное'),
+  isActive: z.boolean().optional(),
+  isAiCulture: z.boolean().optional(),
+  category: promptCategorySchema.optional(),
+  variables: z.array(nonEmptyString).optional(),
+  departmentId: z.string().nullable().optional(),
+  businessFunctionId: z.string().nullable().optional(),
+  grade: z.string().trim().max(100).nullable().optional(),
+  functionType: z.string().trim().max(200).nullable().optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  companyId: z.string().nullable().optional(),
+  positionId: z.string().nullable().optional(),
+  tags: z.array(z.string().trim().max(100)).optional(),
+})
+
+/** PUT /api/master-prompts */
+export const updateMasterPromptSchema = z.object({
+  id: idSchema,
+  name: nonEmptyString.max(500).optional(),
+  content: nonEmptyString.max(100_000).optional(),
+  isActive: z.boolean().optional(),
+  isAiCulture: z.boolean().optional(),
+  category: promptCategorySchema.optional(),
+  variables: z.array(nonEmptyString).optional(),
+  departmentId: z.string().nullable().optional(),
+  businessFunctionId: z.string().nullable().optional(),
+  grade: z.string().trim().max(100).nullable().optional(),
+  functionType: z.string().trim().max(200).nullable().optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  companyId: z.string().nullable().optional(),
+  positionId: z.string().nullable().optional(),
+  tags: z.array(z.string().trim().max(100)).optional(),
+  changeDescription: z.string().trim().max(2000).optional(),
+})
+
+/** DELETE /api/master-prompts */
+export const deleteMasterPromptSchema = z.object({
+  id: idSchema,
+})
+
+// ─────────────────────────────────────────────
+// Схемы роутов prompt-chains/*
+// ─────────────────────────────────────────────
+
+const chainStepSchema = z.object({
+  category: promptCategorySchema,
+  order: z.number().int().min(0),
+  stopOnError: z.boolean().optional(),
+})
+
+/** POST /api/prompt-chains */
+export const createPromptChainSchema = z.object({
+  name: nonEmptyString.max(500, 'Название слишком длинное'),
+  description: z.string().trim().max(2000).optional(),
+  steps: z.array(chainStepSchema).max(20, 'Слишком много шагов').optional(),
+  isActive: z.boolean().optional(),
+})
+
+/** PUT /api/prompt-chains */
+export const updatePromptChainSchema = z.object({
+  id: idSchema,
+  name: nonEmptyString.max(500).optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  steps: z.array(chainStepSchema).max(20).optional(),
+  isActive: z.boolean().optional(),
+})
+
+/** DELETE /api/prompt-chains */
+export const deletePromptChainSchema = z.object({
+  id: idSchema,
+})
+
+// ─────────────────────────────────────────────
+// Схемы роутов master-prompts/test и /preview
+// ─────────────────────────────────────────────
+
+/** POST /api/master-prompts/test */
+export const testMasterPromptSchema = z.object({
+  masterPromptId: idSchema,
+  positionId: z.string().optional(),
+  providerId: z.string().optional(),
+  variables: z.record(z.string(), z.string()).optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().int().min(1).max(32_000).optional(),
+})
+
+/** POST /api/master-prompts/preview */
+export const previewMasterPromptSchema = z.object({
+  content: nonEmptyString.max(100_000),
+  masterPromptId: z.string().optional(),
+  positionId: z.string().optional(),
+  variables: z.record(z.string(), z.string()).optional(),
+})
+
+/** POST /api/master-prompts/resolve */
+export const resolveMasterPromptSchema = z.object({
+  positionId: idSchema,
+  category: promptCategorySchema.optional(),
+})
+
+/** POST /api/prompt-chains/run */
+export const runPromptChainSchema = z.object({
+  chainId: idSchema,
+  positionId: z.string().optional(),
+  providerId: z.string().optional(),
+  variables: z.record(z.string(), z.string()).optional(),
+})
+
+/** PUT /api/master-prompts/test-results */
+export const rateTestResultSchema = z.object({
+  id: idSchema,
+  rating: z.number().int().min(1).max(5),
+})

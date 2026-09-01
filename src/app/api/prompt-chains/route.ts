@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, requireRole } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { requireAuth, requirePermission, requireRole } from '@/lib/auth/session'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { createLogger } from '@/lib/logger'
+
+import {
+  createPromptChainSchema,
+  updatePromptChainSchema,
+  deletePromptChainSchema,
+} from '@/lib/validation/schemas'
 
 const log = createLogger('prompt-chains')
 
@@ -40,8 +46,8 @@ export async function GET(request: NextRequest) {
 // Тело: { name, description?, steps?: Array<{category, order, stopOnError}>, isActive? }
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth()
-    const body = await request.json()
+    await requirePermission('master-prompts', 'write')
+    const body = await parseBody(request, createPromptChainSchema)
     const { name, description, steps, isActive } = body
 
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -50,18 +56,19 @@ export async function POST(request: NextRequest) {
 
     const stepsJson = stringifySteps(steps)
 
-    // Если новая цепочка активна — снимаем isActive с остальных.
-    if (isActive === true) {
-      await db.promptChain.updateMany({ where: { isActive: true }, data: { isActive: false } })
-    }
-
-    const chain = await db.promptChain.create({
-      data: {
-        name: name.trim(),
-        description: description?.trim() || null,
-        steps: stepsJson,
-        isActive: isActive === true,
-      },
+    // Атомарно: снимаем isActive с остальных + создаём новую (защита от race condition).
+    const chain = await db.$transaction(async (tx) => {
+      if (isActive === true) {
+        await tx.promptChain.updateMany({ where: { isActive: true }, data: { isActive: false } })
+      }
+      return tx.promptChain.create({
+        data: {
+          name: name.trim(),
+          description: description?.trim() || null,
+          steps: stepsJson,
+          isActive: isActive === true,
+        },
+      })
     })
 
     return NextResponse.json({ ...chain, steps: safeParseSteps(chain.steps) }, { status: 201 })
@@ -76,8 +83,8 @@ export async function POST(request: NextRequest) {
 // Тело: { id, name?, description?, steps?, isActive? }
 export async function PUT(request: NextRequest) {
   try {
-    await requireAuth()
-    const body = await request.json()
+    await requirePermission('master-prompts', 'write')
+    const body = await parseBody(request, updatePromptChainSchema)
     const { id, name, description, steps, isActive } = body
 
     if (!id || typeof id !== 'string') {
@@ -89,18 +96,19 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Цепочка не найдена' }, { status: 404 })
     }
 
-    // Если активируем эту цепочку — снимаем isActive с остальных.
-    if (isActive === true && !existing.isActive) {
-      await db.promptChain.updateMany({ where: { isActive: true }, data: { isActive: false } })
-    }
-
     const updateData: Record<string, unknown> = {}
     if (name !== undefined) updateData.name = name.trim()
     if (description !== undefined) updateData.description = description?.trim() || null
     if (steps !== undefined) updateData.steps = stringifySteps(steps)
     if (isActive !== undefined) updateData.isActive = isActive === true
 
-    const chain = await db.promptChain.update({ where: { id }, data: updateData })
+    // Атомарно: снимаем isActive с остальных + обновляем текущую.
+    const chain = await db.$transaction(async (tx) => {
+      if (isActive === true && !existing.isActive) {
+        await tx.promptChain.updateMany({ where: { isActive: true }, data: { isActive: false } })
+      }
+      return tx.promptChain.update({ where: { id }, data: updateData })
+    })
 
     return NextResponse.json({ ...chain, steps: safeParseSteps(chain.steps) })
   } catch (error) {
@@ -115,7 +123,7 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     await requireRole('admin')
-    const body = await request.json()
+    const body = await parseBody(request, deletePromptChainSchema)
     const { id } = body
 
     if (!id || typeof id !== 'string') {

@@ -6,8 +6,14 @@ import {
   PROMPT_CATEGORIES,
 } from '@/lib/master-prompt'
 import { requireAuth, requirePermission } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { createLogger } from '@/lib/logger'
+
+import {
+  createMasterPromptSchema,
+  updateMasterPromptSchema,
+  deleteMasterPromptSchema,
+} from '@/lib/validation/schemas'
 
 const log = createLogger('master-prompts')
 
@@ -129,7 +135,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     await requirePermission('master-prompts', 'write')
-    const body = await request.json()
+    const body = await parseBody(request, createMasterPromptSchema)
     const {
       name,
       content,
@@ -224,7 +230,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     await requirePermission('master-prompts', 'write')
-    const body = await request.json()
+    const body = await parseBody(request, updateMasterPromptSchema)
     const {
       id,
       name,
@@ -328,7 +334,7 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     await requirePermission('master-prompts', 'write')
-    const body = await request.json()
+    const body = await parseBody(request, deleteMasterPromptSchema)
     const { id } = body
 
     if (!id || typeof id !== 'string') {

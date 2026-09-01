@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { createLogger } from '@/lib/logger'
+
+import { rateTestResultSchema } from '@/lib/validation/schemas'
 
 const log = createLogger('master-prompts-test-results')
 
@@ -38,7 +40,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     await requireAuth()
-    const body = await request.json()
+    const body = await parseBody(request, rateTestResultSchema)
     const { id, rating } = body
 
     if (!id || typeof id !== 'string') {

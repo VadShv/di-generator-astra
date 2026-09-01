@@ -9,8 +9,10 @@ import {
 import { getProviderClient, getZaiFallbackClient } from '@/lib/ai-connector/ai-provider-factory'
 import type { GenerateRequest, ChatMessage } from '@/lib/ai-connector/types'
 import { requireAuth } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { createLogger } from '@/lib/logger'
+
+import { runPromptChainSchema } from '@/lib/validation/schemas'
 
 const log = createLogger('prompt-chains-run')
 
@@ -22,7 +24,7 @@ const log = createLogger('prompt-chains-run')
 export async function POST(request: NextRequest) {
   try {
     await requireAuth()
-    const body = await request.json()
+    const body = await parseBody(request, runPromptChainSchema)
     const { chainId, positionId, providerId, variables } = body
 
     if (!chainId || typeof chainId !== 'string') {
@@ -144,11 +146,15 @@ export async function POST(request: NextRequest) {
         },
       ]
 
-      const generateRequest: GenerateRequest = { messages }
+      const STEP_TIMEOUT_MS = 120_000 // 2 min per step
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), STEP_TIMEOUT_MS)
+      const generateRequest: GenerateRequest = { messages, signal: controller.signal, timeoutMs: STEP_TIMEOUT_MS }
 
       const startTime = Date.now()
       try {
         const response = await client.generate(generateRequest)
+        clearTimeout(timer)
         const durationMs = Date.now() - startTime
 
         previousOutput = response.content
@@ -163,6 +169,7 @@ export async function POST(request: NextRequest) {
           error: null,
         })
       } catch (genError) {
+        clearTimeout(timer)
         const durationMs = Date.now() - startTime
         const errorMsg = genError instanceof Error ? genError.message : 'Ошибка генерации'
         results.push({
