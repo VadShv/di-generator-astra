@@ -30,10 +30,10 @@ import { extractVariables, estimateTokens, PROMPT_CATEGORIES } from '@/lib/maste
 import {
   type Department, type BusinessFunctionItem, type CompanyItem, type AIProviderItem,
   type MasterPrompt, type Position, type PromptChain, type PromptTestResultItem,
+  type PromptGroup,
   gradeLabel, parseTags, providerTypeLabel, STANDARD_VARIABLES,
 } from './master-prompts-types'
 
-interface PromptGroup { name: string; prompts: MasterPrompt[]; activeVersion: MasterPrompt | undefined; latestVersion: MasterPrompt }
 
 const categoryLabel = (cat: string | null | undefined): string => {
   if (!cat) return PROMPT_CATEGORIES.generation
@@ -103,6 +103,7 @@ export function MasterPromptsModule() {
   const [chainRunResult, setChainRunResult] = useState<{ results: Array<{ step: number; category: string; content: string; error: string | null }>; finalOutput: string } | null>(null)
   const [deletingChain, setDeletingChain] = useState<PromptChain | null>(null)
   const [chainRunLoading, setChainRunLoading] = useState(false)
+  const [chainsLoading, setChainsLoading] = useState(true)
   const [resolverPositionId, setResolverPositionId] = useState('')
   const [resolverResult, setResolverResult] = useState<{ prompt: MasterPrompt | null; resolution: { score: number; matchDetails: string[] } | null } | null>(null)
  const [resolverLoading, setResolverLoading] = useState(false)
@@ -142,10 +143,10 @@ export function MasterPromptsModule() {
     try { const res = await fetch('/api/ai-providers'); if (res.ok) setProviders(await res.json()) } catch { /* silent */ }
   }, [])
   const fetchChains = useCallback(async () => {
-    try { const res = await fetch('/api/prompt-chains'); if (res.ok) setChains(await res.json()) } catch { /* silent */ }
+    try { setChainsLoading(true); const res = await fetch('/api/prompt-chains'); if (res.ok) setChains(await res.json()) } catch { /* silent */ } finally { setChainsLoading(false) }
   }, [])
   const fetchTestResults = useCallback(async (promptId: string) => {
-    try { const res = await fetch(`/api/master-prompts/test-results?masterPromptId=${promptId}`); if (res.ok) setTestResults(await res.json()) } catch { /* silent */ }
+    try { const res = await fetch(`/api/master-prompts/test-results?masterPromptId=${promptId}`); if (res.ok) { const data = await res.json(); setTestResults(Array.isArray(data) ? data : data.results || []) } } catch { /* silent */ }
   }, [])
   const fetchPositions = useCallback(async () => {
     try { const res = await fetch('/api/positions'); if (res.ok) setPositions(await res.json()) } catch { /* silent */ }
@@ -565,7 +566,7 @@ export function MasterPromptsModule() {
           <div className="flex justify-end">
             <Button size="sm" onClick={() => { setChainForm({ id: null, name: '', description: '', steps: [], isActive: false }); setChainDialogOpen(true) }}><Plus className="h-4 w-4 mr-1" /> Создать цепочку</Button>
           </div>
-          {chains.length === 0 ? (
+          {chainsLoading ? <p className="text-center py-8 text-muted-foreground">Загрузка...</p> : chains.length === 0 ? (
             <Card><CardContent className="p-8 text-center text-muted-foreground">
               <Link2 className="h-10 w-10 mx-auto mb-2 opacity-50" />
               <p>Нет цепочек промптов</p>
@@ -716,6 +717,7 @@ export function MasterPromptsModule() {
               {viewingPrompt?.businessFunction && <Badge variant="outline">{viewingPrompt.businessFunction.name}</Badge>}
               {gradeLabel(viewingPrompt?.grade ?? null) && <Badge variant="outline">{gradeLabel(viewingPrompt?.grade ?? null)}</Badge>}
               {viewingPrompt?.useCount ? <Badge variant="outline">Использован {viewingPrompt.useCount} раз</Badge> : null}
+              {viewingPrompt?.estimatedTokens ? <Badge variant="outline">~{viewingPrompt.estimatedTokens} токенов</Badge> : null}
             </div>
             {viewingPrompt?.description && <p className="text-sm text-muted-foreground">{viewingPrompt.description}</p>}
             <pre className="whitespace-pre-wrap text-sm bg-muted p-4 rounded-lg max-h-[500px] overflow-y-auto">{viewingPrompt?.content}</pre>

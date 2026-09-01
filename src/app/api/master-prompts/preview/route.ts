@@ -64,6 +64,9 @@ export async function POST(request: NextRequest) {
     }
 
     const renderedContent = renderPrompt(rawContent, context)
+    if (renderedContent.length > 200_000) {
+      return NextResponse.json({ error: 'Размер отрендеренного промпта превышает лимит (200 000 символов)' }, { status: 413 })
+    }
     const detectedVariables = extractVariables(rawContent)
     // Незаполненные переменные остаются в виде {{...}} после рендера.
     const unfilledVariables = extractVariables(renderedContent)

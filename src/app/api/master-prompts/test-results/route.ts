@@ -11,23 +11,36 @@ const log = createLogger('master-prompts-test-results')
 // GET /api/master-prompts/test-results — история тестов промпта.
 // ?masterPromptId=... — фильтр по промпту.
 // ?limit=20 — ограничение количества.
+// ?page=1 — номер страницы (пагинация).
 export async function GET(request: NextRequest) {
   try {
     await requireAuth()
     const { searchParams } = new URL(request.url)
     const masterPromptId = searchParams.get('masterPromptId')
     const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10) || 20, 100)
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)
+    const skip = (page - 1) * limit
 
     const where: Record<string, unknown> = {}
     if (masterPromptId) where.masterPromptId = masterPromptId
 
-    const results = await db.promptTestResult.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    })
+    const [results, total] = await Promise.all([
+      db.promptTestResult.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      db.promptTestResult.count({ where }),
+    ])
 
-    return NextResponse.json(results)
+    return NextResponse.json({
+      results,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    })
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
     log.error('TestResults GET error:', { error })
