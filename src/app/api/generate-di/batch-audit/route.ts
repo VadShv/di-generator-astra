@@ -66,6 +66,7 @@ ${renderedAuditPrompt ? `\nПРОМПТ АУДИТА:\n${renderedAuditPrompt}` :
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
+        timeoutMs: 180_000,
       })
 
       const raw = result.content || ''

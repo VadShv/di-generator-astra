@@ -77,6 +77,12 @@ export async function POST(
           userEmail,
         },
       }),
+      // Кросс-модульная синхронизация: обновляем статус в DITracking,
+      // чтобы Журнал действий отображал актуальный статус согласования.
+      db.dITracking.updateMany({
+        where: { generatedDIId: id },
+        data: { status: toStatus },
+      }),
     ])
 
     // Уведомление о смене статуса

@@ -59,6 +59,14 @@ export async function PUT(request: Request) {
       await db.dIStatusChange.create({
         data: { generatedDIId, fromStatus: existing.status, toStatus: status },
       })
+      // Кросс-модульная синхронизация: обновляем статус в DITracking,
+      // чтобы Журнал действий отображал актуальный статус согласования.
+      await db.dITracking.updateMany({
+        where: { generatedDIId },
+        data: { status },
+      }).catch((e) => {
+        log.warn('DITracking sync failed', { generatedDIId, message: e instanceof Error ? e.message : String(e) })
+      })
       createNotification({
         type: 'status_change',
         title: 'Статус ДИ изменён',

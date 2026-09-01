@@ -152,6 +152,9 @@ ${diText}
       { role: 'system', content: renderedAuditPrompt ? `${systemPrompt}\n\nПРОМПТ АУДИТА:\n${renderedAuditPrompt}` : systemPrompt },
       { role: 'user', content: userPrompt },
     ],
+    // Аудит — тяжёлый промпт (5 категорий, правовая база, JSON-ответ).
+    // Дефолтный timeout 60 сек недостаточен для GLM-5.2 → 504.
+    timeoutMs: 180_000,
   })
 
   const aiResponse = result.content || ''
