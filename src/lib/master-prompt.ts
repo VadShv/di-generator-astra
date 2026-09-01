@@ -262,9 +262,10 @@ export async function resolveMasterPromptWithDetails(
   category: PromptCategory,
   criteria: PromptCriteria = {},
 ): Promise<{ prompt: ResolvedPrompt; resolution: PromptResolution } | null> {
+  // Load ALL active prompts for this category — the scoring function handles
+  // specificity matching. Pre-filtering by positionId/companyId in the WHERE
+  // clause would exclude global prompts (where those fields are null).
   const where: Record<string, unknown> = { isActive: true, category }
-  if (criteria.positionId) where.positionId = criteria.positionId
-  if (criteria.companyId) where.companyId = criteria.companyId
 
   const active = await db.masterPrompt.findMany({
     where,
