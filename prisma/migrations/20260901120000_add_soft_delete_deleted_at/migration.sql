@@ -12,3 +12,7 @@ ALTER TABLE "ArchiveDI" ADD COLUMN "deletedAt" TIMESTAMP(3);
 CREATE INDEX "User_deletedAt_idx" ON "User"("deletedAt");
 CREATE INDEX "GeneratedDI_deletedAt_idx" ON "GeneratedDI"("deletedAt");
 CREATE INDEX "ArchiveDI_deletedAt_idx" ON "ArchiveDI"("deletedAt");
+
+-- Фаза 8.4: Unique constraint для DIVersion — предотвращает дубликаты версий
+-- (generatedDIId, version) при параллельном создании.
+CREATE UNIQUE INDEX "DIVersion_generatedDIId_version_key" ON "DIVersion"("generatedDIId", "version");

@@ -40,7 +40,8 @@ export async function POST(request: NextRequest) {
     await requireRole('admin')
     const { email, name, password, role, permissions } = await parseBody(request, createUserSchema)
 
-    const existing = await db.user.findUnique({ where: { email: email.toLowerCase() } })
+    const normalizedEmail = email.toLowerCase().normalize('NFC')
+    const existing = await db.user.findUnique({ where: { email: normalizedEmail } })
     if (existing) {
       return NextResponse.json({ error: 'Пользователь с таким email уже существует' }, { status: 409 })
     }
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const user = await db.user.create({
       data: {
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         name: name || null,
         role: finalRole,
         permissions: permissionsJson,

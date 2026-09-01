@@ -24,9 +24,13 @@ export async function GET(request: Request) {
     const result = await listArchiveDIs({
       positionId: searchParams.get('positionId'),
       search: searchParams.get('search'),
-      linkStatus: searchParams.get('linkStatus') as 'unlinked' | 'linked' | 'all' | null,
-      page: searchParams.get('page') ? Number(searchParams.get('page')) : undefined,
-      pageSize: searchParams.get('pageSize') ? Number(searchParams.get('pageSize')) : undefined,
+     linkStatus: searchParams.get('linkStatus') as 'unlinked' | 'linked' | 'all' | null,
+      page: searchParams.get('page')
+        ? Math.max(1, Number(searchParams.get('page')) || 1)
+        : undefined,
+      pageSize: searchParams.get('pageSize')
+        ? Math.max(1, Number(searchParams.get('pageSize')) || 1)
+        : undefined,
     })
     return NextResponse.json(result)
   } catch (error) {

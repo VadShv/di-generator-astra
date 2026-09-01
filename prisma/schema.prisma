@@ -392,10 +392,10 @@ model ActivityLog {
   generatedDIId String?
   createdAt    DateTime @default(now())
 
-  @@index([entityType, entityId])
-  @@index([tagId])
-  @@index([generatedDIId])
-  @@index([createdAt])
+ @@index([entityType, entityId])
+ @@index([tagId])
+@@index([generatedDIId])
+@@index([createdAt])
 }
 
 // ==========================================
@@ -411,11 +411,12 @@ model DIVersion {
   uploadedBy        String?  // Кто загрузил
   fileName          String?  // Имя файла
   diffSummary       String?  // Краткое резюме различий (ИИ-сгенерированное)
-  changeDescription String?  // Описание изменений в данной версии
-  createdAt         DateTime @default(now())
+ changeDescription String?  // Описание изменений в данной версии
+ createdAt         DateTime @default(now())
 
-  @@index([generatedDIId])
-  @@index([createdAt])
+ @@index([generatedDIId])
+ @@index([createdAt])
+  @@unique([generatedDIId, version])
 }
 
 // ==========================================

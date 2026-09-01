@@ -159,9 +159,9 @@ export const authOptions: NextAuthOptions = {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Пароль', type: 'password' },
       },
-     async authorize(credentials) {
-       const email = credentials?.email?.trim().toLowerCase()
-       const password = credentials?.password
+    async authorize(credentials) {
+      const email = credentials?.email?.trim().toLowerCase().normalize('NFC')
+      const password = credentials?.password
        if (!email || !password) return null
 
       // Brute-force-защита: лимит на email+10 мин (5 попыток).

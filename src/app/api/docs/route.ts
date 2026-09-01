@@ -19,7 +19,7 @@ export async function GET() {
 <head>
   <meta charset="UTF-8">
   <title>API Docs — Генератор ДИ</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <link rel="stylesheet" href="/api/docs/assets/swagger-ui.css" />
   <style>
     body { margin: 0; padding: 0; }
     #swagger-ui { max-width: 1460px; margin: 0 auto; padding: 20px; }
@@ -27,7 +27,8 @@ export async function GET() {
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="/api/docs/assets/swagger-ui-bundle.js"></script>
+  <script src="/api/docs/assets/swagger-ui-standalone-preset.js"></script>
   <script>
     window.onload = function() {
       SwaggerUIBundle({
