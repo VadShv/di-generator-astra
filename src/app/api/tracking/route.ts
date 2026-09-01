@@ -67,9 +67,10 @@ export async function POST(request: Request) {
       )
     }
 
-    // Verify GeneratedDI exists
+    // Verify GeneratedDI exists и получаем position для связи с должностью/отделом
     const generatedDI = await db.generatedDI.findUnique({
       where: { id: generatedDIId },
+      include: { position: { select: { id: true, departmentId: true } } },
     })
 
     if (!generatedDI) {
@@ -83,6 +84,10 @@ export async function POST(request: Request) {
       data: {
         generatedDIId,
         status,
+        // Кросс-модульная связь: positionId и departmentId из GeneratedDI.position,
+        // чтобы tracking-запись была связана с должностью/отделом для activity-feed.
+        positionId: generatedDI.positionId,
+        departmentId: generatedDI.position?.departmentId ?? null,
         assignee: assignee || null,
         notes: notes || null,
       },

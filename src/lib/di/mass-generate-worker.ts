@@ -273,10 +273,26 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
       }).catch(() => {})
 
       // Привязываем TokenUsage к созданной ДИ.
-      db.tokenUsage.updateMany({
+      // await вместо fire-and-forget — ранее generatedDIId оставался null.
+      await db.tokenUsage.updateMany({
         where: { generatedDIId: null, userId: createdBy, category: { in: ['section', 'culture'] }, createdAt: { gte: new Date(Date.now() - 5 * 60_000) } },
         data: { generatedDIId: generatedDI.id },
-      }).catch(() => {})
+      }).catch((e) => {
+        log.warn(`Job ${jobId}: TokenUsage binding failed`, { diId: generatedDI.id, message: e instanceof Error ? e.message : String(e) })
+      })
+
+      // Кросс-модульная связь: создаём запись DITracking со статусом 'draft',
+      // чтобы ДИ появилась во вкладке "Отслеживание".
+      await db.dITracking.create({
+        data: {
+          generatedDIId: generatedDI.id,
+          positionId: position.id,
+          departmentId: position.departmentId,
+          status: 'draft',
+        },
+      }).catch((e) => {
+        log.warn(`Job ${jobId}: DITracking creation failed`, { diId: generatedDI.id, message: e instanceof Error ? e.message : String(e) })
+      })
 
       return { positionId: position.id, positionTitle: position.title, diId: generatedDI.id, title: generatedDI.title, status: 'success' }
     } catch (error) {

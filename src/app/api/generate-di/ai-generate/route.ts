@@ -159,10 +159,28 @@ export const POST = withErrorHandler(async (request: Request) => {
   log.info('DI generated', { diId: generatedDI.id, positionId, sections: generatedSections.length })
 
   // Привязываем TokenUsage, созданный во время генерации, к новой ДИ.
-  db.tokenUsage.updateMany({
+  // Используем await вместо fire-and-forget — ранее .catch(() => {}) глотал ошибки,
+  // и generatedDIId оставался null (race condition с updateMany до завершения генерации).
+  await db.tokenUsage.updateMany({
     where: { generatedDIId: null, userId: session?.user?.id ?? null, category: { in: ['section', 'culture'] }, createdAt: { gte: new Date(Date.now() - 5 * 60_000) } },
     data: { generatedDIId: generatedDI.id },
-  }).catch(() => {})
+  }).catch((e) => {
+    log.warn('TokenUsage binding failed', { diId: generatedDI.id, message: e instanceof Error ? e.message : String(e) })
+  })
+
+  // Кросс-модульная связь: создаём запись DITracking со статусом 'draft',
+  // чтобы новая ДИ сразу появилась во вкладке "Отслеживание" (Журнал действий).
+  // positionId и departmentId берутся из позиции — tracking связан с должностью и отделом.
+  await db.dITracking.create({
+    data: {
+      generatedDIId: generatedDI.id,
+      positionId,
+      departmentId: position.departmentId,
+      status: 'draft',
+    },
+  }).catch((e) => {
+    log.warn('DITracking creation failed', { diId: generatedDI.id, message: e instanceof Error ? e.message : String(e) })
+  })
 
   // Audit + уведомление: фиксируем создание ДИ в журнале действий.
   logAudit('di_created', request, 'generated-di', generatedDI.id, {
