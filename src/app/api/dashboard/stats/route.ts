@@ -25,7 +25,8 @@ export async function GET() {
       db.dITemplate.count(),
       db.masterPrompt.count(),
       db.generatedDI.count(),
-      db.dITracking.count({ where: { status: 'sent_for_review' } }),
+      // ДИ на согласовании (статус 'review') — ранее считался по DITracking с несуществующим статусом 'sent_for_review'.
+      db.generatedDI.count({ where: { status: 'review' } }),
       db.dIVersion.count({ where: { isOriginal: false } }),
     ])
 

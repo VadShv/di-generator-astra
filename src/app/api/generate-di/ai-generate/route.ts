@@ -10,6 +10,8 @@ import { createInitialVersion } from '@/lib/di/version'
 import { buildArchiveContext, type ArchiveDIRef } from '@/lib/di/prompts'
 import { requireAuth } from '@/lib/auth/session'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { logAudit } from '@/lib/audit'
+import { createNotification } from '@/lib/notifications'
 
 const log = createLogger('generate-di/ai-generate')
 
@@ -100,6 +102,7 @@ export const POST = withErrorHandler(async (request: Request) => {
     client,
     renderedMasterPrompt,
     archiveDIs: archiveRefs,
+    userId: session?.user?.id,
   })
 
   // h) Культура ИИ: если есть активный промпт категории ai_culture.
@@ -111,7 +114,7 @@ export const POST = withErrorHandler(async (request: Request) => {
   if (aiCulturePrompt) await incrementPromptUsage(aiCulturePrompt.id)
   if (aiCulturePrompt) {
     const cultureSystem = renderPrompt(aiCulturePrompt.content, buildContextFromPosition(position))
-    const cultureSection = await generateAiCultureSection(client, aiCulturePrompt, cultureSystem)
+    const cultureSection = await generateAiCultureSection(client, aiCulturePrompt, cultureSystem, session?.user?.id)
     if (cultureSection) {
       generatedSections.push({ ...cultureSection, order: generatedSections.length })
     }
@@ -154,5 +157,28 @@ export const POST = withErrorHandler(async (request: Request) => {
   })
 
   log.info('DI generated', { diId: generatedDI.id, positionId, sections: generatedSections.length })
+
+  // Привязываем TokenUsage, созданный во время генерации, к новой ДИ.
+  db.tokenUsage.updateMany({
+    where: { generatedDIId: null, userId: session?.user?.id ?? null, category: { in: ['section', 'culture'] }, createdAt: { gte: new Date(Date.now() - 5 * 60_000) } },
+    data: { generatedDIId: generatedDI.id },
+  }).catch(() => {})
+
+  // Audit + уведомление: фиксируем создание ДИ в журнале действий.
+  logAudit('di_created', request, 'generated-di', generatedDI.id, {
+    positionId,
+    positionTitle: position.title,
+    templateId,
+    sourceArchiveId: selectedArchiveDI?.id ?? null,
+    sectionsCount: generatedSections.length,
+  })
+  createNotification({
+    userId: session?.user?.id ?? null,
+    type: 'status_change',
+    title: 'ДИ создана',
+    message: `Сгенерирована ДИ: ${generatedDI.title}`,
+    entityType: 'generated-di',
+    entityId: generatedDI.id,
+  })
   return NextResponse.json(generatedDI, { status: 201 })
 }, 'generate-di/ai-generate')

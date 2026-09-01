@@ -9,13 +9,14 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  Landmark, FolderTree, Users, Briefcase, Percent, Hash, FileText, User, MapPin,
-  Building2, Network, ChevronRight, Pencil, GraduationCap,
+ Landmark, FolderTree, Users, Briefcase, Percent, Hash, FileText, User, MapPin,
+  Building2, Network, ChevronRight, Pencil, GraduationCap, Sparkles,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
 import type { Company, Department, Position } from './staff-schedule-types'
 export type { Company, Department, Position }
 import { PositionDIWorkspace } from './position-di-workspace'
+import { useAppStore } from '@/lib/store'
 
 // Статус ДИ по должности (дублирует логику основного модуля)
 function getDIStatus(pos: Position) {
@@ -290,6 +291,7 @@ export function DepartmentDetailCard(props: DepartmentDetailProps) {
 
 export function PositionDetailCard(props: PositionDetailProps) {
   const { pos: p, onClosePos, onSelectDept, onEditPos, onChanged } = props
+  const navigateTo = useAppStore((s) => s.navigateTo)
   if (!p) return null
   const st = getDIStatus(p)
   const signedByEmployee = p.generatedDIs.some(d => d.signedByEmployee)
@@ -349,6 +351,9 @@ export function PositionDetailCard(props: PositionDetailProps) {
         </div>
 
         <DialogFooter>
+          <Button variant="default" className="mr-auto" onClick={() => { onClosePos(); navigateTo('generation', { positionId: p.id }) }}>
+            <Sparkles className="h-4 w-4 mr-1.5" /> Сгенерировать ДИ
+          </Button>
           <Button variant="outline" onClick={() => { onClosePos(); onEditPos(p) }}>
             <Pencil className="h-4 w-4 mr-1.5" /> Редактировать
           </Button>

@@ -3,12 +3,10 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows, TrendingUp, ArrowRight, Zap, Shield, History, BookOpen } from 'lucide-react'
+import { Users, Archive, FileText, Brain, Sparkles, GitBranch, GitCompareArrows, TrendingUp, ArrowRight, Zap, Shield, History, BookOpen, Loader2 } from 'lucide-react'
 
 import { useAppStore, type ActiveSection } from '@/lib/store'
 import { useToast } from '@/hooks/use-toast'
-
 interface Stats {
   departments: number
   positions: number
@@ -34,38 +32,54 @@ const quickActions = [
 ]
 
 const statCardsConfig = [
-  { label: 'Подразделения', key: 'departments' as const, icon: Users, cardBg: 'bg-emerald-50', iconColor: 'text-emerald-500', iconBg: 'bg-emerald-100', borderAccent: 'border-emerald-200' },
-  { label: 'Должности в ШР', key: 'positions' as const, icon: Users, cardBg: 'bg-teal-50', iconColor: 'text-teal-500', iconBg: 'bg-teal-100', borderAccent: 'border-teal-200' },
-  { label: 'Архивных ДИ', key: 'archiveDIs' as const, icon: Archive, cardBg: 'bg-amber-50', iconColor: 'text-amber-500', iconBg: 'bg-amber-100', borderAccent: 'border-amber-200' },
-  { label: 'Шаблонов ДИ', key: 'templates' as const, icon: FileText, cardBg: 'bg-rose-50', iconColor: 'text-rose-500', iconBg: 'bg-rose-100', borderAccent: 'border-rose-200' },
-  { label: 'Мастер-промптов', key: 'masterPrompts' as const, icon: Brain, cardBg: 'bg-purple-50', iconColor: 'text-purple-500', iconBg: 'bg-purple-100', borderAccent: 'border-purple-200' },
-  { label: 'Сгенерированных ДИ', key: 'generatedDIs' as const, icon: Sparkles, cardBg: 'bg-cyan-50', iconColor: 'text-cyan-500', iconBg: 'bg-cyan-100', borderAccent: 'border-cyan-200' },
-  { label: 'На согласовании', key: 'pendingTracking' as const, icon: GitBranch, cardBg: 'bg-orange-50', iconColor: 'text-orange-500', iconBg: 'bg-orange-100', borderAccent: 'border-orange-200' },
-  { label: 'Ожидают сравнения', key: 'pendingComparison' as const, icon: GitCompareArrows, cardBg: 'bg-pink-50', iconColor: 'text-pink-500', iconBg: 'bg-pink-100', borderAccent: 'border-pink-200' },
+  { label: 'Подразделения', key: 'departments' as const, icon: Users, cardBg: 'bg-emerald-50', iconColor: 'text-emerald-500', iconBg: 'bg-emerald-100', borderAccent: 'border-emerald-200', section: 'staff-schedule' as ActiveSection },
+  { label: 'Должности в ШР', key: 'positions' as const, icon: Users, cardBg: 'bg-teal-50', iconColor: 'text-teal-500', iconBg: 'bg-teal-100', borderAccent: 'border-teal-200', section: 'staff-schedule' as ActiveSection },
+  { label: 'Архивных ДИ', key: 'archiveDIs' as const, icon: Archive, cardBg: 'bg-amber-50', iconColor: 'text-amber-500', iconBg: 'bg-amber-100', borderAccent: 'border-amber-200', section: 'archive' as ActiveSection },
+  { label: 'Шаблонов ДИ', key: 'templates' as const, icon: FileText, cardBg: 'bg-rose-50', iconColor: 'text-rose-500', iconBg: 'bg-rose-100', borderAccent: 'border-rose-200', section: 'templates' as ActiveSection },
+  { label: 'Мастер-промптов', key: 'masterPrompts' as const, icon: Brain, cardBg: 'bg-purple-50', iconColor: 'text-purple-500', iconBg: 'bg-purple-100', borderAccent: 'border-purple-200', section: 'master-prompts' as ActiveSection },
+  { label: 'Сгенерированных ДИ', key: 'generatedDIs' as const, icon: Sparkles, cardBg: 'bg-cyan-50', iconColor: 'text-cyan-500', iconBg: 'bg-cyan-100', borderAccent: 'border-cyan-200', section: 'generation' as ActiveSection },
+  { label: 'На согласовании', key: 'pendingTracking' as const, icon: GitBranch, cardBg: 'bg-orange-50', iconColor: 'text-orange-500', iconBg: 'bg-orange-100', borderAccent: 'border-orange-200', section: 'tracking' as ActiveSection },
+  { label: 'Ожидают сравнения', key: 'pendingComparison' as const, icon: GitCompareArrows, cardBg: 'bg-pink-50', iconColor: 'text-pink-500', iconBg: 'bg-pink-100', borderAccent: 'border-pink-200', section: 'version-history' as ActiveSection },
 ]
+
+interface FeedEvent { id: string; type: string; title: string; description: string | null; author: string | null; createdAt: string }
+
+const EVENT_COLORS: Record<string, string> = {
+  di_created: 'bg-emerald-500',
+  di_updated: 'bg-cyan-500',
+  version_created: 'bg-indigo-500',
+  audit: 'bg-red-500',
+  archive_uploaded: 'bg-amber-500',
+  status_change: 'bg-orange-500',
+  tag_created: 'bg-rose-500',
+  tag_resolved: 'bg-violet-500',
+}
 
 export function DashboardModule() {
   const [stats, setStats] = useState<Stats | null>(null)
+  const [events, setEvents] = useState<FeedEvent[]>([])
   const [loading, setLoading] = useState(true)
- const { setActiveSection } = useAppStore()
-  const { toast } = useToast()
+const { setActiveSection } = useAppStore()
+ const { toast } = useToast()
 
- useEffect(() => {
-   async function loadStats() {
-      try {
-        const res = await fetch('/api/dashboard/stats')
-        if (res.ok) {
-          setStats(await res.json())
-        }
-     } catch (e) {
-       console.error(e)
-        toast({ title: 'Ошибка', description: 'Не удалось загрузить статистику', variant: 'destructive' })
-     } finally {
-        setLoading(false)
-      }
-    }
-    loadStats()
-  }, [])
+useEffect(() => {
+  async function loadStats() {
+     try {
+       const res = await fetch('/api/dashboard/stats')
+       if (res.ok) {
+         setStats(await res.json())
+       }
+       const feedRes = await fetch('/api/activity-feed?limit=8')
+       if (feedRes.ok) { const feedData = await feedRes.json(); setEvents(feedData.events || []) }
+    } catch (e) {
+      console.error(e)
+       toast({ title: 'Ошибка', description: 'Не удалось загрузить статистику', variant: 'destructive' })
+    } finally {
+       setLoading(false)
+     }
+   }
+   loadStats()
+ }, [])
 
   return (
     <div className="space-y-6">
@@ -81,7 +95,7 @@ export function DashboardModule() {
           ))
         ) : (
           statCardsConfig.map((card) => (
-            <Card key={card.label} className={`hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 ${card.cardBg} ${card.borderAccent}`}>
+            <Card key={card.label} className={`hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 cursor-pointer ${card.cardBg} ${card.borderAccent}`} onClick={() => setActiveSection(card.section)}>
               <CardContent className="p-4 relative overflow-hidden">
                 {/* Large background icon */}
                 <card.icon className={`absolute -right-2 -bottom-2 h-16 w-16 opacity-15 ${card.iconColor}`} />
@@ -136,33 +150,28 @@ export function DashboardModule() {
             </CardTitle>
             <CardDescription>Хронология событий</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 p-2 rounded-lg bg-emerald-50">
-                <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                <div className="flex-1">
-                  <span className="text-sm">Система инициализирована</span>
-                  <p className="text-xs text-muted-foreground">Генератор ДИ Группы Астра готов к работе</p>
+         <CardContent>
+            <div className="space-y-3 min-h-[200px]">
+              {loading ? (
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : events.length === 0 ? (
+                <div className="flex items-center gap-3 p-2 rounded-lg">
+                  <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
+                  <span className="text-sm text-muted-foreground">Пока нет событий. Начните с создания должностей и генерации ДИ.</span>
                 </div>
-              </div>
-              <div className="flex items-center gap-3 p-2 rounded-lg bg-cyan-50">
-                <div className="h-2.5 w-2.5 rounded-full bg-cyan-500 flex-shrink-0" />
-                <div className="flex-1">
-                  <span className="text-sm">ИИ-генерация доступна</span>
-                  <p className="text-xs text-muted-foreground">Создание ДИ вручную или с помощью ИИ</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-2 rounded-lg bg-amber-50">
-                <div className="h-2.5 w-2.5 rounded-full bg-amber-500 flex-shrink-0" />
-                <div className="flex-1">
-                  <span className="text-sm">Загрузка файлов</span>
-                  <p className="text-xs text-muted-foreground">Поддержка DOCX, PDF, XLSX, CSV</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-2 rounded-lg">
-                <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
-                <span className="text-sm text-muted-foreground">Начните с добавления подразделений и должностей</span>
-              </div>
+              ) : (
+                events.map((ev) => (
+                  <div key={ev.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/40 transition-colors cursor-pointer" onClick={() => setActiveSection('tracking')}>
+                    <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${EVENT_COLORS[ev.type] || 'bg-muted-foreground'}`} />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm truncate block">{ev.title}</span>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {ev.description || '—'} {ev.author ? `· ${ev.author}` : ''} · {new Date(ev.createdAt).toLocaleString('ru-RU')}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>

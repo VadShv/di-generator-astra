@@ -420,8 +420,9 @@ function LineageTab({
 }
 
 export function MassGenerationModule() {
-  const { toast } = useToast()
-  const [companies, setCompanies] = useState<Company[]>([])
+ const { toast } = useToast()
+  const navigateTo = useAppStore((s) => s.navigateTo)
+ const [companies, setCompanies] = useState<Company[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
@@ -990,11 +991,47 @@ export function MassGenerationModule() {
                     </div>
                     <Button variant="outline" className="w-full" onClick={() => setResultDialogOpen(true)}>
                       Показать детали
-                    </Button>
-                  </div>
-                )}
+                   </Button>
+                    {results.filter(r => r.success).length > 0 && (
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigateTo('generation')}
+                        >
+                          <FileText className="h-3.5 w-3.5 mr-1.5" />
+                          К генерации
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigateTo('tracking')}
+                        >
+                          <ListChecks className="h-3.5 w-3.5 mr-1.5" />
+                          В журнал
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigateTo('version-history')}
+                        >
+                          <History className="h-3.5 w-3.5 mr-1.5" />
+                          Версии
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigateTo('archive')}
+                        >
+                          <Archive className="h-3.5 w-3.5 mr-1.5" />
+                          В архив
+                        </Button>
+                      </div>
+                    )}
+                 </div>
+               )}
 
-                {!generating && !results && (
+               {!generating && !results && (
                   <div className="space-y-3 text-center py-4">
                     <Zap className="h-10 w-10 mx-auto text-muted-foreground/50" />
                     <p className="text-sm text-muted-foreground">
@@ -1162,3 +1199,5 @@ export function MassGenerationModule() {
     </div>
   )
 }
+import { useAppStore } from '@/lib/store'
+import { History, ListChecks, Archive } from 'lucide-react'

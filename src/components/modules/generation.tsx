@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,6 +30,7 @@ import { Plus, Pencil, Trash2, Eye, Loader2, Sparkles, FileText, PenLine, Wand2,
 import { CascadePositionSelector } from '@/components/modules/cascade-position-selector'
 import { DICard, DICardSkeleton, diTypeFromStatus, type DICardData } from '@/components/modules/di-card'
 import { DIDetail } from '@/components/modules/di-detail'
+import { useAppStore } from '@/lib/store'
 import { MagicWandToolbar } from '@/components/editor/magic-wand-toolbar'
 import type { MagicWandPreset } from '@/components/editor/magic-wand-toolbar'
 
@@ -70,6 +71,9 @@ const gradeLabel = (grade?: string | null) => grade ? GRADE_LABELS[grade] || gra
 
 export function GenerationModule() {
   const { toast } = useToast()
+  const navigationContext = useAppStore((s) => s.navigationContext)
+  const clearNavigationContext = useAppStore((s) => s.clearNavigationContext)
+  const pendingArchiveIdRef = useRef<string | undefined>(undefined)
   const [viewMode, setViewMode] = useState<'list' | 'generate' | 'manual' | 'editor' | 'detail'>('list')
  const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
  const [positions, setPositions] = useState<Position[]>([])
@@ -156,6 +160,17 @@ export function GenerationModule() {
 
   useEffect(() => { (async () => { setLoading(true); await Promise.all([fetchDIs(), fetchPositions(), fetchTemplates(), fetchPrompts(), fetchCompanies(), fetchDepartments()]); setLoading(false) })() }, [fetchDIs, fetchPositions, fetchTemplates, fetchPrompts, fetchCompanies, fetchDepartments])
 
+  // Контекстная навигация: если пришли с positionId (например, из штатного расписания),
+  // сразу открываем форму генерации с выбранной должностью.
+  useEffect(() => {
+    if (navigationContext?.positionId && positions.length > 0 && viewMode === 'list') {
+      setSelPositionId(navigationContext.positionId)
+      pendingArchiveIdRef.current = navigationContext.archiveId
+      setViewMode('generate')
+      clearNavigationContext()
+    }
+  }, [navigationContext, positions, viewMode, clearNavigationContext])
+
   // Фаза 23: при смене должности подгружаем её архивные ДИ для выбора как базы.
   useEffect(() => {
     if (!selPositionId) { setArchiveDIs([]); setSelArchiveDIId(''); return }
@@ -167,7 +182,11 @@ export function GenerationModule() {
           setArchiveDIs(Array.isArray(data) ? data.map((a: { id: string; title: string; uploadedAt: string }) => ({ id: a.id, title: a.title, uploadedAt: a.uploadedAt })) : [])
         }
       } catch { /* silent */ }
-      setSelArchiveDIId('')
+      // Если есть отложенный archiveId из контекстной навигации — применяем его
+      const pending = pendingArchiveIdRef.current
+      pendingArchiveIdRef.current = undefined
+      setSelArchiveDIId(pending || '')
+      if (pending) setUseArchiveAsReference(true)
     })()
   }, [selPositionId])
 

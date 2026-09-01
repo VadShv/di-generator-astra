@@ -26,10 +26,11 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import {
-  Archive, Plus, Eye, Pencil, Trash2, Upload, FileText, Loader2, CheckCircle2,
-  XCircle, Link2, Unlink, Search, Building2, FolderTree, FileUp, Briefcase,
+ Archive, Plus, Eye, Pencil, Trash2, Upload, FileText, Loader2, CheckCircle2,
+  XCircle, Link2, Unlink, Search, Building2, FolderTree, FileUp, Briefcase, Sparkles,
 } from 'lucide-react'
 import { CascadePositionSelector } from './cascade-position-selector'
+import { useAppStore } from '@/lib/store'
 
 interface Company { id: string; name: string; shortName: string | null }
 interface Department { id: string; name: string; code: string; company?: Company | null }
@@ -66,6 +67,7 @@ const positionLabel = (p: Position | null): string => {
 
 export function ArchiveModule() {
   const { toast } = useToast()
+  const navigateTo = useAppStore((s) => s.navigateTo)
   const [archiveDIs, setArchiveDIs] = useState<ArchiveDI[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
@@ -432,12 +434,17 @@ export function ArchiveModule() {
                             <Link2 className="h-4 w-4" />
                           </Button>
                         )}
-                        {di.positionId && (
-                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-amber-600" onClick={() => handleUnlink(di)} title="Отвязать">
-                            <Unlink className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => handleView(di)} title="Просмотр"><Eye className="h-4 w-4" /></Button>
+                       {di.positionId && (
+                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-amber-600" onClick={() => handleUnlink(di)} title="Отвязать">
+                           <Unlink className="h-4 w-4" />
+                         </Button>
+                       )}
+                       {di.positionId && (
+                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-violet-600" onClick={() => navigateTo('generation', { positionId: di.positionId!, archiveId: di.id })} title="Сгенерировать ДИ на базе">
+                           <Sparkles className="h-4 w-4" />
+                         </Button>
+                       )}
+                       <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => handleView(di)} title="Просмотр"><Eye className="h-4 w-4" /></Button>
                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEditDialog(di)} title="Редактировать"><Pencil className="h-4 w-4" /></Button>
                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => openDeleteDialog(di)} title="Удалить"><Trash2 className="h-4 w-4" /></Button>
                       </div>

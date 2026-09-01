@@ -32,6 +32,8 @@ export interface GenerateSectionsParams {
   client: AIProviderClient
   renderedMasterPrompt: string | null
   archiveDIs: ArchiveDIRef[]
+  /** ID пользователя для привязки TokenUsage (если известен). */
+  userId?: string | null
   /** Доп. контекст (например, другие секции) — опционально. */
   extraContext?: string
   /** Правовой контекст (ТК РФ, профстандарты) — опционально. */
@@ -56,6 +58,7 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
     client,
     renderedMasterPrompt,
     archiveDIs,
+    userId,
     extraContext,
     legalContext,
     onProgress,
@@ -87,6 +90,7 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
             providerName: result.providerName,
             modelName: result.modelName,
             category: 'section',
+            userId: userId ?? null,
             promptTokens: result.usage.promptTokens ?? 0,
             completionTokens: result.usage.completionTokens ?? 0,
             totalTokens: result.usage.totalTokens ?? 0,
@@ -123,6 +127,7 @@ export async function generateAiCultureSection(
   client: AIProviderClient,
   aiCulturePrompt: { id: string; name: string; content: string } | null,
   renderedCulturePrompt: string | null,
+  userId?: string | null,
   signal?: AbortSignal
 ): Promise<GeneratedSectionResult | null> {
   if (!aiCulturePrompt || !renderedCulturePrompt) return null
@@ -145,6 +150,7 @@ export async function generateAiCultureSection(
           providerName: cultureResult.providerName,
           modelName: cultureResult.modelName,
           category: 'culture',
+          userId: userId ?? null,
           promptTokens: cultureResult.usage.promptTokens ?? 0,
           completionTokens: cultureResult.usage.completionTokens ?? 0,
           totalTokens: cultureResult.usage.totalTokens ?? 0,

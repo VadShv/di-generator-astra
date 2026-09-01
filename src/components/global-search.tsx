@@ -18,7 +18,7 @@ interface SearchResult {
 }
 
 export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { setActiveSection } = useAppStore()
+  const navigateTo = useAppStore((s) => s.navigateTo)
   const { toast } = useToast()
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
@@ -61,11 +61,11 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
   const handleSelect = (type: 'position' | 'department' | 'instruction' | 'archive', id: string) => {
     onOpenChange(false)
     if (type === 'position' || type === 'department') {
-      setActiveSection('staff-schedule')
+      navigateTo('staff-schedule', type === 'position' ? { positionId: id } : { departmentId: id })
     } else if (type === 'instruction') {
-      setActiveSection('version-history')
+      navigateTo('version-history', { diId: id })
     } else if (type === 'archive') {
-      setActiveSection('archive')
+      navigateTo('archive', { archiveId: id })
     }
     toast({ title: 'Переход', description: `Выбран элемент: ${id.slice(-6)}` })
   }

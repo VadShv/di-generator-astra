@@ -97,6 +97,7 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
     log.warn(`Job ${jobId} not found`)
     return
   }
+  const createdBy = job.createdBy || null
 
   const scope = (typeof job.scopeData === 'string' ? JSON.parse(job.scopeData) : {}) as JobScopeData
   const templateId = job.templateId
@@ -211,6 +212,7 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
         client,
         renderedMasterPrompt,
         archiveDIs: archiveRefs,
+        userId: createdBy,
         extraContext: lineageContext || undefined,
         errorPlaceholder: '[Ошибка генерации. Повторите для данной должности.]',
         signal,
@@ -223,13 +225,13 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
       })
       if (aiCulturePrompt) {
         const cultureSystem = renderPrompt(aiCulturePrompt.content, buildContextFromPosition(position))
-        const cultureSection = await generateAiCultureSection(client, aiCulturePrompt, cultureSystem, signal)
+        const cultureSection = await generateAiCultureSection(client, aiCulturePrompt, cultureSystem, createdBy, signal)
         if (cultureSection) {
           generatedSections.push({ ...cultureSection, order: generatedSections.length })
         }
       }
 
-      // Создание ДИ и начальной версии — атомарно (TOCTOU-защита).
+     // Создание ДИ и начальной версии — атомарно (TOCTOU-защита).
       const generatedDI = await db.$transaction(async (tx) => {
         const di = await tx.generatedDI.create({
           data: {
@@ -239,6 +241,7 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
             status: 'draft',
             currentVersion: 1,
             signedByEmployee: false,
+            ...(archiveDIs.length > 0 ? { sourceArchiveId: archiveDIs[0].id } : {}),
             sections: { create: generatedSections },
           },
         })
@@ -251,8 +254,29 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
           'Начальная AI-генерация (массовая)',
           tx
         )
-        return di
+       return di
       })
+
+      // Audit: фиксируем создание ДИ массовой генерацией.
+      db.auditLog.create({
+        data: {
+          userId: createdBy,
+          userEmail: null,
+          action: 'di_created',
+          method: 'POST',
+          path: '/api/generate-di/mass-generate',
+          entityType: 'generated-di',
+          entityId: generatedDI.id,
+          metadata: JSON.stringify({ positionId: position.id, positionTitle: position.title, jobId, source: 'ai-mass-generate' }),
+          ip: null,
+        },
+      }).catch(() => {})
+
+      // Привязываем TokenUsage к созданной ДИ.
+      db.tokenUsage.updateMany({
+        where: { generatedDIId: null, userId: createdBy, category: { in: ['section', 'culture'] }, createdAt: { gte: new Date(Date.now() - 5 * 60_000) } },
+        data: { generatedDIId: generatedDI.id },
+      }).catch(() => {})
 
       return { positionId: position.id, positionTitle: position.title, diId: generatedDI.id, title: generatedDI.title, status: 'success' }
     } catch (error) {

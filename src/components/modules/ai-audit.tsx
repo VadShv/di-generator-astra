@@ -12,8 +12,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import { LegalReferenceDialog, LegalReferenceDeleteDialog } from '@/components/legal-reference-dialog'
 import {
   Alert, AlertDescription, AlertTitle,
 } from '@/components/ui/alert'
@@ -311,10 +312,27 @@ export function AiAuditModule() {
     return () => { cancelled = true }
   }, [toast])
 
-  const filteredLegalRefs = useMemo(
-    () => (legalType === 'all' ? legalRefs : legalRefs.filter(r => r.type === legalType)),
-    [legalRefs, legalType],
-  )
+ const filteredLegalRefs = useMemo(
+   () => (legalType === 'all' ? legalRefs : legalRefs.filter(r => r.type === legalType)),
+  [legalRefs, legalType],
+)
+  const [legalDialogOpen, setLegalDialogOpen] = useState(false)
+  const [editingLegal, setEditingLegal] = useState<LegalReference | null>(null)
+  const [legalDeleteId, setLegalDeleteId] = useState<string | null>(null)
+  const reloadLegalRefs = useCallback(async () => {
+    try {
+      const res = await fetch('/api/legal-references')
+      if (res.ok) setLegalRefs(await res.json())
+    } catch { /* silent */ }
+  }, [])
+  const openCreateLegal = () => {
+    setEditingLegal(null)
+    setLegalDialogOpen(true)
+  }
+  const openEditLegal = (ref: LegalReference) => {
+    setEditingLegal(ref)
+    setLegalDialogOpen(true)
+  }
 
   const handleAudit = async () => {
     if (!selectedDIId) {
@@ -839,11 +857,11 @@ export function AiAuditModule() {
                 onClick={() => setLegalType(t)}
               >
                 {legalTypeLabels[t]}
-              </Button>
-            ))}
+             </Button>
+           ))}
             {isAdmin && (
               <div className="ml-auto flex gap-2">
-                <Button size="sm" variant="outline"><Plus className="h-3.5 w-3.5 mr-1.5" />Добавить норму</Button>
+                <Button size="sm" variant="outline" onClick={openCreateLegal}><Plus className="h-3.5 w-3.5 mr-1.5" />Добавить норму</Button>
               </div>
             )}
           </div>
@@ -874,8 +892,9 @@ export function AiAuditModule() {
                       <div className="flex items-center gap-2">
                         {isAdmin && (
                           <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><Pencil className="h-3.5 w-3.5" /></Button>
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-600"><Trash2 className="h-3.5 w-3.5" /></Button>
+                           <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><Pencil className="h-3.5 w-3.5" /></Button>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openEditLegal(ref)}><Pencil className="h-3.5 w-3.5" /></Button>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-600" onClick={() => setLegalDeleteId(ref.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                           </div>
                         )}
                         {expandedLegalId === ref.id ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
@@ -1060,11 +1079,22 @@ export function AiAuditModule() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+             ))}
+           </div>
+         )}
+       </DialogContent>
+     </Dialog>
+      <LegalReferenceDialog
+        open={legalDialogOpen}
+        onOpenChange={setLegalDialogOpen}
+        editing={editingLegal}
+        onSaved={reloadLegalRefs}
+      />
+      <LegalReferenceDeleteDialog
+        deleteId={legalDeleteId}
+        onClose={() => setLegalDeleteId(null)}
+        onDeleted={reloadLegalRefs}
+      />
+   </div>
   )
 }
