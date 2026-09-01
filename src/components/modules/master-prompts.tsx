@@ -26,7 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { Brain, Plus, Eye, Pencil, Trash2, GitBranch, Copy, CheckCircle2, XCircle, Sparkles, FlaskConical, Play, Link2, History, Download, Upload, Tag } from 'lucide-react'
 import { AlertTriangle } from 'lucide-react'
-import { extractVariables, estimateTokens, PROMPT_CATEGORIES } from '@/lib/master-prompt'
+import { extractVariables, estimateTokens, PROMPT_CATEGORIES } from '@/lib/master-prompt-shared'
 import {
   type Department, type BusinessFunctionItem, type CompanyItem, type AIProviderItem,
   type MasterPrompt, type Position, type PromptChain, type PromptTestResultItem,
