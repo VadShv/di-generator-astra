@@ -185,6 +185,9 @@ export function TrackingModule() {
   // Фильтр ленты: всё или только по текущему фокусу.
   const [feedScope, setFeedScope] = useState<'focus' | 'all'>('all')
 
+  // Фильтр ленты по типу события (null = все типы).
+  const [feedTypeFilter, setFeedTypeFilter] = useState<string | null>(null)
+
   // Диалог метки.
   const [tagDialogOpen, setTagDialogOpen] = useState(false)
   const [editingTag, setEditingTag] = useState<TrackingTag | null>(null)
@@ -374,13 +377,23 @@ export function TrackingModule() {
   // Группировка ленты по дням.
   const feedByDay = useMemo(() => {
     const groups: Record<string, FeedEvent[]> = {}
-    for (const ev of feed) {
+    const filtered = feedTypeFilter ? feed.filter(ev => ev.type === feedTypeFilter) : feed
+    for (const ev of filtered) {
       const day = new Date(ev.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
       if (!groups[day]) groups[day] = []
       groups[day].push(ev)
     }
     return groups
+  }, [feed, feedTypeFilter])
+
+  // Доступные типы событий в ленте (для фильтра-чипов).
+  const feedTypes = useMemo(() => {
+    const types = new Set(feed.map(ev => ev.type))
+    return Array.from(types).map(t => ({ value: t, ...eventMeta(t) }))
   }, [feed])
+
+  // Кол-во отфильтрованных событий.
+  const feedFilteredCount = feedTypeFilter ? feed.filter(ev => ev.type === feedTypeFilter).length : feed.length
 
   return (
     <div className="space-y-4">
@@ -504,7 +517,10 @@ export function TrackingModule() {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Лента действий</CardTitle>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4" /> Лента действий
+                  <Badge variant="secondary" className="text-xs">{feedFilteredCount}</Badge>
+                </CardTitle>
                 <div className="flex items-center gap-1">
                   <Button size="sm" variant={feedScope === 'all' ? 'default' : 'outline'} onClick={() => setFeedScope('all')}>Все</Button>
                   <Button size="sm" variant={feedScope === 'focus' ? 'default' : 'outline'} onClick={() => setFeedScope('focus')} disabled={!focus}>По фокусу</Button>
@@ -521,43 +537,71 @@ export function TrackingModule() {
                   <p className="text-xs mt-1">Создавайте ДИ, запускайте аудиты, добавляйте метки и записи — они появятся здесь</p>
                 </div>
               ) : (
-                <ScrollArea className="max-h-[560px]">
-                  <div className="space-y-4 pr-2">
-                    {Object.entries(feedByDay).map(([day, evs]) => (
-                      <div key={day}>
-                        <div className="sticky top-0 bg-card py-1 z-10">
-                          <p className="text-xs font-medium text-muted-foreground">{day}</p>
-                          <Separator className="mt-1" />
-                        </div>
-                        <div className="space-y-1 mt-2">
-                          {evs.map(ev => {
-                            const em = eventMeta(ev.type)
-                            const Icon = em.icon
-                            return (
-                              <div key={ev.id} className="flex gap-3 py-2">
-                                <div className="flex-shrink-0 mt-0.5">
-                                  <Icon className={`h-4 w-4 ${em.color}`} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <p className="text-sm font-medium truncate">{ev.title}</p>
-                                    <span className="text-xs text-muted-foreground flex-shrink-0">{new Date(ev.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+                <>
+                  {/* Фильтр по типу события */}
+                  {feedTypes.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      <button
+                        onClick={() => setFeedTypeFilter(null)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${feedTypeFilter === null ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/30 text-muted-foreground border-transparent hover:bg-muted/60'}`}
+                      >
+                        Все типы
+                      </button>
+                      {feedTypes.map(ft => {
+                        const Icon = ft.icon
+                        return (
+                          <button
+                            key={ft.value}
+                            onClick={() => setFeedTypeFilter(feedTypeFilter === ft.value ? null : ft.value)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors flex items-center gap-1 ${feedTypeFilter === ft.value ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/30 text-muted-foreground border-transparent hover:bg-muted/60'}`}
+                          >
+                            <Icon className={`h-3 w-3 ${feedTypeFilter === ft.value ? 'text-primary-foreground' : ft.color}`} />
+                            {ft.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                  <ScrollArea className="h-[520px]">
+                    <div className="space-y-1 pr-3">
+                      {Object.entries(feedByDay).map(([day, evs]) => (
+                        <div key={day}>
+                          <div className="sticky top-0 z-10 bg-card py-2">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{day}</p>
+                          </div>
+                          <div className="space-y-2 mt-1 relative">
+                            <div className="absolute left-[15px] top-0 bottom-0 w-px bg-border" />
+                            {evs.map(ev => {
+                              const em = eventMeta(ev.type)
+                              const Icon = em.icon
+                              return (
+                                <div key={ev.id} className="flex gap-3 py-1.5 group">
+                                  <div className="flex-shrink-0 relative z-10">
+                                    <div className={`flex items-center justify-center h-8 w-8 rounded-full bg-card border-2 ${em.color.replace('text-', 'border-')} group-hover:bg-muted/50 transition-colors`}>
+                                      <Icon className={`h-4 w-4 ${em.color}`} />
+                                    </div>
                                   </div>
-                                  {ev.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{ev.description}</p>}
-                                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                    <Badge variant="outline" className="text-xs">{em.label}</Badge>
-                                    {ev.author && <Badge variant="secondary" className="text-xs">{ev.author}</Badge>}
-                                    {ev.diTitle && <Badge variant="outline" className="text-xs truncate max-w-[200px]">{ev.diTitle}</Badge>}
+                                  <div className="flex-1 min-w-0 bg-muted/20 rounded-lg px-3 py-2 group-hover:bg-muted/40 transition-colors">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <p className="text-sm font-medium truncate">{ev.title}</p>
+                                      <span className="text-xs text-muted-foreground flex-shrink-0 tabular-nums">{new Date(ev.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+                                    </div>
+                                    {ev.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{ev.description}</p>}
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                      <Badge variant="outline" className="text-xs">{em.label}</Badge>
+                                      {ev.author && <Badge variant="secondary" className="text-xs">{ev.author}</Badge>}
+                                      {ev.diTitle && <Badge variant="outline" className="text-xs truncate max-w-[200px]">{ev.diTitle}</Badge>}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            )
-                          })}
+                              )
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </>
               )}
             </CardContent>
           </Card>
@@ -580,28 +624,30 @@ export function TrackingModule() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Дата/Время</TableHead>
-                        <TableHead>Пользователь</TableHead>
-                        <TableHead>Действие</TableHead>
-                        <TableHead>Метод</TableHead>
-                        <TableHead>Путь</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {auditItems.map(item => (
-                        <TableRow key={item.id}>
-                          <TableCell>{formatAuditDate(item.createdAt)}</TableCell>
-                          <TableCell>{item.userEmail || item.userId || '—'}</TableCell>
-                          <TableCell>{item.action}</TableCell>
-                          <TableCell><Badge className={`text-xs border-0 ${methodBadgeClass(item.method)}`}>{item.method}</Badge></TableCell>
-                          <TableCell className="font-mono text-xs">{item.path}</TableCell>
+                  <ScrollArea className="h-[560px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Дата/Время</TableHead>
+                          <TableHead>Пользователь</TableHead>
+                          <TableHead>Действие</TableHead>
+                          <TableHead>Метод</TableHead>
+                          <TableHead>Путь</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {auditItems.map(item => (
+                          <TableRow key={item.id}>
+                            <TableCell className="whitespace-nowrap">{formatAuditDate(item.createdAt)}</TableCell>
+                            <TableCell className="truncate max-w-[180px]">{item.userEmail || item.userId || '—'}</TableCell>
+                            <TableCell className="font-medium">{item.action}</TableCell>
+                            <TableCell><Badge className={`text-xs border-0 ${methodBadgeClass(item.method)}`}>{item.method}</Badge></TableCell>
+                            <TableCell className="font-mono text-xs truncate max-w-[260px]">{item.path}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-muted-foreground">Страница {auditPage} · всего {auditTotal}</p>
                     <div className="flex gap-2">
