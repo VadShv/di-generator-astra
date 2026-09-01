@@ -20,6 +20,7 @@ import { DashboardModule } from '@/components/modules/dashboard'
 import { GlobalSearch } from '@/components/global-search'
 import { NotificationBell } from '@/components/notification-bell'
 import { UserMenu } from '@/components/user-menu'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 const StaffScheduleModule = dynamic(() => import('@/components/modules/staff-schedule').then(m => m.StaffScheduleModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
 const ArchiveModule = dynamic(() => import('@/components/modules/archive').then(m => m.ArchiveModule), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin mx-auto my-8 text-muted-foreground" /> })
@@ -189,7 +190,9 @@ export default function HomePage() {
               <kbd className="text-xs bg-background px-1.5 py-0.5 rounded border">⌘K</kbd>
             </button>
           </div>
-          {modules[activeSection] ?? <DashboardModule />}
+          <ErrorBoundary key={activeSection} resetKeys={[activeSection]}>
+            {modules[activeSection] ?? <DashboardModule />}
+          </ErrorBoundary>
         </div>
       </main>
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
