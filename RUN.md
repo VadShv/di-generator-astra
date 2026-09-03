@@ -1,7 +1,7 @@
 # Запуск проекта di-generator-astra
 
 Промпт-инструкция для агента AstraCode: быстрый и правильный запуск сервиса.
-Полная история — в AGENT_LOG.md (разделы 1, 27, 28, 29, 31).
+Полная история — в docs/AGENT_LOG.md (разделы 1, 27, 28, 29, 31).
 
 ---
 
@@ -48,7 +48,7 @@ bash scripts/start.sh start     (sandbox_permissions=require_escalated)
 
 ## ⚙️ Как это работает под капотом (fallback, если старт-скрипт сломался)
 
-Полная история — в AGENT_LOG.md, обязательно прочитать разделы 1, 27, 28, 29, 31.
+Полная история — в docs/AGENT_LOG.md, обязательно прочитать разделы 1, 27, 28, 29, 31.
 
 ### 1. PostgreSQL (portable, НЕ системный — sudo/systemctl неприменимы)
 - Бинари в `/tmp/pgroot` (могут быть очищены между сессиями). Если нет —
@@ -79,13 +79,13 @@ cd /home/astra/di-generator-astra && bun next dev -p 3001 -H 0.0.0.0
 Turbopack включён по умолчанию (Next 16). Работает БЛАГОДАРЯ фиксу в next.config.ts:
 `transpilePackages: ["@prisma/client", ".prisma/client"]` — без него Turbopack
 ломает резолвинг @prisma/client (Cannot find module @prisma/client-<hash>, 500 на
-всех БД-роутах). См. AGENT_LOG.md раздел 31. НЕ удалять transpilePackages и НЕ
+всех БД-роутах). См. docs/AGENT_LOG.md раздел 31. НЕ удалять transpilePackages и НЕ
 возвращать --webpack (медленнее: 2–4s на первый роут vs 0.05–0.1s на Turbopack).
 Запускать через setsid-демон (как postgres) или держать PTY-сессию открытой.
 
 ---
 
-## Важно про среду AstraCode (читай AGENT_LOG.md раздел 27.3)
+## Важно про среду AstraCode (читай docs/AGENT_LOG.md раздел 27.3)
 - sandbox делает bwrap --unshare-net: curl/psql/db:push/next dev к localhost
   запускать ТОЛЬКО с sandbox_permissions=require_escalated.
 - НЕ использовать shell-редирект в файл (> file, >>, tee) и rm через shell —

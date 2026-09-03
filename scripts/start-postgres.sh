@@ -7,7 +7,7 @@
 #   ./scripts/start-postgres.sh stop   # остановить
 #   ./scripts/start-postgres.sh status # статус
 #
-# Требования: бинари PostgreSQL в /tmp/pgroot (см. AGENT_LOG.md, Фаза 1).
+# Требования: бинари PostgreSQL в /tmp/pgroot (см. docs/AGENT_LOG.md, Фаза 1).
 #
 # ПРИМЕЧАНИЕ: кластер хранится ВНУТРИ проекта (./.pgdata), чтобы данные
 # переживали перезапуск сессии/контейнера. /tmp/pgdata очищается между
@@ -34,7 +34,7 @@ export LD_LIBRARY_PATH="$LIBDIR"
 # Если бинари не установлены — подсказка
 if [ ! -x "$PGBIN/postgres" ]; then
   echo "❌ PostgreSQL бинари не найдены в $PGBIN"
-  echo "   См. AGENT_LOG.md (Фаза 1) — инструкция по установке portable PostgreSQL."
+  echo "   См. docs/AGENT_LOG.md (Фаза 1) — инструкция по установке portable PostgreSQL."
   exit 1
 fi
 

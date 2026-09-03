@@ -407,7 +407,7 @@ export function TechStackModule() {
           <div className="text-sm">
             <p className="font-medium">Полная история разработки</p>
             <p className="text-muted-foreground">
-              Подробное описание всех фаз и решений — в <code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">AGENT_LOG.md</code>. Инструкция по быстрому запуску — в <code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">RUN.md</code>.
+              Подробное описание всех фаз и решений — в <code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">docs/AGENT_LOG.md</code>. Инструкция по быстрому запуску — в <code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">RUN.md</code>.
             </p>
           </div>
           <NavButton section="instructions">К инструкции</NavButton>

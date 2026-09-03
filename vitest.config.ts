@@ -6,6 +6,11 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     globals: false,
+    // Тесты выполняются с NODE_ENV=test (не development/production).
+    // auth-options.ts fail-closed без AUTH_SECRET → нужен явный opt-in.
+    env: {
+      ALLOW_OPEN_ACCESS: 'true',
+    },
     // Zod v4 экспортирует `z` через namespace-агрегацию ESM-модулей.
     // В SSR-режиме vitest ломает этот интероп (`z` становится undefined).
     // Инлайн zod в бандл тестов, чтобы ESM-экспорты резолвились корректно.

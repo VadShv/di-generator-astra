@@ -18,6 +18,7 @@ services:
       AUTH_SECRET: ${AUTH_SECRET}
       AI_PROVIDER_ENCRYPTION_KEY: ${AI_PROVIDER_ENCRYPTION_KEY}
       AI_PROVIDER_ALLOW_DEV_KEY: ${AI_PROVIDER_ALLOW_DEV_KEY:-false}
+      ALLOW_OPEN_ACCESS: ${ALLOW_OPEN_ACCESS:-false}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Caddy ходит к app изнутри сети — доверяем его заголовкам x-forwarded-for.
       TRUSTED_PROXY_IP: ${TRUSTED_PROXY_IP:-caddy}

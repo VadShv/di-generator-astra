@@ -3,8 +3,9 @@
 // Стратегия сессии — JWT (без адаптера Prisma для сессий).
 //
 // Аутентификация активируется только если задан AUTH_SECRET.
-// Без AUTH_SECRET next-auth бросит ошибку при инициализации — это намеренно:
-// в dev-окружении без секрета доступ остаётся открытым (middleware гейтит по env).
+// Без AUTH_SECRET сервер не стартует (fail-closed), кроме явного режима разработки:
+// NODE_ENV=development (next dev) или ALLOW_OPEN_ACCESS=true.
+// Это предотвращает запуск открытого приложения в staging/preview без NODE_ENV=production.
 //
 // Фаза 6: isActive + passwordChangedAt проверяются на каждый вызов jwt callback
 // (с TTL-кэшем 60 сек), чтобы деактивированные пользователи и старые сессии
@@ -19,15 +20,11 @@ import { parsePermissions, type Permissions } from '@/lib/auth/permissions'
 function getAuthSecret(): string {
   const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET
   if (!secret) {
-    // В dev без секрета — возвращаем пустую строку, чтобы модуль загрузился.
-    // isAuthEnabled() вернёт false → requireAuth() откроет доступ (dev-only).
-    // assertAuthConfigured() на верхнем уровне уже заблокировал production.
-    if (process.env.NODE_ENV !== 'production') {
-      return ''
-    }
-    throw new Error(
-      'AUTH_SECRET (или NEXTAUTH_SECRET) не задан. Установите его в .env для включения аутентификации.'
-    )
+    // Секрета нет — assertAuthConfigured() (вызывается при загрузке модуля)
+    // уже проверил, что мы в режиме разработки (NODE_ENV=development) или
+    // с явным opt-in ALLOW_OPEN_ACCESS=true. Возвращаем пустую строку:
+    // isAuthEnabled() = false → requireAuth() откроет доступ (dev-only).
+    return ''
   }
   return secret
 }
@@ -38,18 +35,33 @@ export function isAuthEnabled(): boolean {
 }
 
 /**
- * Проверка fail-closed: в production отсутствие AUTH_SECRET — критическая ошибка.
- * Сервер не должен запускаться без аутентификации в production-окружении.
- * @throws Error если NODE_ENV === 'production' и секрет не задан.
+ * Проверка fail-closed: без AUTH_SECRET сервер не должен работать в открытом режиме.
+ * Исключения — только явный режим разработки (NODE_ENV=development, устанавливается
+ * `next dev`) или явный opt-in ALLOW_OPEN_ACCESS=true. Это закрывает брешь, когда
+ * staging/preview без NODE_ENV=production работал с открытым доступом.
+ * @throws Error если AUTH_SECRET не задан и запуск не разрешён в открытом режиме.
  */
 export function assertAuthConfigured(): void {
-  if (process.env.NODE_ENV === 'production' && !isAuthEnabled()) {
+  if (isAuthEnabled()) return
+  // В production — fail-closed безусловно, без возможности обхода.
+  if (process.env.NODE_ENV === 'production') {
     throw new Error(
       'AUTH_SECRET (или NEXTAUTH_SECRET) не задан в production. ' +
         'Аутентификация обязательна — сервер не может работать в открытом режиме. ' +
         'Сгенерируйте секрет: openssl rand -base64 32'
     )
   }
+  // Вне production — разрешаем только в явном режиме разработки или с opt-in.
+  // Это закрывает брешь, где staging/preview без NODE_ENV=production работал открытым.
+  const isExplicitDev = process.env.NODE_ENV === 'development'
+  const allowOpenAccess = process.env.ALLOW_OPEN_ACCESS === 'true'
+  if (isExplicitDev || allowOpenAccess) return
+  throw new Error(
+    'AUTH_SECRET (или NEXTAUTH_SECRET) не задан. ' +
+      'Аутентификация обязательна вне режима разработки — сервер не может работать в открытом режиме. ' +
+      'Установите AUTH_SECRET (openssl rand -base64 32), запустите через `next dev` ' +
+      '(NODE_ENV=development), либо задайте ALLOW_OPEN_ACCESS=true для локальной разработки.'
+  )
 }
 
 // Проверка при загрузке модуля: fail-closed в production.

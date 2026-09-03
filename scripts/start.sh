@@ -7,7 +7,7 @@
 #
 # Важно:
 #   - Next.js запускается на Turbopack (без --webpack). Prisma работает благодаря
-#     transpilePackages в next.config.ts (см. AGENT_LOG.md раздел 31).
+#     transpilePackages в next.config.ts (см. docs/AGENT_LOG.md раздел 31).
 #     НЕ возвращать --webpack (медленнее в 30-40 раз) и НЕ удалять transpilePackages.
 #   - Обе службы запускаются через setsid как демоны — переживают переключение
 #     PTY-сессий AstraCode.

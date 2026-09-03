@@ -77,6 +77,39 @@ describe('assertAuthConfigured (fail-closed в production)', () => {
     const mod = await import('@/lib/auth/auth-options')
     expect(mod.isAuthEnabled()).toBe(false)
   })
+
+  it('fail-closed: бросает в staging без AUTH_SECRET и без ALLOW_OPEN_ACCESS', async () => {
+    vi.stubEnv('NODE_ENV', 'staging')
+    vi.stubEnv('AUTH_SECRET', '')
+    vi.stubEnv('NEXTAUTH_SECRET', '')
+    vi.stubEnv('ALLOW_OPEN_ACCESS', '')
+    await expect(import('@/lib/auth/auth-options')).rejects.toThrow(/AUTH_SECRET/)
+  })
+
+  it('fail-closed: бросает при пустом NODE_ENV без AUTH_SECRET', async () => {
+    vi.stubEnv('NODE_ENV', '')
+    vi.stubEnv('AUTH_SECRET', '')
+    vi.stubEnv('NEXTAUTH_SECRET', '')
+    vi.stubEnv('ALLOW_OPEN_ACCESS', '')
+    await expect(import('@/lib/auth/auth-options')).rejects.toThrow(/AUTH_SECRET/)
+  })
+
+  it('ALLOW_OPEN_ACCESS=true разрешает запуск без AUTH_SECRET вне production', async () => {
+    vi.stubEnv('NODE_ENV', 'staging')
+    vi.stubEnv('AUTH_SECRET', '')
+    vi.stubEnv('NEXTAUTH_SECRET', '')
+    vi.stubEnv('ALLOW_OPEN_ACCESS', 'true')
+    const mod = await import('@/lib/auth/auth-options')
+    expect(mod.isAuthEnabled()).toBe(false)
+  })
+
+  it('fail-closed: ALLOW_OPEN_ACCESS не спасает в production', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AUTH_SECRET', '')
+    vi.stubEnv('NEXTAUTH_SECRET', '')
+    vi.stubEnv('ALLOW_OPEN_ACCESS', 'true')
+    await expect(import('@/lib/auth/auth-options')).rejects.toThrow(/AUTH_SECRET/)
+  })
 })
 
 describe('Cookie security flags (Фаза 3, шаг 3.2)', () => {

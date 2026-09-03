@@ -8,6 +8,14 @@ const mockNotificationUpdateMany = vi.fn()
 
 vi.mock('@/lib/auth/session', () => ({
   getAppSession: (...args: unknown[]) => mockGetAppSession(...args),
+  requireAuth: async () => {
+    const session = await mockGetAppSession()
+    if (!session?.user) {
+      const { ApiError } = await import('@/lib/api-utils')
+      throw new ApiError('Требуется аутентификация', 401, 'unauthorized')
+    }
+    return session
+  },
 }))
 vi.mock('@/lib/db', () => ({
   db: {
@@ -33,7 +41,6 @@ const SESSION = {
 
 describe('PUT /api/notifications — IDOR-защита', () => {
   beforeEach(() => {
-    vi.resetModules()
     mockGetAppSession.mockReset()
     mockNotificationUpdateMany.mockReset()
     mockGetAppSession.mockResolvedValue(SESSION)

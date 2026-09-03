@@ -2,7 +2,7 @@
 
 // Модуль «Архив ДИ» — работа с архивными должностными инструкциями.
 // Архивные ДИ можно загружать без привязки к должности и привязывать позже.
-// См. ТЗ раздел 18 (AGENT_LOG.md).
+// См. ТЗ раздел 18 (docs/AGENT_LOG.md).
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
