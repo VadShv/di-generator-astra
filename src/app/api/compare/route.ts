@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
+import { z } from 'zod'
 
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('compare')
+
+const comparePostSchema = z.object({
+  generatedDIId: z.string().trim().min(1),
+  content: z.string().max(500_000, 'Контент слишком большой'),
+  fileName: z.string().max(255).optional(),
+  isOriginal: z.boolean().optional(),
+})
 
 // GET /api/compare - Paginated list of DI versions (with DI info)
 // Параметры: generatedDIId, page, pageSize
@@ -72,16 +80,8 @@ export async function GET(request: Request) {
 // POST /api/compare - Upload new version
 export async function POST(request: Request) {
   try {
-    await requireAuth()
-    const body = await request.json()
-    const { generatedDIId, content, uploadedBy, fileName, isOriginal } = body
-
-    if (!generatedDIId || !content) {
-      return NextResponse.json(
-        { error: 'ID сгенерированной ДИ и содержание обязательны' },
-        { status: 400 }
-      )
-    }
+    const session = await requireAuth()
+    const { generatedDIId, content, fileName, isOriginal } = await parseBody(request, comparePostSchema)
 
     // Verify generated DI exists
     const generatedDI = await db.generatedDI.findUnique({
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
         content,
         version: nextVersion,
         isOriginal: isOriginal ?? false,
-        uploadedBy: uploadedBy || null,
+        uploadedBy: session?.user?.id ?? null,
         fileName: fileName || null,
       },
      include: {

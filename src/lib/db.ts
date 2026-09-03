@@ -97,10 +97,23 @@ export const db = baseClient.$extends({
             args.where = rest
             return query(args)
           }
-          // Soft-delete: помечаем deletedAt вместо физического удаления.
+          // Soft-delete: помечаем deletedAt + каскадно удаляем дочерние записи.
+          // Без этого child-записи (секции, версии, аудит) осиротевают (W9).
+          const now = new Date()
+          if (model === 'GeneratedDI') {
+            const id = (args.where as { id?: string }).id
+            if (id) {
+              await Promise.all([
+                (baseClient as any).generatedDISection.deleteMany({ where: { generatedDIId: id } }),
+                (baseClient as any).dIVersion.deleteMany({ where: { generatedDIId: id } }),
+                (baseClient as any).dIAuditResult.deleteMany({ where: { generatedDIId: id } }),
+                (baseClient as any).dITracking.deleteMany({ where: { generatedDIId: id } }),
+              ]).catch(() => {})
+            }
+          }
           return (baseClient as any)[model].update({
             where: args.where,
-            data: { deletedAt: new Date() },
+            data: { deletedAt: now },
           })
         }
         return query(args)

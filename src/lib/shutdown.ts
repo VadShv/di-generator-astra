@@ -10,6 +10,7 @@
  */
 
 import { stopQueuePoller, getActiveJobsCount } from './di/mass-generate-worker'
+import { db } from './db'
 import { createLogger } from './logger'
 
 const log = createLogger('shutdown')
@@ -52,6 +53,14 @@ export function registerShutdownHandlers(): void {
     if (activeJobs > 0) {
       log.info(`Waiting for ${activeJobs} active job(s) to finish`, { timeoutMs: SHUTDOWN_TIMEOUT_MS })
       await waitForActiveJobs(SHUTDOWN_TIMEOUT_MS)
+    }
+
+    // Помечаем зависшие running-задачи как failed — не оставляем orphaned jobs.
+    if (getActiveJobsCount() > 0) {
+      await db.generationJob.updateMany({
+        where: { status: 'running' },
+        data: { status: 'failed', finishedAt: new Date(), results: JSON.stringify([{ status: 'error', message: 'Прервано при остановке сервера' }]) },
+      }).catch((e) => { log.error('Failed to mark running jobs as failed', { message: e instanceof Error ? e.message : String(e) }) })
     }
 
     log.info('Graceful shutdown complete')

@@ -120,6 +120,7 @@ export async function GET(request: NextRequest) {
         { grade: 'desc' },
         { version: 'desc' },
       ],
+      take: 200,
     })
 
     return NextResponse.json(prompts)

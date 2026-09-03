@@ -50,6 +50,8 @@ interface JobScopeData {
  * Защита от повторного запуска той же job — через атомарное обновление статуса.
  */
 export async function runJob(jobId: string): Promise<void> {
+  // Синхронно резервируем слот — устраняет async gap между проверкой и инкрементом (W18).
+  activeJobs++
   // Захват job: переводим queued -> running только если она ещё queued.
   const claimed = await db.generationJob
     .updateMany({
@@ -62,11 +64,11 @@ export async function runJob(jobId: string): Promise<void> {
     })
 
   if (claimed.count === 0) {
-    // Уже занята или не существует — пропускаем.
+    // Уже занята или не существует — освобождаем слот.
+    activeJobs--
     return
   }
 
-  activeJobs++
   try {
     // Per-job таймаут с активной отменой через AbortController.
     // При превышении — прерываем запросы к провайдеру и помечаем job как failed.

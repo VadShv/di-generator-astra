@@ -139,7 +139,8 @@ model StaffingTable {
   department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   positionTitle String   // Название должности из ШР
   positionCode String?   // Код должности (если есть)
-  positionId   String?   // Привязка к созданной Position (после импорта) — обратная связь
+  positionId   String?   // Привязка к созданной Position (после импорта) — FK с referential integrity
+  positionRef  Position? @relation("StaffingTableToPosition", fields: [positionId], references: [id], onDelete: SetNull)
   position     Position? @relation("StaffingTablePosition")
   headcount    Int      @default(1) // Кол-во ставок
   category     String?  // Категория (руководители/специалисты/служащие/рабочие)
@@ -172,6 +173,7 @@ model Position {
   functions           String?     // Выполняемые функции (JSON строка с массивом)
   staffingTableId     String?  @unique  // Связь со строкой ШР (одна должность ← одна строка ШР)
   staffingTable       StaffingTable? @relation("StaffingTablePosition", fields: [staffingTableId], references: [id])
+  staffingTableRefs   StaffingTable[] @relation("StaffingTableToPosition") // Back-relation для positionId FK
  archiveDIs          ArchiveDI[]
  generatedDIs        GeneratedDI[]
  uploadedDocuments   UploadedDocument[]

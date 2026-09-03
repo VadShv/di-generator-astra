@@ -1,10 +1,26 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, requireRole } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { createLogger } from '@/lib/logger'
+import { z } from 'zod'
 
 const log = createLogger('tracking')
+
+const validTrackingStatuses = ['draft', 'review', 'approved', 'exported', 'outdated', 'missing']
+
+const trackingCreateSchema = z.object({
+  generatedDIId: z.string().trim().min(1),
+  status: z.enum(validTrackingStatuses as [string, ...string[]]),
+  assignee: z.string().max(255).optional(),
+  notes: z.string().max(10_000).optional(),
+})
+
+const trackingUpdateSchema = z.object({
+  status: z.enum(validTrackingStatuses as [string, ...string[]]).optional(),
+  assignee: z.string().max(255).nullable().optional(),
+  notes: z.string().max(10_000).nullable().optional(),
+})
 
 // GET /api/tracking - List all tracking entries with DI and position info
 export async function GET(request: Request) {
@@ -43,6 +59,7 @@ export async function GET(request: Request) {
         },
       },
       orderBy: { createdAt: 'desc' },
+      take: 500,
     })
 
     return NextResponse.json(trackings)
@@ -57,15 +74,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     await requireAuth()
-    const body = await request.json()
-    const { generatedDIId, status, assignee, notes } = body
-
-    if (!generatedDIId || !status) {
-      return NextResponse.json(
-        { error: 'generatedDIId и status обязательны' },
-        { status: 400 }
-      )
-    }
+    const { generatedDIId, status, assignee, notes } = await parseBody(request, trackingCreateSchema)
 
     // Verify GeneratedDI exists и получаем position для связи с должностью/отделом
     const generatedDI = await db.generatedDI.findUnique({
@@ -116,15 +125,8 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     await requireAuth()
-    const body = await request.json()
+    const body = await parseBody(request, z.object({ id: z.string().trim().min(1) }).extend(trackingUpdateSchema.shape))
     const { id, status, assignee, notes } = body
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'ID обязателен для обновления' },
-        { status: 400 }
-      )
-    }
 
     const existing = await db.dITracking.findUnique({ where: { id } })
 

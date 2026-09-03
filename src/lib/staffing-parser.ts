@@ -57,9 +57,9 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   positionCode: ['коддолжности', 'кодпрофессии', 'positioncode', 'jobcode'],
   headcount: [
     'кол-воставок', 'колвоставок', 'количествоставок', 'штатныхединиц', 'ставок',
-    'headcount', 'qty', 'quantity', 'count', 'штед',
+    'headcount', 'quantity', 'штед',
   ],
-  category: ['категория', 'category', 'кат'],
+  category: ['категория', 'category'],
   grade: ['грейд', 'разряд', 'grade', 'level'],
 }
 
