@@ -13,10 +13,11 @@ export const nonEmptyString = z
 /** ID (cuid) — непустая строка. */
 export const idSchema = nonEmptyString
 
-/** Массив ID с минимум одним элементом. */
+/** Массив ID с минимум одним элементом (макс. 200 — защита от DoS). */
 export const idArraySchema = z
   .array(nonEmptyString)
   .min(1, 'Список не может быть пустым')
+  .max(200, 'Список не может содержать более 200 элементов')
 
 // ─────────────────────────────────────────────
 // Схемы роутов generate-di/*
@@ -79,9 +80,9 @@ export const batchAuditSchema = z.object({
 /** POST /api/generate-di/mass-generate */
 export const massGenerateSchema = z
   .object({
-    departmentIds: z.array(nonEmptyString).optional(),
-    companyIds: z.array(nonEmptyString).optional(),
-    positionIds: z.array(nonEmptyString).optional(),
+    departmentIds: z.array(nonEmptyString).max(200).optional(),
+    companyIds: z.array(nonEmptyString).max(200).optional(),
+    positionIds: z.array(nonEmptyString).max(200).optional(),
     templateId: idSchema,
     masterPromptId: z.string().optional(),
     providerId: z.string().optional(),

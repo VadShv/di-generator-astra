@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { withErrorHandler, parseBody } from '@/lib/api-utils'
 import { z } from 'zod'
 import { createLogger } from '@/lib/logger'
-import { requirePermission } from '@/lib/auth/session'
+import { requireRole } from '@/lib/auth/session'
 
 const log = createLogger('generate-di/batch-delete')
 
@@ -19,7 +19,7 @@ const batchDeleteBodySchema = z
 
 // POST /api/generate-di/batch-delete — пакетное удаление сгенерированных ДИ.
 export const POST = withErrorHandler(async (request: Request) => {
-  await requirePermission('generate-di', 'write')
+  await requireRole('admin')
   const { diIds } = await parseBody(request, batchDeleteBodySchema)
 
   const results: { diId: string; success: boolean; error?: string }[] = []

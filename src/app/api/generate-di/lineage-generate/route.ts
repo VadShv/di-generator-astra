@@ -18,7 +18,7 @@ const lineageGenerateSchema = z.object({
 // POST /api/generate-di/lineage-generate — генерация ДИ для всех должностей в линейке
 // AI дифференцирует обязанности по уровням (junior → lead)
 export const POST = withErrorHandler(async (request: Request) => {
-  await requireAuth()
+  const session = await requireAuth()
   const body = await parseBody(request, lineageGenerateSchema)
   const { lineageId, templateId, masterPromptId, providerId } = body
 
@@ -43,7 +43,7 @@ export const POST = withErrorHandler(async (request: Request) => {
 
   // Проверяем лимит массовой генерации
   const limitSetting = await db.systemSettings.findUnique({ where: { key: 'massGenLimit' } })
-  const massGenLimit = parseInt(limitSetting?.value || '20', 10)
+  const massGenLimit = Number.isFinite(parseInt(limitSetting?.value || '20', 10)) && parseInt(limitSetting?.value || '20', 10) > 0 ? parseInt(limitSetting?.value || '20', 10) : 20
   if (lineage.items.length > massGenLimit) {
     return NextResponse.json(
       { error: `Превышен лимит: ${lineage.items.length} должностей в линейке, максимум ${massGenLimit}` },
@@ -64,6 +64,7 @@ export const POST = withErrorHandler(async (request: Request) => {
       failed: 0,
       results: '[]',
       templateId,
+      createdBy: session?.user?.id,
       ...(masterPromptId ? { masterPromptId } : {}),
       ...(providerId ? { providerId } : {}),
     },

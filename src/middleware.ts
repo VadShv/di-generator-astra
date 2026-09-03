@@ -59,7 +59,7 @@ export function isCsrfAllowed(
   } catch {
     return false
   }
-  return originHost === host
+  return originHost === host.toLowerCase()
 }
 
 /**
@@ -72,7 +72,7 @@ async function getValidSessionToken(request: NextRequest): Promise<boolean> {
       req: request,
       secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
     })
-    return Boolean(token)
+    return Boolean(token?.id)
   } catch {
     // Ошибка верификации (невалидная подпись, истёкший токен) — считаем не залогиненным.
     return false

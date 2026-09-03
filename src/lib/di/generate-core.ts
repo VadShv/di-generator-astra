@@ -26,6 +26,12 @@ export interface GeneratedSectionResult {
   aiGenerated: boolean
 }
 
+/** Результат генерации всех секций с ID записей TokenUsage для привязки к ДИ. */
+export interface GenerationResult {
+  sections: GeneratedSectionResult[]
+  tokenUsageIds: string[]
+}
+
 export interface GenerateSectionsParams {
   position: PositionForContext
   templateSections: TemplateSectionForGen[]
@@ -51,7 +57,7 @@ export interface GenerateSectionsParams {
  * Последовательно вызывает ИИ для каждой секции.
  * При ошибке одной секции — вставляет placeholder и продолжает.
  */
-export async function generateSectionsForPosition(params: GenerateSectionsParams): Promise<GeneratedSectionResult[]> {
+export async function generateSectionsForPosition(params: GenerateSectionsParams): Promise<GenerationResult> {
   const {
     position,
     templateSections,
@@ -70,6 +76,7 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
   const systemPrompt = buildGenerationSystemPrompt(position, renderedMasterPrompt, archiveContext, extraContext, legalContext)
 
   const results: GeneratedSectionResult[] = []
+  const tokenUsageIds: string[] = []
   const total = templateSections.length
 
   for (let i = 0; i < templateSections.length; i++) {
@@ -83,9 +90,8 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
         ],
         signal,
       })
-      // Fire-and-forget: сохраняем использование токенов
       if (result.usage) {
-        db.tokenUsage.create({
+        const tu = await db.tokenUsage.create({
           data: {
             providerName: result.providerName,
             modelName: result.modelName,
@@ -95,7 +101,8 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
             completionTokens: result.usage.completionTokens ?? 0,
             totalTokens: result.usage.totalTokens ?? 0,
           },
-        }).catch(() => {})
+        }).catch((e) => { log.warn('tokenUsage create failed', { error: e instanceof Error ? e.message : String(e) }); return null })
+        if (tu) tokenUsageIds.push(tu.id)
       }
       results.push({
         sectionTitle: section.title,
@@ -104,19 +111,18 @@ export async function generateSectionsForPosition(params: GenerateSectionsParams
         aiGenerated: true,
       })
     } catch (aiError) {
-      // Логируем, но продолжаем генерацию остальных секций.
       log.error(`AI generation error for section "${section.title}":`, { error: aiError })
       results.push({
         sectionTitle: section.title,
         sectionContent: errorPlaceholder,
         order: section.order,
-        aiGenerated: true,
+        aiGenerated: false,
       })
     }
     onProgress?.(i + 1, total)
   }
 
-  return results
+  return { sections: results, tokenUsageIds }
 }
 
 /**
@@ -129,8 +135,8 @@ export async function generateAiCultureSection(
   renderedCulturePrompt: string | null,
   userId?: string | null,
   signal?: AbortSignal
-): Promise<GeneratedSectionResult | null> {
-  if (!aiCulturePrompt || !renderedCulturePrompt) return null
+): Promise<{ section: GeneratedSectionResult | null; tokenUsageId: string | null }> {
+  if (!aiCulturePrompt || !renderedCulturePrompt) return { section: null, tokenUsageId: null }
   try {
     const cultureResult = await client.generate({
       messages: [
@@ -143,9 +149,9 @@ export async function generateAiCultureSection(
       ],
       signal,
     })
-    // Fire-and-forget: сохраняем использование токенов
+    let tokenUsageId: string | null = null
     if (cultureResult.usage) {
-      db.tokenUsage.create({
+      const tu = await db.tokenUsage.create({
         data: {
           providerName: cultureResult.providerName,
           modelName: cultureResult.modelName,
@@ -155,16 +161,20 @@ export async function generateAiCultureSection(
           completionTokens: cultureResult.usage.completionTokens ?? 0,
           totalTokens: cultureResult.usage.totalTokens ?? 0,
         },
-      }).catch(() => {})
+      }).catch((e) => { log.warn('tokenUsage create failed (culture)', { error: e instanceof Error ? e.message : String(e) }); return null })
+      tokenUsageId = tu?.id ?? null
     }
     return {
-      sectionTitle: 'Взаимодействие с системами ИИ',
-      sectionContent: (cultureResult.content || '').trim() || '[Раздел не сгенерирован]',
-      order: 0, // порядок задаётся вызывающим кодом
-      aiGenerated: true,
+      section: {
+        sectionTitle: 'Взаимодействие с системами ИИ',
+        sectionContent: (cultureResult.content || '').trim() || '[Раздел не сгенерирован]',
+        order: 0,
+        aiGenerated: true,
+      },
+      tokenUsageId,
     }
   } catch (cultureError) {
     log.error('AI Culture section error:', { error: cultureError })
-    return null
+    return { section: null, tokenUsageId: null }
   }
 }

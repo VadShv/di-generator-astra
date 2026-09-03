@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { hasAccess, type Permissions } from '@/lib/auth/permissions'
+import { hasAccessSafe, type Permissions } from '@/lib/auth/permissions'
 import { DashboardModule } from '@/components/modules/dashboard'
 import { GlobalSearch } from '@/components/global-search'
 import { NotificationBell } from '@/components/notification-bell'
@@ -93,7 +93,10 @@ export default function HomePage() {
   }, [])
 
   const groups = ['Обзор', 'Данные', 'Настройка', 'Генерация', 'Жизненный цикл', 'Анализ', 'Помощь', 'Профиль']
-  const visibleNavItems = navItems.filter((item) => hasAccess(permissions, item.id))
+  const role = (session?.user as { role?: string } | undefined)?.role
+  // Если нет session.user — auth отключена (middleware блокирует logged-out при включённой auth).
+  const authDisabled = !session?.user
+  const visibleNavItems = navItems.filter((item) => hasAccessSafe(permissions, item.id, 'read', role, authDisabled))
 
   return (
     <div className="min-h-screen flex bg-background">

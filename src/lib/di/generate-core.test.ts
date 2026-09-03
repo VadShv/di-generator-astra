@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { generateSectionsForPosition, generateAiCultureSection } from './generate-core'
 import type { AIProviderClient } from '@/lib/ai-connector'
 
-// Мокаем db для изоляции тестов
+const tokenUsageCreateMock = vi.hoisted(() => vi.fn())
+
 vi.mock('@/lib/db', () => ({
   db: {
     tokenUsage: {
-      create: vi.fn().mockResolvedValue({}),
+      create: tokenUsageCreateMock,
     },
   },
 }))
@@ -25,6 +26,7 @@ describe('generateSectionsForPosition', () => {
 
   beforeEach(() => {
     client = createMockClient()
+    tokenUsageCreateMock.mockResolvedValue({ id: 'tu-1' })
     vi.clearAllMocks()
   })
 
@@ -49,10 +51,10 @@ describe('generateSectionsForPosition', () => {
       archiveDIs: [],
     })
 
-    expect(result).toHaveLength(2)
-    expect(result[0].sectionTitle).toBe('Общие положения')
-    expect(result[0].sectionContent).toBe('Сгенерированный текст секции')
-    expect(result[0].aiGenerated).toBe(true)
+    expect(result.sections).toHaveLength(2)
+    expect(result.sections[0].sectionTitle).toBe('Общие положения')
+    expect(result.sections[0].sectionContent).toBe('Сгенерированный текст секции')
+    expect(result.sections[0].aiGenerated).toBe(true)
     expect(mockGenerate).toHaveBeenCalledTimes(2)
   })
 
@@ -71,9 +73,9 @@ describe('generateSectionsForPosition', () => {
       errorPlaceholder: '[Ошибка — тест]',
     })
 
-    expect(result).toHaveLength(1)
-    expect(result[0].sectionContent).toBe('[Ошибка — тест]')
-    expect(result[0].aiGenerated).toBe(true)
+    expect(result.sections).toHaveLength(1)
+    expect(result.sections[0].sectionContent).toBe('[Ошибка — тест]')
+    expect(result.sections[0].aiGenerated).toBe(false)
   })
 
   it('вызывает onProgress с правильными аргументами', async () => {
@@ -138,12 +140,13 @@ describe('generateAiCultureSection', () => {
 
   beforeEach(() => {
     client = createMockClient()
+    tokenUsageCreateMock.mockResolvedValue({ id: 'tu-culture' })
     vi.clearAllMocks()
   })
 
   it('возвращает null если промпт не передан', async () => {
     const result = await generateAiCultureSection(client, null, null)
-    expect(result).toBeNull()
+    expect(result.section).toBeNull()
   })
 
   it('возвращает null если renderedCulturePrompt пуст', async () => {
@@ -152,7 +155,7 @@ describe('generateAiCultureSection', () => {
       { id: '1', name: 'AI Culture', content: 'тест' },
       null
     )
-    expect(result).toBeNull()
+    expect(result.section).toBeNull()
   })
 
   it('генерирует секцию культуры ИИ при успехе', async () => {
@@ -171,10 +174,10 @@ describe('generateAiCultureSection', () => {
       'rendered system prompt'
     )
 
-    expect(result).not.toBeNull()
-    expect(result?.sectionTitle).toBe('Взаимодействие с системами ИИ')
-    expect(result?.sectionContent).toBe('Культура ИИ — важна')
-    expect(result?.aiGenerated).toBe(true)
+    expect(result.section).not.toBeNull()
+    expect(result.section?.sectionTitle).toBe('Взаимодействие с системами ИИ')
+    expect(result.section?.sectionContent).toBe('Культура ИИ — важна')
+    expect(result.section?.aiGenerated).toBe(true)
   })
 
   it('возвращает fallback content при пустом ответе ИИ', async () => {
@@ -192,7 +195,7 @@ describe('generateAiCultureSection', () => {
       'rendered system prompt'
     )
 
-    expect(result?.sectionContent).toBe('[Раздел не сгенерирован]')
+    expect(result.section?.sectionContent).toBe('[Раздел не сгенерирован]')
   })
 
   it('возвращает null при ошибке генерации', async () => {
@@ -205,6 +208,6 @@ describe('generateAiCultureSection', () => {
       'rendered system prompt'
     )
 
-    expect(result).toBeNull()
+    expect(result.section).toBeNull()
   })
 })

@@ -1,4 +1,4 @@
-// In-memory rate limiter (sliding window).
+// In-memory rate limiter (fixed window).
 // Достаточно для single-instance архитектуры.
 // При horizontal scaling — заменить на Redis-backed (upstash/ratelimit).
 

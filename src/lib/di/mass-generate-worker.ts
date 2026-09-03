@@ -206,7 +206,7 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
       const archiveDIs = archiveByPosition.get(position.id) ?? []
       const archiveRefs: ArchiveDIRef[] = archiveDIs.map((di) => ({ title: di.title, content: di.content }))
 
-      const generatedSections = await generateSectionsForPosition({
+      const { sections: generatedSections, tokenUsageIds } = await generateSectionsForPosition({
         position,
         templateSections,
         client,
@@ -225,10 +225,11 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
       })
       if (aiCulturePrompt) {
         const cultureSystem = renderPrompt(aiCulturePrompt.content, buildContextFromPosition(position))
-        const cultureSection = await generateAiCultureSection(client, aiCulturePrompt, cultureSystem, createdBy, signal)
+        const { section: cultureSection, tokenUsageId: cultureTokenUsageId } = await generateAiCultureSection(client, aiCulturePrompt, cultureSystem, createdBy, signal)
         if (cultureSection) {
           generatedSections.push({ ...cultureSection, order: generatedSections.length })
         }
+        if (cultureTokenUsageId) tokenUsageIds.push(cultureTokenUsageId)
       }
 
      // Создание ДИ и начальной версии — атомарно (TOCTOU-защита).
@@ -272,14 +273,15 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
         },
       }).catch(() => {})
 
-      // Привязываем TokenUsage к созданной ДИ.
-      // await вместо fire-and-forget — ранее generatedDIId оставался null.
-      await db.tokenUsage.updateMany({
-        where: { generatedDIId: null, userId: createdBy, category: { in: ['section', 'culture'] }, createdAt: { gte: new Date(Date.now() - 5 * 60_000) } },
-        data: { generatedDIId: generatedDI.id },
-      }).catch((e) => {
-        log.warn(`Job ${jobId}: TokenUsage binding failed`, { diId: generatedDI.id, message: e instanceof Error ? e.message : String(e) })
-      })
+      // Привязываем TokenUsage к созданной ДИ по конкретным ID записей.
+      if (tokenUsageIds.length > 0) {
+        await db.tokenUsage.updateMany({
+          where: { id: { in: tokenUsageIds } },
+          data: { generatedDIId: generatedDI.id },
+        }).catch((e) => {
+          log.warn(`Job ${jobId}: TokenUsage binding failed`, { diId: generatedDI.id, message: e instanceof Error ? e.message : String(e) })
+        })
+      }
 
       // Кросс-модульная связь: создаём запись DITracking со статусом 'draft',
       // чтобы ДИ появилась во вкладке "Отслеживание".
@@ -304,6 +306,11 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
 
   // Пакетная параллельная обработка: BATCH_SIZE должностей одновременно.
   for (let i = 0; i < positions.length; i += BATCH_SIZE) {
+    // Проверка отмены: если job-таймаут сработал — останавливаем обработку,
+    // чтобы не создавать мусорные ДИ с placeholder-контентом.
+    if (signal?.aborted) {
+      throw new Error('Job timed out — обработка прервана')
+    }
     const batch = positions.slice(i, i + BATCH_SIZE)
     const batchResults = await Promise.allSettled(batch.map((p) => processPosition(p)))
 
@@ -378,7 +385,11 @@ async function failJob(jobId: string, message: string): Promise<void> {
 export function scheduleJob(jobId: string): void {
   // Небольшая задержка, чтобы роут успел вернуть 202.
   setTimeout(() => {
-    void runJob(jobId)
+    // Уважаем лимит конкурентности — иначе N быстрых POST стартуют N job'ов.
+    // Если лимит исчерпан — job остаётся 'queued', poller подхватит позже.
+    if (activeJobs < MAX_CONCURRENT_JOBS) {
+      void runJob(jobId)
+    }
   }, 100)
 }
 

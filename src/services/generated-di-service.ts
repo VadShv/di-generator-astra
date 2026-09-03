@@ -183,62 +183,61 @@ export async function updateGeneratedDI(input: UpdateDIInput) {
       where: { generatedDIId: id, version: existing.currentVersion },
     })
 
-    if (!existingVersion) {
-      await db.dIVersion.create({
-        data: {
-          generatedDIId: id,
-          content: currentContent,
-          version: existing.currentVersion,
-          isOriginal: existing.currentVersion === 1,
-          changeDescription: `Версия v${existing.currentVersion} (авто-сохранение перед изменением)`,
-          uploadedBy: 'system',
-        },
-      })
-    }
-
     newVersionNumber = existing.currentVersion + 1
 
-    await db.generatedDISection.deleteMany({ where: { generatedDIId: id } })
+    // Атомарная замена секций: deleteMany + update + version.create в одной транзакции.
+    // Без этого crash между deleteMany и update оставляет ДИ без секций (data loss).
+    await db.$transaction(async (tx) => {
+      if (!existingVersion) {
+        await tx.dIVersion.create({
+          data: {
+            generatedDIId: id,
+            content: currentContent,
+            version: existing.currentVersion,
+            isOriginal: existing.currentVersion === 1,
+            changeDescription: `Версия v${existing.currentVersion} (авто-сохранение перед изменением)`,
+            uploadedBy: 'system',
+          },
+        })
+      }
 
-    await db.generatedDI.update({
-      where: { id },
-      data: {
-        title: title !== undefined ? title.trim() : undefined,
-        status: status !== undefined ? status : undefined,
-        currentVersion: newVersionNumber,
-        ...signedData,
-        sections: {
-          create: sections.map((s) => ({
-            sectionTitle: s.sectionTitle.trim(),
-            sectionContent: s.sectionContent,
-            order: s.order,
-            aiGenerated: s.aiGenerated !== undefined ? s.aiGenerated : true,
-            editedBy: s.editedBy || null,
-          })),
+      await tx.generatedDISection.deleteMany({ where: { generatedDIId: id } })
+
+      const updated = await tx.generatedDI.update({
+        where: { id },
+        data: {
+          title: title !== undefined ? title.trim() : undefined,
+          status: status !== undefined ? status : undefined,
+          currentVersion: newVersionNumber,
+          ...signedData,
+          sections: {
+            create: sections.map((s) => ({
+              sectionTitle: s.sectionTitle.trim(),
+              sectionContent: s.sectionContent,
+              order: s.order,
+              aiGenerated: s.aiGenerated !== undefined ? s.aiGenerated : true,
+              editedBy: s.editedBy || null,
+            })),
+          },
         },
-      },
-      include: DI_INCLUDE,
-    })
+        include: { sections: { orderBy: { order: 'asc' } } },
+      })
 
-    const updated = await db.generatedDI.findUnique({
-      where: { id },
-      include: { sections: { orderBy: { order: 'asc' } } },
-    })
+      const newContent = JSON.stringify({
+        title: updated.title || existing.title,
+        sections: updated.sections.map((s) => ({ title: s.sectionTitle, content: s.sectionContent })),
+      })
 
-    const newContent = JSON.stringify({
-      title: updated?.title || existing.title,
-      sections: updated?.sections.map((s) => ({ title: s.sectionTitle, content: s.sectionContent })) || [],
-    })
-
-    await db.dIVersion.create({
-      data: {
-        generatedDIId: id,
-        content: newContent,
-        version: newVersionNumber,
-        isOriginal: false,
-        changeDescription: changeDescription || `Обновление до версии v${newVersionNumber}`,
-        uploadedBy: 'manual-edit',
-      },
+      await tx.dIVersion.create({
+        data: {
+          generatedDIId: id,
+          content: newContent,
+          version: newVersionNumber,
+          isOriginal: false,
+          changeDescription: changeDescription || `Обновление до версии v${newVersionNumber}`,
+          uploadedBy: 'manual-edit',
+        },
+      })
     })
   } else {
     await db.generatedDI.update({

@@ -95,11 +95,24 @@ interface UserStatus {
 }
 const userStatusCache = new Map<string, { status: UserStatus; expiresAt: number }>()
 
+// Periodic cleanup устаревших записей — предотвращает memory leak (W4).
+let lastCacheCleanup = 0
+const CACHE_CLEANUP_INTERVAL_MS = 5 * 60_000
+
+function cleanupExpiredCacheEntries(now: number): void {
+  if (now - lastCacheCleanup < CACHE_CLEANUP_INTERVAL_MS) return
+  lastCacheCleanup = now
+  for (const [key, entry] of userStatusCache) {
+    if (entry.expiresAt < now) userStatusCache.delete(key)
+  }
+}
+
 /**
  * Получить актуальный статус пользователя с TTL-кэшем.
  * @returns null если пользователь не найден (был удалён).
  */
 async function getUserStatus(userId: string): Promise<UserStatus | null> {
+  cleanupExpiredCacheEntries(Date.now())
   const cached = userStatusCache.get(userId)
   if (cached && cached.expiresAt > Date.now()) {
     return cached.status
@@ -197,7 +210,7 @@ export const authOptions: NextAuthOptions = {
         if (!loginAllowed) {
           db.auditLog.create({
             data: { userId: null, userEmail: email, action: 'login_failed', method: 'POST', path: '/api/auth/callback/credentials', entityType: 'user', entityId: null, metadata: JSON.stringify({ reason: 'rate_limited' }), ip: null },
-          }).catch(() => {})
+          }).catch((e) => { console.warn('auditLog create failed (rate_limited)', e instanceof Error ? e.message : String(e)) })
           return null
         }
 
@@ -206,9 +219,13 @@ export const authOptions: NextAuthOptions = {
           select: { id: true, email: true, name: true, role: true, passwordHash: true, isActive: true, permissions: true },
         })
         if (!user || !user.isActive) {
+          // Timing-attack защита: выполняем dummy scrypt даже для несуществующего/
+          // неактивного пользователя, чтобы выровнять время ответа с валидным логином.
+          const { verifyPassword } = await import('@/lib/auth/password')
+          await verifyPassword(password, 'scrypt:16384:8:1:00000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000')
           db.auditLog.create({
             data: { userId: user?.id ?? null, userEmail: email, action: 'login_failed', method: 'POST', path: '/api/auth/callback/credentials', entityType: 'user', entityId: user?.id ?? null, metadata: JSON.stringify({ reason: user ? 'inactive' : 'user_not_found' }), ip: null },
-          }).catch(() => {})
+          }).catch((e) => { console.warn('auditLog create failed (login_failed)', e instanceof Error ? e.message : String(e)) })
           return null
         }
 
@@ -216,14 +233,14 @@ export const authOptions: NextAuthOptions = {
         if (!ok) {
           db.auditLog.create({
             data: { userId: user.id, userEmail: email, action: 'login_failed', method: 'POST', path: '/api/auth/callback/credentials', entityType: 'user', entityId: user.id, metadata: JSON.stringify({ reason: 'wrong_password' }), ip: null },
-          }).catch(() => {})
+          }).catch((e) => { console.warn("auditLog create failed", e instanceof Error ? e.message : String(e)) })
           return null
         }
 
         // Обновляем время последнего входа (fire-and-forget).
         db.user
           .update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
-          .catch(() => undefined)
+          .catch((e) => { console.warn('lastLoginAt update failed', e instanceof Error ? e.message : String(e)) })
 
         const permissions = parsePermissions(user.role, user.permissions)
 
@@ -253,7 +270,7 @@ export const authOptions: NextAuthOptions = {
           metadata: JSON.stringify({ source: 'credentials' }),
           ip: null,
         },
-      }).catch(() => {})
+      }).catch((e) => { console.warn("auditLog create failed", e instanceof Error ? e.message : String(e)) })
     },
     // Выход: записываем в AuditLog.
     async signOut(message) {
@@ -270,7 +287,7 @@ export const authOptions: NextAuthOptions = {
           metadata: JSON.stringify({ source: 'signout' }),
           ip: null,
         },
-      }).catch(() => {})
+      }).catch((e) => { console.warn("auditLog create failed", e instanceof Error ? e.message : String(e)) })
     },
   },
   callbacks: {
@@ -290,15 +307,17 @@ export const authOptions: NextAuthOptions = {
       if (token.id) {
         const status = await getUserStatus(token.id as string)
 
-        // Пользователь удалён или деактивирован — инвалидируем токен.
+        // Пользователь удалён или деактивирован — полностью отзываем токен.
+        // Возвращаем пустой объект (без id) — session callback и middleware
+        // проверяют token.id, а не просто truthiness токена.
         if (!status || !status.isActive) {
-          return { ...token, role: undefined, permissions: undefined } as typeof token
+          return {} as typeof token
         }
 
         // Смена пароля после выдачи токена → отзыв старых сессий.
         const issuedAt = (token.issuedAt as number | undefined) ?? 0
         if (status.passwordChangedAt && status.passwordChangedAt > issuedAt) {
-          return { ...token, role: undefined, permissions: undefined } as typeof token
+          return {} as typeof token
         }
 
         // При trigger='update' — принудительно перечитываем роль/права (минуя кэш).
@@ -310,6 +329,11 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async session({ session, token }) {
+      // Токен без id = отозванный (деактивация/смена пароля) — нет сессии.
+      if (!token?.id) {
+        session.user = undefined
+        return session
+      }
       if (token && session.user) {
         ;(session.user as { id?: string }).id = token.id as string
         ;(session.user as { role?: string }).role = token.role as string

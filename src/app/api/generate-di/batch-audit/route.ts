@@ -8,13 +8,15 @@ import { createLogger } from '@/lib/logger'
 import { parseJsonOr } from '@/lib/json-safe'
 import { buildPositionContext } from '@/lib/di/prompts'
 import { requirePermission } from '@/lib/auth/session'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 const log = createLogger('generate-di/batch-audit')
 
 // POST /api/generate-di/batch-audit — пакетный аудит сгенерированных ДИ.
 // Тело: { diIds: string[] } — список ID GeneratedDI для аудита.
 export const POST = withErrorHandler(async (request: Request) => {
-  await requirePermission('generate-di', 'write')
+  const session = await requirePermission('generate-di', 'write')
+  checkRateLimit(request, 'batch-audit', 5, 60_000, session?.user?.id)
   const body = await parseBody(request, batchAuditSchema)
   const { diIds } = body
 

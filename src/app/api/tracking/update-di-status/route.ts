@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth } from '@/lib/auth/session'
+import { requirePermission } from '@/lib/auth/session'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 import { createNotification } from '@/lib/notifications'
 import { createLogger } from '@/lib/logger'
@@ -10,7 +10,7 @@ const log = createLogger('tracking-update-di-status')
 // PUT /api/tracking/update-di-status - Update the GeneratedDI status
 export async function PUT(request: Request) {
   try {
-    await requireAuth()
+    await requirePermission('generation', 'write')
     const body = await request.json()
     const { generatedDIId, status } = body
 

@@ -90,7 +90,7 @@ export const POST = withErrorHandler(async (request: Request) => {
   const client = await getProviderClient()
 
   // f) Generate content for each section (общее ядро генерации).
-  const generatedSections = await generateSectionsForPosition({
+  const { sections: generatedSections, tokenUsageIds } = await generateSectionsForPosition({
     position,
     templateSections: template.sections.map((s) => ({
       id: s.id,
@@ -114,10 +114,11 @@ export const POST = withErrorHandler(async (request: Request) => {
   if (aiCulturePrompt) await incrementPromptUsage(aiCulturePrompt.id)
   if (aiCulturePrompt) {
     const cultureSystem = renderPrompt(aiCulturePrompt.content, buildContextFromPosition(position))
-    const cultureSection = await generateAiCultureSection(client, aiCulturePrompt, cultureSystem, session?.user?.id)
+    const { section: cultureSection, tokenUsageId: cultureTokenUsageId } = await generateAiCultureSection(client, aiCulturePrompt, cultureSystem, session?.user?.id)
     if (cultureSection) {
       generatedSections.push({ ...cultureSection, order: generatedSections.length })
     }
+    if (cultureTokenUsageId) tokenUsageIds.push(cultureTokenUsageId)
   }
 
   // g) Create the GeneratedDI in the database
@@ -158,15 +159,15 @@ export const POST = withErrorHandler(async (request: Request) => {
 
   log.info('DI generated', { diId: generatedDI.id, positionId, sections: generatedSections.length })
 
-  // Привязываем TokenUsage, созданный во время генерации, к новой ДИ.
-  // Используем await вместо fire-and-forget — ранее .catch(() => {}) глотал ошибки,
-  // и generatedDIId оставался null (race condition с updateMany до завершения генерации).
-  await db.tokenUsage.updateMany({
-    where: { generatedDIId: null, userId: session?.user?.id ?? null, category: { in: ['section', 'culture'] }, createdAt: { gte: new Date(Date.now() - 5 * 60_000) } },
-    data: { generatedDIId: generatedDI.id },
-  }).catch((e) => {
-    log.warn('TokenUsage binding failed', { diId: generatedDI.id, message: e instanceof Error ? e.message : String(e) })
-  })
+  // Привязываем TokenUsage к созданной ДИ по конкретным ID записей.
+  if (tokenUsageIds.length > 0) {
+    await db.tokenUsage.updateMany({
+      where: { id: { in: tokenUsageIds } },
+      data: { generatedDIId: generatedDI.id },
+    }).catch((e) => {
+      log.warn('TokenUsage binding failed', { diId: generatedDI.id, message: e instanceof Error ? e.message : String(e) })
+    })
+  }
 
   // Кросс-модульная связь: создаём запись DITracking со статусом 'draft',
   // чтобы новая ДИ сразу появилась во вкладке "Отслеживание" (Журнал действий).

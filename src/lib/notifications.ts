@@ -20,5 +20,5 @@ export function createNotification(params: {
         entityId: params.entityId ?? null,
       },
     })
-    .catch(() => {})
+    .catch((e) => { console.warn('Notification creation failed:', e instanceof Error ? e.message : String(e)) })
 }
