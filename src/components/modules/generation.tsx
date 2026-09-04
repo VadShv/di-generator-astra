@@ -31,6 +31,7 @@ import { CascadePositionSelector } from '@/components/modules/cascade-position-s
 import { DICard, DICardSkeleton, diTypeFromStatus, type DICardData } from '@/components/modules/di-card'
 import { DIDetail } from '@/components/modules/di-detail'
 import { useAppStore } from '@/lib/store'
+import { useDIList, useInvalidateDIData } from '@/hooks/use-generated-dis'
 import { MagicWandToolbar } from '@/components/editor/magic-wand-toolbar'
 import type { MagicWandPreset } from '@/components/editor/magic-wand-toolbar'
 
@@ -75,7 +76,12 @@ export function GenerationModule() {
   const clearNavigationContext = useAppStore((s) => s.clearNavigationContext)
   const pendingArchiveIdRef = useRef<string | undefined>(undefined)
   const [viewMode, setViewMode] = useState<'list' | 'generate' | 'manual' | 'editor' | 'detail'>('list')
- const [generatedDIs, setGeneratedDIs] = useState<GeneratedDI[]>([])
+ // Список ДИ — из общего кэша React Query (единый источник с карточкой должности
+ // и деревом штатки). После любой генерации/удаления/смены статуса кэш
+ // инвалидируется, и все три экрана обновляются автоматически.
+  const invalidateDIData = useInvalidateDIData()
+  const { data: generatedDIsData, isLoading: disLoading, isError: disError } = useDIList()
+  const generatedDIs = (generatedDIsData ?? []) as unknown as GeneratedDI[]
  const [positions, setPositions] = useState<Position[]>([])
  const [templates, setTemplates] = useState<Template[]>([])
  const [masterPrompts, setMasterPrompts] = useState<MasterPrompt[]>([])
@@ -139,9 +145,11 @@ export function GenerationModule() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Обновление списка ДИ теперь через инвалидацию общего кэша React Query —
+  // это обновляет и вкладку «Генерация ДИ», и карточку должности, и дерево штатки.
   const fetchDIs = useCallback(async () => {
-    try { const res = await fetch('/api/generate-di'); if (res.ok) setGeneratedDIs(await res.json()) } catch { toast({ title: 'Ошибка', description: 'Не удалось загрузить ДИ', variant: 'destructive' }) }
-  }, [toast])
+    invalidateDIData()
+  }, [invalidateDIData])
  const fetchPositions = useCallback(async () => {
    try { const res = await fetch('/api/positions'); if (res.ok) setPositions(await res.json()) } catch { /* silent */ }
  }, [])
@@ -158,7 +166,13 @@ export function GenerationModule() {
     try { const res = await fetch('/api/master-prompts?active=true'); if (res.ok) { const data = await res.json(); setMasterPrompts(Array.isArray(data) ? data : []) } } catch { setMasterPrompts([]) }
  }, [])
 
-  useEffect(() => { (async () => { setLoading(true); await Promise.all([fetchDIs(), fetchPositions(), fetchTemplates(), fetchPrompts(), fetchCompanies(), fetchDepartments()]); setLoading(false) })() }, [fetchDIs, fetchPositions, fetchTemplates, fetchPrompts, fetchCompanies, fetchDepartments])
+  useEffect(() => { (async () => { setLoading(true); await Promise.all([fetchPositions(), fetchTemplates(), fetchPrompts(), fetchCompanies(), fetchDepartments()]); setLoading(false) })() }, [fetchPositions, fetchTemplates, fetchPrompts, fetchCompanies, fetchDepartments])
+
+  // Уведомление об ошибке загрузки списка ДИ (React Query). Ранее это делал
+  // ручной fetchDIs через try/catch — сохраняем поведение при переходе на RQ.
+  useEffect(() => {
+    if (disError) toast({ title: 'Ошибка', description: 'Не удалось загрузить ДИ', variant: 'destructive' })
+  }, [disError, toast])
 
   // Контекстная навигация: если пришли с positionId (например, из штатного расписания),
   // сразу открываем форму генерации с выбранной должностью.
@@ -290,6 +304,9 @@ export function GenerationModule() {
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Ошибка') }
       const data = await res.json()
       setEditingDI(data); setEditSections(data.sections || []); setEditTitle(data.title); setEditSignedByEmployee(data.signedByEmployee ?? false)
+      // Инвалидируем общий кэш: новая ДИ сразу появится в списке вкладки,
+      // в карточке должности (штатное расписание) и в бейджах дерева штатки.
+      invalidateDIData()
       toast({ title: 'Успех', description: 'ДИ сгенерирована' }); setViewMode('editor')
     } catch (e) {
       toast({ title: 'Ошибка генерации', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' })
@@ -504,7 +521,9 @@ export function GenerationModule() {
       if (res.ok) {
         toast({ title: 'Статус изменён', description: STATUS_LABELS[newStatus] })
         setEditingDI({ ...editingDI, status: newStatus })
-        setGeneratedDIs(prev => prev.map(d => d.id === editingDI.id ? { ...d, status: newStatus } : d))
+        // Инвалидируем общий кэш — статус обновится и в списке, и в карточке
+        // должности, и в дереве штатки (бейдж «Согласована»).
+        invalidateDIData()
         setStatusDialogOpen(false)
         setNewStatus('')
         setStatusComment('')
@@ -626,7 +645,7 @@ export function GenerationModule() {
         <Input placeholder="Поиск по названию..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
       </div>
 
-      {loading ? (
+      {loading || disLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.from({ length: 4 }).map((_, i) => <DICardSkeleton key={i} />)}
         </div>

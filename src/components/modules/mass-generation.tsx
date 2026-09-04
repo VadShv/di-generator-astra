@@ -422,6 +422,7 @@ function LineageTab({
 export function MassGenerationModule() {
  const { toast } = useToast()
   const navigateTo = useAppStore((s) => s.navigateTo)
+  const invalidateDIData = useInvalidateDIData()
  const [companies, setCompanies] = useState<Company[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [positions, setPositions] = useState<Position[]>([])
@@ -611,6 +612,10 @@ export function MassGenerationModule() {
 
       const successCount = finalResults.filter(r => r.success).length
       const failCount = finalResults.filter(r => !r.success).length
+      // Массовая генерация пишет GeneratedDI в фоне (worker). По завершении job
+      // инвалидируем общий кэш — созданные ДИ сразу видны во вкладке «Генерация ДИ»
+      // и в карточках должностей штатного расписания без ручного обновления.
+      if (successCount > 0) invalidateDIData()
       toast({
         title: 'Генерация завершена',
         description: `Создано ${successCount} ДИ. Ошибок: ${failCount}`,
@@ -687,6 +692,8 @@ export function MassGenerationModule() {
         title: 'Удаление завершено',
         description: `Удалено ${data.successCount} из ${data.total}. Ошибок: ${data.failCount}`,
       })
+      // ДИ удалены — обновляем список вкладки «Генерация ДИ» и бейджи дерева штатки.
+      invalidateDIData()
       setResults(null)
       setResultDialogOpen(false)
     } catch (error) {
@@ -1200,4 +1207,5 @@ export function MassGenerationModule() {
   )
 }
 import { useAppStore } from '@/lib/store'
+import { useInvalidateDIData } from '@/hooks/use-generated-dis'
 import { History, ListChecks, Archive } from 'lucide-react'

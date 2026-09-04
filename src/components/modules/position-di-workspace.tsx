@@ -5,6 +5,7 @@
 // и утверждением финальной ДИ. Все данные подгружаются через существующие API.
 
 import { useCallback, useEffect, useState } from 'react'
+import { useDIByPosition, useInvalidateDIData } from '@/hooks/use-generated-dis'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -125,13 +126,19 @@ const AUTO_PROMPT = '__auto__'
 
 export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspaceProps) {
   const { toast } = useToast()
+  const invalidateDIData = useInvalidateDIData()
   const [tab, setTab] = useState('archive')
 
   // Данные
   const [archiveDIs, setArchiveDIs] = useState<ArchiveDIRow[]>([])
-  const [generatedDIs, setGeneratedDIs] = useState<GeneratedDIRow[]>([])
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Сгенерированные ДИ должности — из общего кэша React Query.
+  // Запрос идёт с positionId на сервер (не клиентский фильтр по первой странице),
+  // поэтому после массовой генерации все ДИ должности гарантированно видны.
+  const { data: generatedDIsData } = useDIByPosition(position.id)
+  const generatedDIs: GeneratedDIRow[] = (generatedDIsData ?? []) as unknown as GeneratedDIRow[]
 
   // Состояния операций
   const [generating, setGenerating] = useState(false)
@@ -170,16 +177,13 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
   const loadAll = useCallback(async () => {
     setLoading(true)
     try {
-     const [archRes, genRes, tmplRes] = await Promise.all([
+     // Сгенерированные ДИ грузит React Query (useDIByPosition) — здесь только
+     // архив, шаблоны и мастер-промпты.
+     const [archRes, tmplRes] = await Promise.all([
        fetch(`/api/archive-di?positionId=${position.id}`),
-       fetch('/api/generated-di'),
        fetch('/api/templates'),
      ])
       if (archRes.ok) setArchiveDIs((await archRes.json()).items as ArchiveDIRow[])
-      if (genRes.ok) {
-        const all = (await genRes.json()).items as GeneratedDIRow[]
-        setGeneratedDIs(all.filter(d => d.positionId === position.id))
-      }
      if (tmplRes.ok) setTemplates((await tmplRes.json()) as TemplateRow[])
       // Мастер-промпты для выбора при генерации (только активные, категория generation)
       const mpRes = await fetch('/api/master-prompts?active=true')
@@ -242,6 +246,7 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Ошибка генерации')
       toast({ title: '✓ ДИ сгенерирована', description: 'Новый черновик создан' })
+      invalidateDIData()
       await loadAll()
       onChanged?.()
       setTab('generated')
@@ -433,6 +438,7 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
       }
 
       toast({ title: '✓ Утверждённая ДИ загружена', description: 'Создана новая версия, статус обновлён' })
+      invalidateDIData()
       await loadAll()
       onChanged?.()
     } catch (e) {
@@ -453,6 +459,7 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
      })
       if (!res.ok) throw new Error('Ошибка обновления статуса')
       toast({ title: '✓ Статус обновлён' })
+      invalidateDIData()
       await loadAll()
       onChanged?.()
     } catch (e) {

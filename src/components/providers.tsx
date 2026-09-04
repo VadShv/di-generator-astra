@@ -10,6 +10,7 @@ import { NextIntlClientProvider } from 'next-intl'
 import type { ReactNode } from 'react'
 import { useEffect } from 'react'
 import { isSentryEnabled, SENTRY_DSN, SENTRY_ENV } from '@/lib/sentry'
+import { QueryProvider } from '@/components/query-provider'
 
 function initClientSentry() {
   if (!isSentryEnabled()) return
@@ -42,7 +43,9 @@ export function Providers({
 
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
-      <SessionProvider>{children}</SessionProvider>
+      <SessionProvider>
+        <QueryProvider>{children}</QueryProvider>
+      </SessionProvider>
     </NextIntlClientProvider>
   )
 }
