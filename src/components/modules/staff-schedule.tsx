@@ -45,9 +45,6 @@ import {
 // ============ Interfaces ============
 import type { Company, Department, Position, BusinessFunction, Project, GDI } from './staff-schedule-types'
 import { RaciMatrixDialog } from '@/components/raci-matrix-dialog'
-import { CoverageRing } from './staff-schedule-coverage-ring'
-import { StaffScheduleTreemap } from './staff-schedule-treemap'
-import { motion, AnimatePresence } from 'framer-motion'
 
 // ============ Main Component ============
 export function StaffScheduleModule() {
@@ -67,7 +64,6 @@ export function StaffScheduleModule() {
   // Сворачивание основных блоков (структура организации / должности)
   const [orgTreeCollapsed, setOrgTreeCollapsed] = useState(false)
   const [positionsCollapsed, setPositionsCollapsed] = useState(false)
-  const [treemapCollapsed, setTreemapCollapsed] = useState(false)
 
   // Company dialog
   const [companyDialogOpen, setCompanyDialogOpen] = useState(false)
@@ -481,15 +477,8 @@ export function StaffScheduleModule() {
     return (
       <div key={dept.id}>
         <div
-          className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all group border-l-[3px] ${
+          className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all group ${
             isSelected ? 'bg-primary/10 ring-1 ring-primary/30' : 'hover:bg-muted/50'
-          } ${
-            coverage.total > 0
-              ? coverage.percent >= 80 ? 'border-l-emerald-500'
-              : coverage.percent >= 50 ? 'border-l-amber-500'
-              : coverage.percent >= 25 ? 'border-l-orange-500'
-              : 'border-l-red-400'
-              : 'border-l-transparent'
           }`}
           style={{ paddingLeft: `${depth * 24 + 12}px` }}
           onClick={() => { setSelectedDeptId(isSelected ? null : dept.id); setActiveTab('positions') }}
@@ -527,13 +516,26 @@ export function StaffScheduleModule() {
             </TooltipProvider>
           )}
 
-          {/* DI coverage ring */}
+          {/* DI coverage mini bar */}
           {coverage.total > 0 && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex-shrink-0">
-                    <CoverageRing percent={coverage.percent} size={32} strokeWidth={2.5} />
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="w-16 h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          coverage.percent >= 80 ? 'bg-emerald-500' :
+                          coverage.percent >= 50 ? 'bg-amber-500' :
+                          coverage.percent >= 25 ? 'bg-orange-500' : 'bg-red-400'
+                        }`}
+                        style={{ width: `${coverage.percent}%` }}
+                      />
+                    </div>
+                    <span className={`text-xs font-medium ${
+                      coverage.percent >= 80 ? 'text-emerald-700' :
+                      coverage.percent >= 50 ? 'text-amber-700' : 'text-red-600'
+                    }`}>{coverage.percent}%</span>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
@@ -563,20 +565,10 @@ export function StaffScheduleModule() {
             </button>
           </div>
         </div>
-        {hasChildren && (
-          <AnimatePresence initial={false}>
-            {isExpanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2, ease: 'easeInOut' }}
-                className="overflow-hidden ml-3 border-l-2 border-muted/40 pl-1"
-              >
-                {children.map(c => renderDeptTreeItem(c, depth + 1))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {hasChildren && isExpanded && (
+          <div className="ml-2">
+            {children.map(c => renderDeptTreeItem(c, depth + 1))}
+          </div>
         )}
       </div>
     )
@@ -633,10 +625,22 @@ export function StaffScheduleModule() {
             {companyHeadcount} ставок
           </Badge>
 
-          {/* Company coverage ring */}
+          {/* Company coverage */}
           {companyPositions.length > 0 && (
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <CoverageRing percent={companyCoverage} size={36} strokeWidth={3} />
+              <div className="w-20 h-2.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    companyCoverage >= 80 ? 'bg-emerald-500' :
+                    companyCoverage >= 50 ? 'bg-amber-500' : 'bg-red-400'
+                  }`}
+                  style={{ width: `${companyCoverage}%` }}
+                />
+              </div>
+              <span className={`text-xs font-bold ${
+                companyCoverage >= 80 ? 'text-emerald-700' :
+                companyCoverage >= 50 ? 'text-amber-700' : 'text-red-600'
+              }`}>{companyCoverage}%</span>
             </div>
           )}
 
@@ -656,20 +660,10 @@ export function StaffScheduleModule() {
             </button>
           </div>
         </div>
-        {companyDepts.length > 0 && (
-          <AnimatePresence initial={false}>
-            {isExpanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.25, ease: 'easeInOut' }}
-                className="overflow-hidden ml-3 mt-1 space-y-0.5 border-l-2 border-emerald-200/40 pl-1"
-              >
-                {companyDepts.map(d => renderDeptTreeItem(d, 0))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {isExpanded && companyDepts.length > 0 && (
+          <div className="ml-3 mt-1 space-y-0.5">
+            {companyDepts.map(d => renderDeptTreeItem(d, 0))}
+          </div>
         )}
         {isExpanded && companyDepts.length === 0 && (
           <div className="ml-6 py-3 text-center text-muted-foreground">
@@ -819,50 +813,6 @@ export function StaffScheduleModule() {
         </CardContent>
       </Card>
 
-      {/* ====== Treemap Visualization ====== */}
-      {positions.length > 0 && companies.length > 0 && (
-        <Card className="shadow-sm max-w-5xl mx-auto w-full">
-          <Collapsible open={!treemapCollapsed} onOpenChange={(v) => setTreemapCollapsed(!v)}>
-            <CollapsibleTrigger asChild>
-              <CardHeader className="pb-2 cursor-pointer hover:bg-muted/40 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Network className="h-4 w-4 text-indigo-600" />
-                    <div>
-                      <CardTitle className="text-base">Структура штата</CardTitle>
-                      <CardDescription className="text-xs">
-                        Площадь блока ∝ кол-во ставок · цвет = покрытие ДИ
-                      </CardDescription>
-                    </div>
-                  </div>
-                  {treemapCollapsed ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
-                </div>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent className="pt-0">
-                <StaffScheduleTreemap
-                  companies={companies}
-                  departments={departments}
-                  positions={positions}
-                  selectedDeptId={selectedDeptId}
-                  selectedCompanyId={selectedCompanyId}
-                  onSelectDept={(deptId) => { setSelectedDeptId(deptId); setSelectedCompanyId(null); setActiveTab('positions') }}
-                  onSelectCompany={(companyId) => { setSelectedCompanyId(companyId); setSelectedDeptId(null); setActiveTab('positions') }}
-                  onDetailDept={(deptId) => { const dept = departments.find(d => d.id === deptId); if (dept) setDetailDept(dept) }}
-                />
-                <div className="flex items-center justify-center gap-4 mt-2 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500/30 border border-emerald-500" /> ≥80%</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-500/30 border border-amber-500" /> ≥50%</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-500/30 border border-orange-500" /> ≥25%</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-400/30 border border-red-400" /> &lt;25%</span>
-                </div>
-              </CardContent>
-            </CollapsibleContent>
-          </Collapsible>
-        </Card>
-      )}
-
       {/* ====== Main Content: Tree + Positions ====== */}
       <div className="flex flex-col gap-4 max-w-5xl mx-auto w-full">
         {/* ====== Block 1: Organization Tree ====== */}
@@ -995,18 +945,12 @@ export function StaffScheduleModule() {
               </div>
             ) : (
               <div className="px-4 pb-4 grid gap-2 max-h-[600px] overflow-y-auto">
-                {filteredPositions.map((p, idx) => {
+                {filteredPositions.map(p => {
                   const diStatus = getDIStatus(p)
                   const DiIcon = diStatus.icon
                   const signedByEmployee = p.generatedDIs.some(d => d.signedByEmployee)
                   return (
-                    <motion.div
-                      key={p.id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.2, delay: Math.min(idx * 0.02, 0.3) }}
-                      className="group border rounded-xl p-3 hover:bg-muted/30 transition-all hover:shadow-sm"
-                    >
+                    <div key={p.id} className="group border rounded-xl p-3 hover:bg-muted/30 transition-all hover:shadow-sm">
                       <div className="flex items-start gap-3">
                         {/* DI Status indicator */}
                         <div className={`flex items-center justify-center h-10 w-10 rounded-lg ${diStatus.color} text-white flex-shrink-0`}>
@@ -1102,7 +1046,7 @@ export function StaffScheduleModule() {
                           </Button>
                         </div>
                       </div>
-                    </motion.div>
+                    </div>
                   )
                 })}
               </div>
