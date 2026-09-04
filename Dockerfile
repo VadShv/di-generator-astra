@@ -26,8 +26,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Создаём non-root пользователя для безопасности (Фаза 6, шаг 6.8).
 # RCE-уязвимость в приложении не должна давать root-доступ к контейнеру.
-RUN addgroup --system --gid 1001 app && \
-    adduser --system --uid 1001 --gid 1001 app
+RUN groupadd --system --gid 1001 app && \
+    useradd --system --uid 1001 --gid 1001 app
 
 # Копируем standalone-сборку
 COPY --from=builder /app/.next/standalone ./
