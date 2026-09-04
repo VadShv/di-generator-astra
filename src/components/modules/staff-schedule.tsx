@@ -33,8 +33,13 @@ import {
   Landmark, FolderTree, Percent, Eye,
   ChevronUp, MapPin, GraduationCap, Briefcase, Shield,
   Clock, UserCheck, Scale, TrendingUp, CheckSquare2,
-  Hash, Calendar, Layers, Network, FileSignature, Building, User, BadgeCheck, AlertTriangle
+  Hash, Calendar, Layers, Network, FileSignature, Building, User, BadgeCheck, AlertTriangle,
+  MoreHorizontal, ChevronsDownUp, ChevronsUpDown,
 } from 'lucide-react'
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   CompanyDetailCard, DepartmentDetailCard, PositionDetailCard,
 } from './staff-schedule-detail-cards'
@@ -45,13 +50,20 @@ import {
 // ============ Interfaces ============
 import type { Company, Department, Position, BusinessFunction, Project, GDI } from './staff-schedule-types'
 import { RaciMatrixDialog } from '@/components/raci-matrix-dialog'
+import { usePositions } from '@/hooks/use-positions'
+import { useQueryClient } from '@tanstack/react-query'
+import { positionKeys } from '@/lib/query-keys'
 
 // ============ Main Component ============
 export function StaffScheduleModule() {
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [companies, setCompanies] = useState<Company[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
-  const [positions, setPositions] = useState<Position[]>([])
+  // Должности (с бейджами статуса ДИ) — из общего кэша React Query. После
+  // генерации ДИ из любого пути кэш инвалидируется, и бейджи в дереве обновляются.
+  const { data: positionsData, isLoading: positionsLoading } = usePositions()
+  const positions = (positionsData ?? []) as Position[]
   const [businessFunctions, setBusinessFunctions] = useState<BusinessFunction[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -137,9 +149,12 @@ export function StaffScheduleModule() {
   const fetchDepartments = useCallback(async () => {
     try { const res = await fetch('/api/departments'); if (res.ok) setDepartments(await res.json()) } catch { /* silent */ }
   }, [])
+  // Обновление должностей — через инвалидацию общего кэша React Query
+  // (usePositions). Так после локальных мутаций (CRUD должностей, импорт ШР)
+  // и после генерации ДИ из других экранов дерево остаётся актуальным.
   const fetchPositions = useCallback(async () => {
-    try { const res = await fetch('/api/positions'); if (res.ok) setPositions(await res.json()) } catch { /* silent */ }
-  }, [])
+    await queryClient.invalidateQueries({ queryKey: positionKeys.all })
+  }, [queryClient])
   const fetchBusinessFunctions = useCallback(async () => {
     try { const res = await fetch('/api/business-functions'); if (res.ok) setBusinessFunctions(await res.json()) } catch { /* silent */ }
   }, [])
@@ -154,15 +169,25 @@ export function StaffScheduleModule() {
   useEffect(() => {
     (async () => {
       setLoading(true)
-      await Promise.all([fetchCompanies(), fetchDepartments(), fetchPositions(), fetchBusinessFunctions(), fetchProjects(), fetchPositionAttributes()])
+      await Promise.all([fetchCompanies(), fetchDepartments(), fetchBusinessFunctions(), fetchProjects(), fetchPositionAttributes()])
       setLoading(false)
     })()
-  }, [fetchCompanies, fetchDepartments, fetchPositions, fetchBusinessFunctions, fetchProjects, fetchPositionAttributes])
+  }, [fetchCompanies, fetchDepartments, fetchBusinessFunctions, fetchProjects, fetchPositionAttributes])
 
   // ============ Tree helpers ============
   const toggleExpand = (id: string) => setExpandedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const toggleCompanyExpand = (id: string) => setExpandedCompanyIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const getChildren = (id: string) => departments.filter(d => d.parentId === id)
+
+  // Развернуть/свернуть всё дерево (компании + подразделения).
+  const expandAllTree = () => {
+    setExpandedCompanyIds(new Set(companies.map(c => c.id)))
+    setExpandedIds(new Set(departments.map(d => d.id)))
+  }
+  const collapseAllTree = () => {
+    setExpandedCompanyIds(new Set())
+    setExpandedIds(new Set())
+  }
 
   // ============ Filtered positions ============
   const filteredPositions = positions.filter(p => {
@@ -466,110 +491,192 @@ export function StaffScheduleModule() {
   }
 
   // ============ Render: Department tree item ============
-  const renderDeptTreeItem = (dept: Department, depth: number) => {
+  // ancestorLines[i] — рисовать ли продолжающуюся вертикальную guide-линию на
+  // уровне i-го предка (true = у предка есть сиблинги ниже). isLast — является ли
+  // сам узел последним ребёнком (тогда «колено» └, иначе ├).
+  const renderDeptTreeItem = (dept: Department, ancestorLines: boolean[], isLast: boolean) => {
     const children = getChildren(dept.id)
     const hasChildren = children.length > 0
     const isExpanded = expandedIds.has(dept.id)
     const isSelected = selectedDeptId === dept.id
     const coverage = getDICoverage(dept.id, positions, departments)
     const directPositions = positions.filter(p => p.departmentId === dept.id)
+    const depth = ancestorLines.length
+    const isNested = depth > 0
+
+    // Ширина одного уровня отступа (px) — под неё же рассчитаны guide-линии.
+    const INDENT = 22
 
     return (
       <div key={dept.id}>
         <div
-          className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all group ${
-            isSelected ? 'bg-primary/10 ring-1 ring-primary/30' : 'hover:bg-muted/50'
+          className={`relative flex items-center gap-2 py-1.5 pr-2 rounded-lg cursor-pointer transition-colors group ${
+            isSelected
+              ? 'bg-emerald-50/80 ring-1 ring-emerald-300/60'
+              : 'hover:bg-muted/50'
           }`}
-          style={{ paddingLeft: `${depth * 24 + 12}px` }}
+          style={{ paddingLeft: `${depth * INDENT + 8}px` }}
           onClick={() => { setSelectedDeptId(isSelected ? null : dept.id); setActiveTab('positions') }}
         >
+          {/* Guide-lines: вертикальные линии предков + колено к узлу */}
+          {ancestorLines.map((show, i) => (
+            <span
+              key={i}
+              aria-hidden
+              className={`absolute top-0 bottom-0 w-px ${show ? 'bg-border' : 'bg-transparent'}`}
+              style={{ left: `${i * INDENT + 8 + 9}px` }}
+            />
+          ))}
+          {isNested && (
+            <>
+              {/* Вертикаль до колена (у последнего ребёнка — только до середины) */}
+              <span
+                aria-hidden
+                className={`absolute w-px bg-border ${isLast ? 'top-0 h-1/2' : 'top-0 bottom-0'}`}
+                style={{ left: `${(depth - 1) * INDENT + 8 + 9}px` }}
+              />
+              {/* Горизонтальное «колено» к узлу */}
+              <span
+                aria-hidden
+                className="absolute top-1/2 h-px bg-border"
+                style={{ left: `${(depth - 1) * INDENT + 8 + 9}px`, width: `${INDENT - 2}px` }}
+              />
+            </>
+          )}
+
           {/* Expand toggle */}
           <button
-            className="h-5 w-5 flex items-center justify-center flex-shrink-0 rounded hover:bg-muted"
+            className="h-5 w-5 flex items-center justify-center flex-shrink-0 rounded hover:bg-muted z-10"
             onClick={e => { e.stopPropagation(); toggleExpand(dept.id) }}
+            aria-label={isExpanded ? 'Свернуть' : 'Развернуть'}
           >
-            {hasChildren ? (isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />) : <span className="h-3.5 w-3.5 block" />}
+            {hasChildren ? (
+              <motion.span animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="flex">
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              </motion.span>
+            ) : (
+              <span className="h-1.5 w-1.5 rounded-full bg-border block" />
+            )}
           </button>
 
-          {/* Dept icon */}
-          <FolderTree className="h-4 w-4 flex-shrink-0 text-emerald-600" />
-
-          {/* Dept name */}
-          <div className="flex-1 min-w-0">
-            <span className="text-sm font-medium truncate">{dept.name}</span>
-            <span className="text-xs text-muted-foreground ml-1.5">{dept.code}</span>
+          {/* Dept icon в кружке-контейнере */}
+          <div className={`flex items-center justify-center rounded-md flex-shrink-0 z-10 ${
+            isNested ? 'h-6 w-6 bg-slate-100' : 'h-7 w-7 bg-teal-100'
+          }`}>
+            <FolderTree className={`${isNested ? 'h-3.5 w-3.5 text-slate-600' : 'h-4 w-4 text-teal-700'}`} />
           </div>
 
-          {/* Position count */}
-          {directPositions.length > 0 && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-teal-50 text-teal-700 border-teal-200">
-                    {directPositions.length} должн.
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Должностей в этом подразделении: {directPositions.length}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+          {/* Dept name (двухстрочно: название + код/потомки) */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className={`truncate ${isNested ? 'text-sm font-medium' : 'text-sm font-semibold'}`}>{dept.name}</span>
+              {hasChildren && (
+                <span className="text-[10px] text-muted-foreground bg-muted rounded px-1 py-px flex-shrink-0">{children.length}</span>
+              )}
+            </div>
+            <span className="text-[11px] text-muted-foreground truncate block leading-tight">{dept.code}</span>
+          </div>
 
-          {/* DI coverage mini bar */}
-          {coverage.total > 0 && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <div className="w-16 h-2 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          coverage.percent >= 80 ? 'bg-emerald-500' :
-                          coverage.percent >= 50 ? 'bg-amber-500' :
-                          coverage.percent >= 25 ? 'bg-orange-500' : 'bg-red-400'
-                        }`}
-                        style={{ width: `${coverage.percent}%` }}
-                      />
+          {/* Метрики — выровненная колонка фиксированной ширины */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Position count */}
+            {directPositions.length > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-teal-50 text-teal-700 border-teal-200 tabular-nums w-[68px] justify-center">
+                      {directPositions.length} должн.
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Должностей в этом подразделении: {directPositions.length}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            {/* DI coverage mini bar */}
+            {coverage.total > 0 ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5 w-[92px] justify-end">
+                      <div className="w-14 h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            coverage.percent >= 80 ? 'bg-emerald-500' :
+                            coverage.percent >= 50 ? 'bg-amber-500' :
+                            coverage.percent >= 25 ? 'bg-orange-500' : 'bg-red-400'
+                          }`}
+                          style={{ width: `${coverage.percent}%` }}
+                        />
+                      </div>
+                      <span className={`text-xs font-medium tabular-nums w-8 text-right ${
+                        coverage.percent >= 80 ? 'text-emerald-700' :
+                        coverage.percent >= 50 ? 'text-amber-700' : 'text-red-600'
+                      }`}>{coverage.percent}%</span>
                     </div>
-                    <span className={`text-xs font-medium ${
-                      coverage.percent >= 80 ? 'text-emerald-700' :
-                      coverage.percent >= 50 ? 'text-amber-700' : 'text-red-600'
-                    }`}>{coverage.percent}%</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="font-medium">Покрытие ДИ: {coverage.percent}%</p>
-                  <p className="text-xs text-muted-foreground">
-                    {coverage.covered} из {coverage.total} должностей имеют утверждённые ДИ
-                    (включая дочерние подразделения)
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="font-medium">Покрытие ДИ: {coverage.percent}%</p>
+                    <p className="text-xs text-muted-foreground">
+                      {coverage.covered} из {coverage.total} должностей имеют утверждённые ДИ
+                      (включая дочерние подразделения)
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <div className="w-[92px]" />
+            )}
 
-          {/* Action buttons */}
-         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-            <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); setDetailDept(dept) }} title="Подробная карточка">
-              <Eye className="h-3 w-3" />
-            </button>
-           <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); openCreateDept(dept.id, dept.companyId || selectedCompanyId || undefined) }} title="Добавить дочернее">
-             <Plus className="h-3 w-3" />
-           </button>
-            <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); openEditDept(dept) }}>
-              <Pencil className="h-3 w-3" />
-            </button>
-            <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 hover:text-destructive" onClick={e => { e.stopPropagation(); setDeptToDelete(dept); setDeptDeleteOpen(true) }}>
-              <Trash2 className="h-3 w-3" />
-            </button>
+            {/* Действия — всегда видимый dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors z-10"
+                  onClick={e => e.stopPropagation()}
+                  aria-label="Действия"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
+                <DropdownMenuLabel className="max-w-[220px] truncate">{dept.name}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setDetailDept(dept)}>
+                  <Eye className="h-4 w-4" /> Открыть карточку
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openCreateDept(dept.id, dept.companyId || selectedCompanyId || undefined)}>
+                  <Plus className="h-4 w-4" /> Добавить дочернее
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openEditDept(dept)}>
+                  <Pencil className="h-4 w-4" /> Редактировать
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={() => { setDeptToDelete(dept); setDeptDeleteOpen(true) }}>
+                  <Trash2 className="h-4 w-4" /> Удалить
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-        {hasChildren && isExpanded && (
-          <div className="ml-2">
-            {children.map(c => renderDeptTreeItem(c, depth + 1))}
-          </div>
-        )}
+
+        <AnimatePresence initial={false}>
+          {hasChildren && isExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: 'easeInOut' }}
+              className="overflow-hidden"
+            >
+              {children.map((c, idx) =>
+                renderDeptTreeItem(c, [...ancestorLines, !isLast], idx === children.length - 1)
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
@@ -591,10 +698,12 @@ export function StaffScheduleModule() {
     const companyCoverage = companyPositions.length > 0 ? Math.round((approvedCount / companyPositions.length) * 100) : 0
 
     return (
-      <div key={company.id} className="mb-2">
+      <div key={company.id} className={`rounded-xl border mb-2.5 overflow-hidden transition-shadow ${
+        isSelected && !selectedDeptId ? 'border-emerald-300 shadow-sm ring-1 ring-emerald-200/60' : 'border-border/70 hover:border-emerald-200'
+      }`}>
         <div
-          className={`flex items-center gap-2 py-2.5 px-3 rounded-xl cursor-pointer transition-all group ${
-            isSelected && !selectedDeptId ? 'bg-emerald-50 ring-1 ring-emerald-300/50' : 'hover:bg-emerald-5'
+          className={`flex items-center gap-2.5 py-2.5 px-3 cursor-pointer transition-colors ${
+            isSelected && !selectedDeptId ? 'bg-emerald-50/80' : 'bg-muted/30 hover:bg-emerald-50/40'
           }`}
           onClick={() => {
             const newId = isSelected && !selectedDeptId ? null : company.id
@@ -604,31 +713,38 @@ export function StaffScheduleModule() {
             if (!isExpanded) toggleCompanyExpand(company.id)
           }}
         >
-          <button className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); toggleCompanyExpand(company.id) }}>
-            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          <button
+            className="h-6 w-6 flex items-center justify-center rounded hover:bg-emerald-100/60 flex-shrink-0"
+            onClick={e => { e.stopPropagation(); toggleCompanyExpand(company.id) }}
+            aria-label={isExpanded ? 'Свернуть' : 'Развернуть'}
+          >
+            <motion.span animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="flex">
+              <ChevronRight className="h-4 w-4 text-emerald-700" />
+            </motion.span>
           </button>
-          <Landmark className="h-5 w-5 text-emerald-700 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <span className="text-sm font-bold truncate">{company.name}</span>
-            {company.shortName && <span className="text-xs text-muted-foreground ml-1">({company.shortName})</span>}
-            {company.type && <Badge variant="outline" className="ml-1.5 text-xs h-5 border-emerald-300 text-emerald-700">{company.type}</Badge>}
+
+          {/* Company icon в кружке */}
+          <div className="h-9 w-9 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+            <Landmark className="h-5 w-5 text-emerald-700" />
           </div>
 
-          {/* Company summary badges */}
-          <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-teal-50 text-teal-700 border-teal-200">
-            {new Set(allCompanyDeptIds).size} подр.
-          </Badge>
-          <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-emerald-50 text-emerald-700 border-emerald-200">
-            {companyPositions.length} должн.
-          </Badge>
-          <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-sky-50 text-sky-700 border-sky-200">
-            {companyHeadcount} ставок
-          </Badge>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-[15px] font-semibold truncate">{company.name}</span>
+              {company.shortName && <span className="text-xs text-muted-foreground flex-shrink-0">({company.shortName})</span>}
+              {company.type && <Badge variant="outline" className="text-[10px] h-4 px-1 border-emerald-300 text-emerald-700 flex-shrink-0">{company.type}</Badge>}
+            </div>
+            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><FolderTree className="h-3 w-3" />{new Set(allCompanyDeptIds).size} подр.</span>
+              <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" />{companyPositions.length} должн.</span>
+              <span className="inline-flex items-center gap-1"><Briefcase className="h-3 w-3" />{companyHeadcount} ставок</span>
+            </div>
+          </div>
 
           {/* Company coverage */}
           {companyPositions.length > 0 && (
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <div className="w-20 h-2.5 rounded-full bg-muted overflow-hidden">
+              <div className="w-24 h-2.5 rounded-full bg-muted overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${
                     companyCoverage >= 80 ? 'bg-emerald-500' :
@@ -637,42 +753,68 @@ export function StaffScheduleModule() {
                   style={{ width: `${companyCoverage}%` }}
                 />
               </div>
-              <span className={`text-xs font-bold ${
+              <span className={`text-sm font-bold tabular-nums w-10 text-right ${
                 companyCoverage >= 80 ? 'text-emerald-700' :
                 companyCoverage >= 50 ? 'text-amber-700' : 'text-red-600'
               }`}>{companyCoverage}%</span>
             </div>
           )}
 
-          {/* Action buttons */}
-         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-            <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); setDetailCompany(company) }} title="Подробная карточка">
-              <Eye className="h-3 w-3" />
-            </button>
-           <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); openCreateDept(undefined, company.id) }} title="Добавить подразделение">
-             <Plus className="h-3 w-3" />
-           </button>
-           <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted" onClick={e => { e.stopPropagation(); openEditCompany(company) }}>
-             <Pencil className="h-3 w-3" />
-           </button>
-            <button className="h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 hover:text-destructive" onClick={e => { e.stopPropagation(); setCompanyToDelete(company); setCompanyDeleteOpen(true) }}>
-              <Trash2 className="h-3 w-3" />
-            </button>
-          </div>
+          {/* Действия — всегда видимый dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:bg-emerald-100/60 hover:text-foreground transition-colors flex-shrink-0"
+                onClick={e => e.stopPropagation()}
+                aria-label="Действия"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
+              <DropdownMenuLabel className="max-w-[220px] truncate">{company.name}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setDetailCompany(company)}>
+                <Eye className="h-4 w-4" /> Открыть карточку
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openCreateDept(undefined, company.id)}>
+                <Plus className="h-4 w-4" /> Добавить подразделение
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openEditCompany(company)}>
+                <Pencil className="h-4 w-4" /> Редактировать
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => { setCompanyToDelete(company); setCompanyDeleteOpen(true) }}>
+                <Trash2 className="h-4 w-4" /> Удалить
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        {isExpanded && companyDepts.length > 0 && (
-          <div className="ml-3 mt-1 space-y-0.5">
-            {companyDepts.map(d => renderDeptTreeItem(d, 0))}
-          </div>
-        )}
-        {isExpanded && companyDepts.length === 0 && (
-          <div className="ml-6 py-3 text-center text-muted-foreground">
-            <p className="text-xs">Нет подразделений</p>
-            <Button size="sm" variant="ghost" className="mt-1 h-6 text-xs" onClick={() => openCreateDept(undefined, company.id)}>
-              <Plus className="h-3 w-3 mr-1" /> Добавить
-            </Button>
-          </div>
-        )}
+
+        <AnimatePresence initial={false}>
+          {isExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: 'easeInOut' }}
+              className="overflow-hidden"
+            >
+              {companyDepts.length > 0 ? (
+                <div className="py-1 px-1.5">
+                  {companyDepts.map((d, idx) => renderDeptTreeItem(d, [], idx === companyDepts.length - 1))}
+                </div>
+              ) : (
+                <div className="py-3 text-center text-muted-foreground">
+                  <p className="text-xs">Нет подразделений</p>
+                  <Button size="sm" variant="ghost" className="mt-1 h-6 text-xs" onClick={() => openCreateDept(undefined, company.id)}>
+                    <Plus className="h-3 w-3 mr-1" /> Добавить
+                  </Button>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
@@ -681,7 +823,7 @@ export function StaffScheduleModule() {
   const orphanDepts = departments.filter(d => !d.companyId && !d.parentId)
 
   // ============ Loading ============
-  if (loading) return (
+  if (loading || positionsLoading) return (
     <div className="flex items-center justify-center py-12">
       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
     </div>
@@ -814,28 +956,40 @@ export function StaffScheduleModule() {
       </Card>
 
       {/* ====== Main Content: Tree + Positions ====== */}
-      <div className="flex flex-col gap-4 max-w-5xl mx-auto w-full">
+      <div className="flex flex-col gap-4 max-w-6xl mx-auto w-full">
         {/* ====== Block 1: Organization Tree ====== */}
         <Card className="shadow-sm">
           <Collapsible open={!orgTreeCollapsed} onOpenChange={(v) => setOrgTreeCollapsed(!v)}>
-          <CollapsibleTrigger asChild>
-          <CardHeader className="pb-2 cursor-pointer hover:bg-muted/40 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FolderTree className="h-4 w-4 text-emerald-600" />
-                <div>
-                  <CardTitle className="text-base">Структура организации</CardTitle>
-                  <CardDescription className="text-xs">
-                    Компании и подразделения с покрытием ДИ
-                  </CardDescription>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <CollapsibleTrigger asChild>
+                <div className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                  <FolderTree className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <CardTitle className="text-base">Структура организации</CardTitle>
+                    <CardDescription className="text-xs">
+                      Компании и подразделения с покрытием ДИ
+                    </CardDescription>
+                  </div>
                 </div>
+              </CollapsibleTrigger>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground" onClick={expandAllTree}>
+                  <ChevronsUpDown className="h-3.5 w-3.5 mr-1" /> Развернуть
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground" onClick={collapseAllTree}>
+                  <ChevronsDownUp className="h-3.5 w-3.5 mr-1" /> Свернуть
+                </Button>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7">
+                    {orgTreeCollapsed ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
+                  </Button>
+                </CollapsibleTrigger>
               </div>
-              {orgTreeCollapsed ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
             </div>
           </CardHeader>
-          </CollapsibleTrigger>
           <CollapsibleContent>
-          <CardContent className="max-h-[460px] overflow-y-auto">
+          <CardContent className="max-h-[70vh] overflow-y-auto">
             {companies.length === 0 && orphanDepts.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Landmark className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -852,10 +1006,13 @@ export function StaffScheduleModule() {
 
                 {/* Orphan departments */}
                 {orphanDepts.length > 0 && (
-                  <div className="mt-3">
-                    <Separator className="mb-2" />
-                    <p className="text-xs text-muted-foreground font-medium mb-1 px-2">Без юр. лица</p>
-                    {orphanDepts.map(d => renderDeptTreeItem(d, 0))}
+                  <div className="mt-3 rounded-xl border border-border/70 overflow-hidden">
+                    <div className="bg-muted/30 px-3 py-2">
+                      <p className="text-xs text-muted-foreground font-medium">Без юр. лица</p>
+                    </div>
+                    <div className="py-1 px-1.5">
+                      {orphanDepts.map((d, idx) => renderDeptTreeItem(d, [], idx === orphanDepts.length - 1))}
+                    </div>
                   </div>
                 )}
               </div>
