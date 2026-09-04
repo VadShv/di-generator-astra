@@ -9,6 +9,7 @@ import {
 import { getProviderClient, getZaiFallbackClient } from '@/lib/ai-connector/ai-provider-factory'
 import type { GenerateRequest, ChatMessage } from '@/lib/ai-connector/types'
 import { requireAuth } from '@/lib/auth/session'
+import { checkRateLimit } from '@/lib/rate-limit'
 import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import { createLogger } from '@/lib/logger'
 
@@ -23,7 +24,8 @@ const log = createLogger('prompt-chains-run')
 // предыдущего шага как контекст. Возвращает массив результатов по шагам.
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth()
+    const session = await requireAuth()
+    checkRateLimit(request, 'prompt-chain-run', 5, 60_000, session?.user?.id)
     const body = await parseBody(request, runPromptChainSchema)
     const { chainId, positionId, providerId, variables } = body
 
@@ -47,6 +49,9 @@ export async function POST(request: NextRequest) {
 
     if (steps.length === 0) {
       return NextResponse.json({ error: 'Цепочка не содержит шагов' }, { status: 400 })
+    }
+    if (steps.length > 20) {
+      return NextResponse.json({ error: 'Слишком много шагов в цепочке (максимум 20)' }, { status: 400 })
     }
 
     // Строим контекст переменных из позиции.

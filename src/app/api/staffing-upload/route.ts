@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof ApiError) return errorResponse(error)
     log.error('POST /api/staffing-upload error:', { error })
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Ошибка обработки файла' },
+      { error: 'Ошибка обработки файла' },
       { status: 500 }
     )
   }

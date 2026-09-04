@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getProviderClient } from '@/lib/ai-connector'
 import { requireAuth } from '@/lib/auth/session'
+import { checkRateLimit } from '@/lib/rate-limit'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
 import { createLogger } from '@/lib/logger'
@@ -15,7 +16,8 @@ const log = createLogger('compare-ai-text-diff')
 // сравнивать разные типы ДИ и разные версии между собой.
 export async function POST(request: Request) {
   try {
-    await requireAuth()
+    const session = await requireAuth()
+    checkRateLimit(request, 'ai-text-diff', 10, 60_000, session?.user?.id)
     const body = await request.json()
     const { text1, text2, title1, title2, context } = body as {
       text1?: string

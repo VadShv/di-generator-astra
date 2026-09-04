@@ -50,7 +50,6 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof ApiError) return errorResponse(error)
     log.error('POST /api/ai-providers/generate error:', { error })
-    const message = error instanceof Error ? error.message : 'Ошибка генерации'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: 'Ошибка генерации' }, { status: 500 })
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
  import { getProviderClient } from '@/lib/ai-connector'
 import { requireAuth } from '@/lib/auth/session'
+import { checkRateLimit } from '@/lib/rate-limit'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 
 import { createLogger } from '@/lib/logger'
@@ -11,7 +12,8 @@ const log = createLogger('compare-ai-diff')
 // POST /api/compare/ai-diff - AI-powered comparison of two versions
 export async function POST(request: Request) {
   try {
-    await requireAuth()
+    const session = await requireAuth()
+    checkRateLimit(request, 'ai-diff', 10, 60_000, session?.user?.id)
     const body = await request.json()
     const { version1Id, version2Id } = body
 

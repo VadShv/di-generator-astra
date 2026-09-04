@@ -9,6 +9,7 @@ import { createProvider, toProviderConfig } from '@/lib/ai-connector'
 import { validateProviderUrl } from '@/lib/ai-connector/url-validator'
 import type { AIProviderConfig } from '@/lib/ai-connector'
 import { requireRole } from '@/lib/auth/session'
+import { checkRateLimit } from '@/lib/rate-limit'
 import { ApiError, errorResponse } from '@/lib/api-utils'
 import { createLogger } from '@/lib/logger'
 
@@ -17,6 +18,7 @@ const log = createLogger('ai-providers-test')
 export async function POST(request: Request) {
   try {
     await requireRole('admin')
+    checkRateLimit(request, 'ai-provider-test', 10, 60_000)
     const body = await request.json()
     const { providerId, type, baseUrl, apiKey, modelName, folderId, config } = body
 
