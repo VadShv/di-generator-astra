@@ -11,6 +11,12 @@ RUN bun install --frozen-lockfile
 # Копируем исходники
 COPY . .
 
+# Build-time env vars (передаются через --build-arg, нужны для next build).
+ARG AUTH_SECRET
+ARG AI_PROVIDER_ENCRYPTION_KEY
+ENV AUTH_SECRET=$AUTH_SECRET
+ENV AI_PROVIDER_ENCRYPTION_KEY=$AI_PROVIDER_ENCRYPTION_KEY
+
 # Генерируем Prisma клиент и собираем
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN bunx prisma generate
