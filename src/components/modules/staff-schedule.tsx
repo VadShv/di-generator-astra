@@ -428,7 +428,13 @@ export function StaffScheduleModule() {
       setUploadProgress(50)
       const res = await fetch('/api/staffing-upload?mode=parse', { method: 'POST', body: formData })
       setUploadProgress(90)
-      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Ошибка парсинга') }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        const detail = Array.isArray(err.details) && err.details.length > 0
+          ? `: ${err.details.map((d: { message?: string }) => d.message).join('; ')}`
+          : ''
+        throw new Error((err.error || 'Ошибка парсинга') + detail)
+      }
       const data = await res.json()
       setUploadProgress(100)
       setPreviewRows(data.rows || [])
@@ -476,13 +482,22 @@ export function StaffScheduleModule() {
     else if (e.type === 'dragleave') setDragActive(false)
   }, [])
 
+  const validateStaffingFile = (f: File): boolean => {
+    const ext = f.name.toLowerCase().split('.').pop()
+    if (ext !== 'xlsx' && ext !== 'xls') { toast({ title: 'Ошибка', description: 'Поддерживаются только .xlsx и .xls', variant: 'destructive' }); return false }
+    if (f.size > 10 * 1024 * 1024) { toast({ title: 'Ошибка', description: 'Файл больше 10 МБ', variant: 'destructive' }); return false }
+    return true
+  }
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation(); setDragActive(false)
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) setSelectedFile(e.dataTransfer.files[0])
+    const f = e.dataTransfer.files?.[0]
+    if (f && validateStaffingFile(f)) setSelectedFile(f)
   }, [])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) setSelectedFile(e.target.files[0])
+    const f = e.target.files?.[0]
+    if (f && validateStaffingFile(f)) setSelectedFile(f)
   }
 
   const openUploadDialog = () => {

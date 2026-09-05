@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, requirePermission } from '@/lib/auth/session'
-import { ApiError, errorResponse } from '@/lib/api-utils'
+import { ApiError, errorResponse, parseBody } from '@/lib/api-utils'
 import {
   listPositions,
   createPosition,
   updatePosition,
   deletePosition,
 } from '@/services/position-service'
+import { createPositionSchema, updatePositionSchema, deletePositionSchema } from '@/lib/validation/schemas'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('positions')
@@ -32,38 +33,32 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     await requirePermission('staff-schedule', 'write')
-    const body = await request.json()
-    const position = await createPosition(body)
+    const body = await parseBody(request, createPositionSchema)
+    const position = await createPosition(body as unknown as Parameters<typeof createPosition>[0])
     return NextResponse.json(position, { status: 201 })
   } catch (error) {
-    if (error instanceof ApiError) return errorResponse(error)
-    log.error('Error creating position:', { error })
-    return NextResponse.json({ error: 'Ошибка при создании должности' }, { status: 500 })
+    return errorResponse(error)
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
     await requirePermission('staff-schedule', 'write')
-    const body = await request.json()
-    const position = await updatePosition(body)
+    const body = await parseBody(request, updatePositionSchema)
+    const position = await updatePosition(body as unknown as Parameters<typeof updatePosition>[0])
     return NextResponse.json(position)
   } catch (error) {
-    if (error instanceof ApiError) return errorResponse(error)
-    log.error('Error updating position:', { error })
-    return NextResponse.json({ error: 'Ошибка при обновлении должности' }, { status: 500 })
+    return errorResponse(error)
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
     await requirePermission('staff-schedule', 'write')
-    const body = await request.json()
+    const body = await parseBody(request, deletePositionSchema)
     const result = await deletePosition(body.id)
     return NextResponse.json(result)
   } catch (error) {
-    if (error instanceof ApiError) return errorResponse(error)
-    log.error('Error deleting position:', { error })
-    return NextResponse.json({ error: 'Ошибка при удалении должности' }, { status: 500 })
+    return errorResponse(error)
   }
 }

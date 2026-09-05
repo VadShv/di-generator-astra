@@ -451,3 +451,55 @@ export const rateTestResultSchema = z.object({
   id: idSchema,
   rating: z.number().int().min(1).max(5),
 })
+
+// ── Positions ──────────────────────────────────
+/** POST /api/positions */
+export const createPositionSchema = z.object({
+  title: nonEmptyString.max(500, 'Слишком длинное название'),
+  code: nonEmptyString.max(100),
+  departmentId: idSchema,
+  grade: z.string().trim().nullish(),
+  businessFunctionId: idSchema.nullish(),
+  projectId: idSchema.nullish(),
+  headcount: z.number().int().positive().max(10000).nullish(),
+  functions: z.string().nullish(),
+  attributeIds: z.array(idSchema).max(100).nullish(),
+})
+
+/** PUT /api/positions */
+export const updatePositionSchema = z.object({
+  id: idSchema,
+  title: nonEmptyString.max(500).nullish(),
+  code: nonEmptyString.max(100).nullish(),
+  departmentId: idSchema.nullish(),
+  grade: z.string().trim().nullish(),
+  businessFunctionId: idSchema.nullish(),
+  projectId: idSchema.nullish(),
+  headcount: z.number().int().positive().max(10000).nullish(),
+  functions: z.string().nullish(),
+  attributeIds: z.array(idSchema).max(100).nullish(),
+})
+
+/** DELETE /api/positions */
+export const deletePositionSchema = z.object({ id: idSchema })
+
+// ── Departments ────────────────────────────────
+/** POST /api/departments */
+export const createDepartmentSchema = z.object({
+  name: nonEmptyString.max(500),
+  code: nonEmptyString.max(100),
+  parentId: idSchema.nullish(),
+  companyId: idSchema.nullish(),
+})
+
+/** PUT /api/departments */
+export const updateDepartmentSchema = z.object({
+  id: idSchema,
+  name: nonEmptyString.max(500).nullish(),
+  code: nonEmptyString.max(100).nullish(),
+  parentId: idSchema.nullish(),
+  companyId: idSchema.nullish(),
+})
+
+/** DELETE /api/departments */
+export const deleteDepartmentSchema = z.object({ id: idSchema })
