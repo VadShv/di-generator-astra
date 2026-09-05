@@ -424,14 +424,20 @@ export function DIVersionsModule() {
   const handleRestore = async () => {
     if (!restoringVersion || !selectedDI) return
     try {
-      const versionData = JSON.parse(restoringVersion.content)
+      let versionData: { title?: string; sections?: { title?: string; content?: string; sectionTitle?: string; sectionContent?: string; order?: number }[] }
+      try { versionData = JSON.parse(restoringVersion.content) } catch { versionData = { sections: [{ content: restoringVersion.content || '' }] } }
+      const rawSections = Array.isArray(versionData?.sections) ? versionData.sections : []
       const res = await fetch('/api/generate-di', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: selectedDI.id,
           title: versionData.title || selectedDI.title,
-          sections: versionData.sections || [],
+          sections: rawSections.map((s, i) => ({
+            sectionTitle: s.title ?? s.sectionTitle ?? '',
+            sectionContent: s.content ?? s.sectionContent ?? '',
+            order: s.order ?? i,
+          })),
         }),
       })
       if (!res.ok) throw new Error()

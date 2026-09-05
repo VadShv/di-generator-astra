@@ -18,7 +18,7 @@ const comparePostSchema = z.object({
 // GET /api/compare - Paginated list of DI versions (with DI info)
 // Параметры: generatedDIId, page, pageSize
 // Возвращает: { items, total, page, pageSize }
-// content НЕ загружается в списке — только при запросе конкретной версии (GET /api/compare/[id])
+// content включён в список — нужен клиенту для сравнения/восстановления/просмотра версий.
 const DEFAULT_PAGE_SIZE = 50
 const MAX_PAGE_SIZE = 200
 
@@ -44,6 +44,7 @@ export async function GET(request: Request) {
           isOriginal: true,
           uploadedBy: true,
           fileName: true,
+          content: true,
           diffSummary: true,
           changeDescription: true,
           createdAt: true,

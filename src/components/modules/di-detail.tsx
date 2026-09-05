@@ -49,6 +49,19 @@ const GRADE_LABELS: Record<string, string> = { 'линейная': 'Линейн
 function formatDate(d: string): string { try { return new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) } catch { return d } }
 function formatDateTime(d: string): string { try { return new Date(d).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch { return d } }
 
+function parseVersionContent(raw: string): { sections: { sectionTitle: string; sectionContent: string; order: number }[] } {
+  try {
+    const p = JSON.parse(raw)
+    if (p && typeof p === 'object' && Array.isArray(p.sections)) {
+      return { sections: p.sections.map((s: Record<string, unknown>, i: number) => ({ sectionTitle: String(s.title ?? s.sectionTitle ?? `Раздел ${i + 1}`), sectionContent: String(s.content ?? s.sectionContent ?? ''), order: typeof s.order === 'number' ? s.order : i })) }
+    }
+    if (Array.isArray(p)) {
+      return { sections: p.map((s: Record<string, unknown>, i: number) => ({ sectionTitle: String(s.title ?? s.sectionTitle ?? `Раздел ${i + 1}`), sectionContent: String(s.content ?? s.sectionContent ?? ''), order: typeof s.order === 'number' ? s.order : i })) }
+    }
+  } catch { /* not JSON — plain text fallback */ }
+  return { sections: [{ sectionTitle: 'Содержимое', sectionContent: raw || '', order: 0 }] }
+}
+
 const AUDIT_CATEGORIES = [
   { key: 'duplicatedTkItems', label: 'Дублирование норм ТК РФ' },
   { key: 'vagueFormulationItems', label: 'Расплывчатые формулировки' },
@@ -89,7 +102,7 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
   const [versions, setVersions] = useState<{ id: string; version: number; isOriginal: boolean; createdAt: string; changeDescription?: string | null; diffSummary?: string | null; uploadedBy?: string | null }[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [versionContent, setVersionContent] = useState<{ sections: { sectionTitle: string; sectionContent: string }[] } | null>(null)
-  const [diffData, setDiffData] = useState<{ aiSummary: string; diff: { type: string; text: string }[] } | null>(null)
+  const [diffData, setDiffData] = useState<{ aiSummary: string; diff: { type: string; line1?: string; line2?: string }[] } | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
   const [sectionSearch, setSectionSearch] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -120,7 +133,7 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
 
   // B1 — Version content preview
   const fetchVersionContent = async (versionId: string) => {
-    try { const res = await fetch(`/api/compare/${versionId}`); if (res.ok) { const d = await res.json(); setVersionContent(JSON.parse(d.content)) } } catch { /* silent */ }
+    try { const res = await fetch(`/api/compare/${versionId}`); if (res.ok) { const d = await res.json(); setVersionContent(parseVersionContent(d.content)) } } catch { /* silent */ }
   }
 
   // B2 — Diff between versions
@@ -135,10 +148,9 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
       const res = await fetch(`/api/compare/${versionId}`)
       if (!res.ok) throw new Error()
       const v = await res.json()
-      const content = JSON.parse(v.content)
-      const sections = Array.isArray(content?.sections) ? content.sections : Array.isArray(content) ? content : null
-      if (!sections) throw new Error('Invalid version format')
-      const putRes = await fetch('/api/generate-di', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentDI.id, title: currentDI.title, sections: sections.map((s: { sectionTitle: string; sectionContent: string; order?: number; aiGenerated?: boolean; editedBy?: string | null }) => ({ sectionTitle: s.sectionTitle, sectionContent: s.sectionContent, order: s.order ?? 0, aiGenerated: s.aiGenerated ?? false, editedBy: s.editedBy ?? null })) }) })
+      const parsed = parseVersionContent(v.content)
+      if (!parsed.sections.length) throw new Error('Invalid version format')
+      const putRes = await fetch('/api/generate-di', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentDI.id, title: currentDI.title, sections: parsed.sections.map((s, i) => ({ sectionTitle: s.sectionTitle, sectionContent: s.sectionContent, order: s.order ?? i, aiGenerated: false, editedBy: null })) }) })
       if (!putRes.ok) throw new Error()
       toast({ title: 'Версия восстановлена' }); onRefresh(); fetchVersions()
     } catch { toast({ title: 'Ошибка', description: 'Не удалось восстановить', variant: 'destructive' }) }
@@ -764,8 +776,8 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
                   {diffData.aiSummary && <p className="text-sm text-muted-foreground">{diffData.aiSummary}</p>}
                   <div className="font-mono text-xs space-y-0.5 max-h-96 overflow-y-auto">
                     {diffData.diff?.map((line, i) => (
-                      <div key={i} className={`px-2 py-0.5 rounded ${line.type === 'added' ? 'bg-emerald-50 text-emerald-800' : line.type === 'removed' ? 'bg-red-50 text-red-800' : 'text-muted-foreground'}`}>
-                        {line.type === 'added' ? '+ ' : line.type === 'removed' ? '- ' : '  '}{line.text}
+                      <div key={i} className={`px-2 py-0.5 rounded ${line.type === 'added' ? 'bg-emerald-50 text-emerald-800' : line.type === 'removed' ? 'bg-red-50 text-red-800' : line.type === 'modified' ? 'bg-amber-50 text-amber-800' : 'text-muted-foreground'}`}>
+                        {line.type === 'added' ? '+ ' : line.type === 'removed' ? '- ' : line.type === 'modified' ? '~ ' : '  '}{line.line1 ?? line.line2 ?? ''}
                       </div>
                     ))}
                   </div>

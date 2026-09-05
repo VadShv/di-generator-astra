@@ -71,6 +71,7 @@ export async function listArchiveDIs(filters: ArchiveListFilters = {}) {
       select: {
         id: true,
         title: true,
+        content: true,
         fileName: true,
         uploadedAt: true,
         createdAt: true,
