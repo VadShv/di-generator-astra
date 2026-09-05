@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast'
 import {
   Archive, FileText, Sparkles, GitCompareArrows, FileCheck2, Upload, Loader2,
   Trash2, RefreshCw, CheckCircle2, AlertCircle, ChevronRight, FileSignature,
+  FileEdit,
 } from 'lucide-react'
 import type { Position } from './staff-schedule-types'
 
@@ -148,6 +149,7 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
   const [useArchiveAsReference, setUseArchiveAsReference] = useState(true)
   const [uploadingArchive, setUploadingArchive] = useState(false)
   const [uploadingApproved, setUploadingApproved] = useState(false)
+  const [uploadingCorrections, setUploadingCorrections] = useState(false)
 
   // Сравнение
   const [versions, setVersions] = useState<VersionRow[]>([])
@@ -453,6 +455,59 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
     }
   }
 
+  // ===== Загрузка правок руководителя (статус review, без утверждения) =====
+  const handleUploadCorrections = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (generatedDIs.length === 0) {
+      toast({ title: 'Сначала сгенерируйте ДИ', description: 'Правки загружаются на сгенерированную ДИ', variant: 'destructive' })
+      e.target.value = ''
+      return
+    }
+    setUploadingCorrections(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const parseRes = await fetch('/api/di-upload?mode=parse', { method: 'POST', body: fd })
+      const parsed = await parseRes.json()
+      if (!parseRes.ok) throw new Error(parsed.error || 'Ошибка разбора файла')
+
+      const targetDI = generatedDIs[0]
+      const versionRes = await fetch('/api/compare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          generatedDIId: targetDI.id,
+          content: parsed.rawText,
+          fileName: parsed.fileName,
+          isOriginal: false,
+        }),
+      })
+      if (!versionRes.ok) {
+        const err = await versionRes.json()
+        throw new Error(err.error || 'Ошибка создания версии')
+      }
+
+      const statusRes = await fetch('/api/tracking/update-di-status', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generatedDIId: targetDI.id, status: 'review' }),
+      })
+      if (!statusRes.ok) console.warn('Статус не обновлён')
+
+      toast({ title: '✓ Правки загружены', description: 'Создана новая версия. Перейдите во вкладку «Сравнение» для сверки' })
+      invalidateDIData()
+      await loadAll()
+      onChanged?.()
+      setTab('compare')
+    } catch (e) {
+      toast({ title: 'Ошибка', description: e instanceof Error ? e.message : '', variant: 'destructive' })
+    } finally {
+      setUploadingCorrections(false)
+      e.target.value = ''
+    }
+  }
+
   // ===== Изменение статуса ДИ =====
   const handleStatusChange = async (diId: string, status: string) => {
     try {
@@ -483,9 +538,10 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
 
   return (
     <Tabs value={tab} onValueChange={setTab} className="w-full">
-      <TabsList className="grid grid-cols-4 w-full">
+      <TabsList className="grid grid-cols-5 w-full">
         <TabsTrigger value="archive" className="text-xs"><Archive className="h-3.5 w-3.5 mr-1.5" /> Архив ({archiveDIs.length})</TabsTrigger>
         <TabsTrigger value="generated" className="text-xs"><Sparkles className="h-3.5 w-3.5 mr-1.5" /> Генерация ({generatedDIs.length})</TabsTrigger>
+        <TabsTrigger value="corrections" className="text-xs"><FileEdit className="h-3.5 w-3.5 mr-1.5" /> Правки</TabsTrigger>
         <TabsTrigger value="compare" className="text-xs"><GitCompareArrows className="h-3.5 w-3.5 mr-1.5" /> Сравнение</TabsTrigger>
         <TabsTrigger value="approve" className="text-xs"><FileCheck2 className="h-3.5 w-3.5 mr-1.5" /> Утверждение</TabsTrigger>
       </TabsList>
@@ -760,6 +816,49 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
         )}
       </TabsContent>
 
+      {/* ===== Правки руководителя ===== */}
+      <TabsContent value="corrections" className="mt-3 space-y-3">
+        <div className="p-3 rounded-lg border bg-amber-50/50 space-y-2">
+          <div className="flex items-center gap-2">
+            <FileEdit className="h-4 w-4 text-amber-600" />
+            <p className="text-sm font-medium text-amber-700">Правки руководителя</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Загрузите ДИ с правками руководителя (PDF/DOCX). Будет создана новая версия
+            для сравнения с оригиналом. Статус ДИ изменится на «На проверке».
+          </p>
+          {generatedDIs.length === 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Сначала сгенерируйте ДИ во вкладке «Генерация»
+            </div>
+          )}
+          <label className="cursor-pointer block">
+            <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleUploadCorrections} disabled={uploadingCorrections || generatedDIs.length === 0} />
+            <span className={`inline-flex items-center justify-center gap-1.5 rounded-md text-xs font-medium h-9 px-4 w-full ${generatedDIs.length === 0 ? 'bg-muted text-muted-foreground' : 'bg-amber-600 text-white hover:bg-amber-700'} disabled:opacity-50`}>
+              {uploadingCorrections ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {uploadingCorrections ? 'Загрузка…' : 'Загрузить ДИ с правками'}
+            </span>
+          </label>
+        </div>
+
+        {generatedDIs.length > 0 && (
+          <div className="rounded-lg border p-3 space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">ДИ по этой должности</p>
+            {generatedDIs.map(d => (
+              <div key={d.id} className="flex items-center gap-2 text-sm">
+                <FileSignature className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                <span className="flex-1 truncate">{d.title}</span>
+                <Badge variant="outline" className={`text-xs h-5 ${STATUS_COLORS[d.status] || 'bg-slate-100'}`}>
+                  {STATUS_LABELS[d.status] || d.status}
+                </Badge>
+                <span className="text-xs text-muted-foreground">v{d.currentVersion}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </TabsContent>
+
       {/* ===== Сравнение версий ===== */}
       <TabsContent value="compare" className="mt-3 space-y-3">
         <div className="space-y-2">
@@ -836,23 +935,25 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
             <p className="text-sm font-medium text-emerald-700">Утверждение должностной инструкции</p>
           </div>
           <p className="text-xs text-muted-foreground">
-            Загрузите ДИ с корректировками руководителя (PDF/DOCX). Будет создана новая версия,
-            а статус ДИ изменится на «Утверждена».
+            После сверки правок во вкладке «Сравнение» утвердите ДИ. Статус изменится на «Утверждена».
           </p>
-          {generatedDIs.length === 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-              <AlertCircle className="h-3.5 w-3.5" />
-              Сначала сгенерируйте ДИ во вкладке «Генерация»
-            </div>
-          )}
-          <label className="cursor-pointer block">
-            <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleUploadApproved} disabled={uploadingApproved || generatedDIs.length === 0} />
-            <span className={`inline-flex items-center justify-center gap-1.5 rounded-md text-xs font-medium h-9 px-4 w-full ${generatedDIs.length === 0 ? 'bg-muted text-muted-foreground' : 'bg-emerald-600 text-white hover:bg-emerald-700'} disabled:opacity-50`}>
-              {uploadingApproved ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {uploadingApproved ? 'Загрузка…' : 'Загрузить утверждённую ДИ'}
-            </span>
-          </label>
         </div>
+
+        {generatedDIs.filter(d => d.status === 'review').length > 0 && (
+          <div className="rounded-lg border p-3 space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ожидают утверждения</p>
+            {generatedDIs.filter(d => d.status === 'review').map(d => (
+              <div key={d.id} className="flex items-center gap-2 text-sm p-2 rounded hover:bg-muted/50">
+                <FileSignature className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                <span className="flex-1 truncate">{d.title}</span>
+                <Badge variant="outline" className="text-xs h-5 bg-amber-50 text-amber-700 border-amber-300">v{d.currentVersion}</Badge>
+                <Button size="sm" className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => handleStatusChange(d.id, 'approved')}>
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Утвердить
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {generatedDIs.filter(d => d.status === 'approved').length > 0 && (
           <div className="rounded-lg border p-3 space-y-1">
@@ -862,9 +963,15 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
                 <span className="flex-1 truncate">{d.title}</span>
                 <Badge variant="outline" className="text-xs h-5 bg-emerald-50 text-emerald-700 border-emerald-300">v{d.currentVersion}</Badge>
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
               </div>
             ))}
+          </div>
+        )}
+
+        {generatedDIs.length === 0 && (
+          <div className="text-center py-6 text-muted-foreground text-xs border rounded-lg border-dashed">
+            <FileCheck2 className="h-6 w-6 mx-auto mb-2 opacity-40" />
+            Нет ДИ для утверждения
           </div>
         )}
       </TabsContent>
