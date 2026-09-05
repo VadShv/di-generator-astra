@@ -442,6 +442,7 @@ model DIAuditResult {
   riskyItems       String   @default("[]") // JSON: массив юридически рискованных пунктов
   recommendations  String   @default("[]") // JSON: массив рекомендаций по улучшению
   summary          String?  // Общее резюме аудита
+  categoryScores   String   @default("{}") // JSON: оценки по категориям {duplicatedTk, vagueFormulation, legislativeConflict, unrealisticRequirement, incompleteSection}
   auditedBy        String?  // Кто запустил аудит
   createdAt        DateTime @default(now())
 

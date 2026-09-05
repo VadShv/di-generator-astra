@@ -127,6 +127,7 @@ export function StaffScheduleModule() {
   const [previewSummary, setPreviewSummary] = useState<{
     totalRows: number; errorCount: number; uniqueDepartments: number; uniquePositions: number
   } | null>(null)
+  const [columnMapping, setColumnMapping] = useState<Record<string, string> | null>(null)
   const [importCompanyId, setImportCompanyId] = useState<string>('')
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<{
@@ -219,7 +220,7 @@ export function StaffScheduleModule() {
   })
 
   // ============ Stats ============
-  const totalHeadcount = positions.reduce((sum, p) => sum + p.headcount, 0)
+  const totalHeadcount = positions.reduce((sum, p) => sum + (p.headcount || 0), 0)
   const uniqueBusinessFunctions = [...new Set(positions.map(p => p.businessFunction?.name).filter(Boolean))]
   const totalApproved = positions.filter(p => p.generatedDIs.some(d => d.status === 'approved')).length
   const totalGenerated = positions.filter(p => p.generatedDIs.length > 0).length
@@ -283,7 +284,7 @@ export function StaffScheduleModule() {
       toast({ title: 'Удалено', description: companyToDelete.name })
       if (selectedCompanyId === companyToDelete.id) setSelectedCompanyId(null)
       setCompanyDeleteOpen(false); setCompanyToDelete(null); await fetchCompanies(); await fetchDepartments()
-    } catch (e) { toast({ title: 'Ошибка', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' }) }
+    } catch (e) { toast({ title: 'Ошибка', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' }) } finally { setCompanyToDelete(null) }
   }
 
   // ============ Dept handlers ============
@@ -327,7 +328,7 @@ export function StaffScheduleModule() {
       toast({ title: 'Удалено', description: deptToDelete.name })
       if (selectedDeptId === deptToDelete.id) setSelectedDeptId(null)
       setDeptDeleteOpen(false); setDeptToDelete(null); await fetchDepartments()
-    } catch (e) { toast({ title: 'Ошибка', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' }) }
+    } catch (e) { toast({ title: 'Ошибка', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' }) } finally { setDeptToDelete(null) }
   }
 
   // ============ Position handlers ============
@@ -380,7 +381,7 @@ export function StaffScheduleModule() {
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Ошибка') }
       toast({ title: 'Удалено', description: posToDelete.title })
       setPosDeleteOpen(false); setPosToDelete(null); await fetchPositions(); await fetchDepartments()
-    } catch (e) { toast({ title: 'Ошибка', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' }) }
+    } catch (e) { toast({ title: 'Ошибка', description: e instanceof Error ? e.message : 'Ошибка', variant: 'destructive' }) } finally { setPosToDelete(null) }
   }
 
   // Bulk upload
@@ -440,6 +441,7 @@ export function StaffScheduleModule() {
       setPreviewRows(data.rows || [])
       setPreviewErrors(data.errors || [])
       setPreviewSummary(data.summary || null)
+      setColumnMapping(data.columnMapping || null)
       toast({
         title: 'Файл распознан',
         description: `Строк: ${data.summary?.totalRows ?? 0}, подразделений: ${data.summary?.uniqueDepartments ?? 0}`,
@@ -501,7 +503,7 @@ export function StaffScheduleModule() {
   }
 
   const openUploadDialog = () => {
-    setSelectedFile(null); setPreviewRows(null); setPreviewErrors([]); setPreviewSummary(null)
+    setSelectedFile(null); setPreviewRows(null); setPreviewErrors([]); setPreviewSummary(null); setColumnMapping(null)
     setImportResult(null); setImportCompanyId(''); setUploadProgress(0); setUploadDialogOpen(true)
   }
 
@@ -1490,6 +1492,16 @@ export function StaffScheduleModule() {
                     {previewSummary.errorCount > 0 ? `, ${previewSummary.errorCount} ошибок` : ''})
                   </span>
                 </div>
+                {columnMapping && Object.keys(columnMapping).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 text-xs">
+                    {Object.entries(columnMapping).map(([field, col]) => (
+                      <span key={field} className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5">
+                        <span className="text-muted-foreground">{field}:</span>
+                        <span className="font-medium">{col}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {/* Выбор юр. лица для привязки импортируемых данных */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Юридическое лицо (опционально)</label>

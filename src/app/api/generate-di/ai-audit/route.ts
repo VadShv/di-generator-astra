@@ -194,6 +194,7 @@ ${diText}
       riskyItems: JSON.stringify(legacyRisky),
       recommendations: JSON.stringify(auditData.recommendations || []),
       summary: (auditData.summary as string) || null,
+      categoryScores: JSON.stringify(auditData.categoryScores || {}),
       auditedBy: 'ai-system',
     },
   })
@@ -236,6 +237,7 @@ export async function GET(request: Request) {
     const safeParse = (s: string | null): unknown => { try { return JSON.parse(s ?? '[]') } catch { return [] } }
     const parsed = auditResults.map((r) => ({
       ...r,
+      categoryScores: (() => { try { return JSON.parse(r.categoryScores) } catch { return {} } })(),
       duplicatedTkItems: safeParse(r.duplicatedTkItems),
       vagueFormulationItems: safeParse(r.vagueFormulationItems),
       legislativeConflictItems: safeParse(r.legislativeConflictItems),
