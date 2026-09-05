@@ -832,7 +832,7 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
                       <FileSignature className="h-4 w-4" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <button className="text-sm font-medium text-left hover:text-violet-700 hover:underline truncate w-full" onClick={() => setPreviewGenId(previewGenId === d.id ? null : d.id)}>
+                      <button className="text-sm font-medium text-left hover:text-violet-700 truncate w-full" onClick={() => setPreviewGenId(previewGenId === d.id ? null : d.id)}>
                         {d.title}
                       </button>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -856,7 +856,7 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
                         </ScrollArea>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                       {d.status !== 'approved' && (
                         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleStatusChange(d.id, 'approved')} title="Утвердить">
                           <FileCheck2 className="h-3.5 w-3.5 mr-1" /> Утвердить
