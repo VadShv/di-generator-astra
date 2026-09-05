@@ -113,12 +113,12 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
 
   const fetchStatusHistory = useCallback(async () => {
     setHistoryLoading(true)
-    try { const res = await fetch(`/api/generate-di/${currentDI.id}/status`); if (res.ok) setStatusHistory(await res.json()) } catch { /* silent */ } finally { setHistoryLoading(false) }
+    try { const res = await fetch(`/api/generate-di/${currentDI.id}/status`); if (res.ok) setStatusHistory(await res.json()); else toast({ title: 'Ошибка загрузки истории', variant: 'destructive' }) } catch { /* silent */ } finally { setHistoryLoading(false) }
   }, [currentDI.id])
 
   const fetchAuditResults = useCallback(async () => {
     setAuditLoading(true)
-    try { const res = await fetch(`/api/generate-di/ai-audit?generatedDIId=${currentDI.id}`); if (res.ok) setAuditResults(await res.json()) } catch { /* silent */ } finally { setAuditLoading(false) }
+    try { const res = await fetch(`/api/generate-di/ai-audit?generatedDIId=${currentDI.id}`); if (res.ok) setAuditResults(await res.json()); else toast({ title: 'Ошибка загрузки аудита', variant: 'destructive' }) } catch { /* silent */ } finally { setAuditLoading(false) }
   }, [currentDI.id])
 
   useEffect(() => { fetchStatusHistory() }, [fetchStatusHistory])
@@ -127,19 +127,19 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
   // B1 — Versions fetch
   const fetchVersions = useCallback(async () => {
     setVersionsLoading(true)
-    try { const res = await fetch(`/api/compare?generatedDIId=${currentDI.id}`); if (res.ok) { const d = await res.json(); setVersions(d.items || []) } } catch { /* silent */ } finally { setVersionsLoading(false) }
+    try { const res = await fetch(`/api/compare?generatedDIId=${currentDI.id}`); if (res.ok) { const d = await res.json(); setVersions(d.items || []) } else toast({ title: 'Ошибка загрузки версий', variant: 'destructive' }) } catch { /* silent */ } finally { setVersionsLoading(false) }
   }, [currentDI.id])
   useEffect(() => { if (activeTab === 'versions' && versions.length === 0) fetchVersions() }, [activeTab, versions.length, fetchVersions])
 
   // B1 — Version content preview
   const fetchVersionContent = async (versionId: string) => {
-    try { const res = await fetch(`/api/compare/${versionId}`); if (res.ok) { const d = await res.json(); setVersionContent(parseVersionContent(d.content)) } } catch { /* silent */ }
+    try { const res = await fetch(`/api/compare/${versionId}`); if (res.ok) { const d = await res.json(); setVersionContent(parseVersionContent(d.content)) } else toast({ title: 'Ошибка загрузки версии', variant: 'destructive' }) } catch { /* silent */ }
   }
 
   // B2 — Diff between versions
   const handleDiff = async (v1Id: string, v2Id: string) => {
     setDiffLoading(true); setDiffData(null)
-    try { const res = await fetch('/api/compare/ai-diff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version1Id: v1Id, version2Id: v2Id }) }); if (res.ok) setDiffData(await res.json()) } catch { /* silent */ } finally { setDiffLoading(false) }
+    try { const res = await fetch('/api/compare/ai-diff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version1Id: v1Id, version2Id: v2Id }) }); if (res.ok) setDiffData(await res.json()); else toast({ title: 'Ошибка сравнения', variant: 'destructive' }) } catch { /* silent */ } finally { setDiffLoading(false) }
   }
 
   // B3 — Restore version
@@ -245,10 +245,11 @@ export function DIDetail({ di, onBack, onEdit, onDelete, onCompare, onRefresh }:
     )
     setCurrentDI(prev => ({ ...prev, sections: updatedSections }))
     try {
-      await fetch('/api/generate-di', {
+      const res = await fetch('/api/generate-di', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: currentDI.id, sections: updatedSections.map(s => ({ sectionTitle: s.sectionTitle, sectionContent: s.sectionContent, order: s.order, aiGenerated: s.aiGenerated, editedBy: s.editedBy })) }),
       })
+      if (!res.ok) throw new Error()
       toast({ title: 'Секция сохранена' }); onRefresh()
     } catch { toast({ title: 'Ошибка', description: 'Не удалось сохранить', variant: 'destructive' }) }
     finally { setSavingSection(false); setEditingSectionId(null) }

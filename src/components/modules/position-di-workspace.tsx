@@ -445,11 +445,10 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
        body: JSON.stringify({ generatedDIId: targetDI.id, status: 'approved' }),
      })
       if (!statusRes.ok) {
-        // Не критично — версия создана
         console.warn('Статус не обновлён')
       }
 
-      toast({ title: '✓ Утверждённая ДИ загружена', description: 'Создана новая версия, статус обновлён' })
+      toast({ title: '✓ Утверждённая ДИ загружена', description: statusRes.ok ? 'Создана новая версия, статус обновлён' : 'Создана новая версия (статус не обновлён)' })
       invalidateDIData()
       await loadAll()
       onChanged?.()

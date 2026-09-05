@@ -365,15 +365,18 @@ export function GenerationModule() {
     }
     
     setManualGeneratingAll(true); setManualProgress(0)
-    
-    for (let i = 0; i < manualSections.length; i++) {
-      setManualProgress(Math.round((i / manualSections.length) * 100))
-      await handleManualSectionGenerate(i)
+    try {
+      for (let i = 0; i < manualSections.length; i++) {
+        setManualProgress(Math.round((i / manualSections.length) * 100))
+        await handleManualSectionGenerate(i)
+      }
+      setManualProgress(100)
+      toast({ title: 'Генерация завершена', description: `Обработано секций: ${manualSections.length}` })
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось сгенерировать все секции', variant: 'destructive' })
+    } finally {
+      setManualGeneratingAll(false)
     }
-    
-    setManualProgress(100)
-    setManualGeneratingAll(false)
-    toast({ title: 'Все секции сгенерированы' })
   }
 
   // Manual: Save DI
