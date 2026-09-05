@@ -144,11 +144,11 @@ export function StaffScheduleModule() {
 
   // ============ Data fetching ============
   const fetchCompanies = useCallback(async () => {
-    try { const res = await fetch('/api/companies'); if (res.ok) setCompanies(await res.json()) } catch { /* silent */ }
-  }, [])
+    try { const res = await fetch('/api/companies'); if (res.ok) setCompanies(await res.json()); else toast({ title: 'Ошибка загрузки компаний', variant: 'destructive' }) } catch { toast({ title: 'Ошибка загрузки компаний', variant: 'destructive' }) }
+  }, [toast])
   const fetchDepartments = useCallback(async () => {
-    try { const res = await fetch('/api/departments'); if (res.ok) setDepartments(await res.json()) } catch { /* silent */ }
-  }, [])
+    try { const res = await fetch('/api/departments'); if (res.ok) setDepartments(await res.json()); else toast({ title: 'Ошибка загрузки подразделений', variant: 'destructive' }) } catch { toast({ title: 'Ошибка загрузки подразделений', variant: 'destructive' }) }
+  }, [toast])
   // Обновление должностей — через инвалидацию общего кэша React Query
   // (usePositions). Так после локальных мутаций (CRUD должностей, импорт ШР)
   // и после генерации ДИ из других экранов дерево остаётся актуальным.
@@ -156,15 +156,15 @@ export function StaffScheduleModule() {
     await queryClient.invalidateQueries({ queryKey: positionKeys.all })
   }, [queryClient])
   const fetchBusinessFunctions = useCallback(async () => {
-    try { const res = await fetch('/api/business-functions'); if (res.ok) setBusinessFunctions(await res.json()) } catch { /* silent */ }
-  }, [])
+    try { const res = await fetch('/api/business-functions'); if (res.ok) setBusinessFunctions(await res.json()); else toast({ title: 'Ошибка загрузки справочников', variant: 'destructive' }) } catch { toast({ title: 'Ошибка загрузки справочников', variant: 'destructive' }) }
+  }, [toast])
   const fetchProjects = useCallback(async () => {
-    try { const res = await fetch('/api/projects'); if (res.ok) setProjects(await res.json()) } catch { /* silent */ }
-  }, [])
+    try { const res = await fetch('/api/projects'); if (res.ok) setProjects(await res.json()); else toast({ title: 'Ошибка загрузки проектов', variant: 'destructive' }) } catch { toast({ title: 'Ошибка загрузки проектов', variant: 'destructive' }) }
+  }, [toast])
 
   const fetchPositionAttributes = useCallback(async () => {
-    try { const res = await fetch('/api/position-attributes?isActive=true'); if (res.ok) setPositionAttributes(await res.json()) } catch { /* silent */ }
-  }, [])
+    try { const res = await fetch('/api/position-attributes?isActive=true'); if (res.ok) setPositionAttributes(await res.json()); else toast({ title: 'Ошибка загрузки признаков', variant: 'destructive' }) } catch { toast({ title: 'Ошибка загрузки признаков', variant: 'destructive' }) }
+  }, [toast])
 
   useEffect(() => {
     (async () => {

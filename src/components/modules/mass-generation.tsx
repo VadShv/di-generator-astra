@@ -211,18 +211,26 @@ function LineageTab({
     const lineageName = genLineage.name
     setGenerating(true)
     try {
-      await fetch('/api/generate-di/lineage-generate', {
+      const res = await fetch('/api/generate-di/lineage-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lineageId: genLineage.id, templateId: genTemplateId }),
       })
-    } catch {
-      // placeholder endpoint — ignore network errors
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Ошибка запуска генерации')
+      }
+      const data = await res.json()
+      if (!data.jobId) throw new Error('Сервер не вернул jobId')
+
+      toast({ title: '✓ Генерация запущена', description: `Линейка: ${lineageName}. ДИ появятся после завершения — обновите список.` })
+      setGenLineage(null)
+      setGenTemplateId('')
+    } catch (e) {
+      toast({ title: 'Ошибка', description: e instanceof Error ? e.message : '', variant: 'destructive' })
+    } finally {
+      setGenerating(false)
     }
-    setGenerating(false)
-    toast({ title: 'Генерация запущена', description: `Линейка: ${lineageName}` })
-    setGenLineage(null)
-    setGenTemplateId('')
   }
 
   return (
@@ -456,13 +464,16 @@ export function MassGenerationModule() {
         fetch('/api/positions'),
         fetch('/api/templates'),
       ])
-      setCompanies(await companiesRes.json())
-      setDepartments(await departmentsRes.json())
-      setPositions(await positionsRes.json())
+      const companiesData = await companiesRes.json()
+      const departmentsData = await departmentsRes.json()
+      const positionsData = await positionsRes.json()
       const templatesData = await templatesRes.json()
-      setTemplates(templatesData)
+      if (Array.isArray(companiesData)) setCompanies(companiesData)
+      if (Array.isArray(departmentsData)) setDepartments(departmentsData)
+      if (Array.isArray(positionsData)) setPositions(positionsData)
+      setTemplates(Array.isArray(templatesData) ? templatesData : [])
       // Auto-select primary template
-      const primary = templatesData.find((t: Template) => t.isPrimary)
+      const primary = (Array.isArray(templatesData) ? templatesData : []).find((t: Template) => t.isPrimary)
       if (primary) setSelectedTemplateId(primary.id)
     } catch {
       toast({ title: 'Ошибка', description: 'Не удалось загрузить данные', variant: 'destructive' })

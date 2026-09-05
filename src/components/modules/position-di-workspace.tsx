@@ -190,7 +190,9 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
        fetch('/api/templates'),
      ])
       if (archRes.ok) setArchiveDIs((await archRes.json()).items as ArchiveDIRow[])
-     if (tmplRes.ok) setTemplates((await tmplRes.json()) as TemplateRow[])
+      else toast({ title: 'Ошибка загрузки архивных ДИ', variant: 'destructive' })
+      if (tmplRes.ok) setTemplates((await tmplRes.json()) as TemplateRow[])
+      else toast({ title: 'Ошибка загрузки шаблонов', variant: 'destructive' })
       // Мастер-промпты для выбора при генерации (только активные, категория generation)
       const mpRes = await fetch('/api/master-prompts?active=true')
       if (mpRes.ok) {
@@ -568,6 +570,7 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
 
   // ===== Изменение статуса ДИ =====
   const handleStatusChange = async (diId: string, status: string) => {
+    if (status === 'approved' && !confirm('Утвердить должностную инструкцию? Статус изменится на «Утверждена».')) return
     try {
       const res = await fetch('/api/tracking/update-di-status', {
         method: 'PUT',
