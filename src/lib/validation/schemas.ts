@@ -106,27 +106,27 @@ export const batchDeleteSchema = z.object({
 
 /** Общие поля компании (опциональные в update, обязательные в create). */
 const companyFields = {
-  shortName: z.string().trim().optional(),
-  type: z.string().trim().optional(),
-  director: z.string().trim().optional(),
-  description: z.string().trim().optional(),
+  shortName: z.string().trim().nullish(),
+  type: z.string().trim().nullish(),
+  director: z.string().trim().nullish(),
+  description: z.string().trim().nullish(),
   inn: z
     .string()
     .trim()
     .regex(/^\d{10,12}$/, 'ИНН должен содержать 10–12 цифр')
-    .optional(),
+    .nullish(),
   ogrn: z
     .string()
     .trim()
     .regex(/^\d{13,15}$/, 'ОГРН должен содержать 13–15 цифр')
-    .optional(),
+    .nullish(),
   kpp: z
     .string()
     .trim()
     .regex(/^\d{9}$/, 'КПП должен содержать 9 цифр')
-    .optional(),
-  legalAddress: z.string().trim().optional(),
-  actualAddress: z.string().trim().optional(),
+    .nullish(),
+  legalAddress: z.string().trim().nullish(),
+  actualAddress: z.string().trim().nullish(),
 }
 
 /** POST /api/companies */

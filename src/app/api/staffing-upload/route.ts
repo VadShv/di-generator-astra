@@ -192,7 +192,6 @@ export async function POST(request: NextRequest) {
                   departmentId: dept.id,
                   headcount: Math.max(1, Math.round(row.headcount)),
                   grade: row.grade,
-                  ...(companyId ? { companyId } : {}),
                 },
               })
               posCacheByCode.set(finalPosCode, newPos.id)

@@ -35,9 +35,7 @@ export async function POST(request: NextRequest) {
     const company = await createCompany(body)
     return NextResponse.json(company, { status: 201 })
   } catch (error) {
-    if (error instanceof ApiError) return errorResponse(error)
-    log.error('Error creating company:', { error })
-    return NextResponse.json({ error: 'Ошибка при создании компании' }, { status: 500 })
+    return errorResponse(error)
   }
 }
 
@@ -48,9 +46,7 @@ export async function PUT(request: NextRequest) {
     const company = await updateCompany(body)
     return NextResponse.json(company)
   } catch (error) {
-    if (error instanceof ApiError) return errorResponse(error)
-    log.error('Error updating company:', { error })
-    return NextResponse.json({ error: 'Ошибка при обновлении компании' }, { status: 500 })
+    return errorResponse(error)
   }
 }
 
@@ -61,8 +57,6 @@ export async function DELETE(request: NextRequest) {
     const result = await deleteCompany(body.id)
     return NextResponse.json(result)
   } catch (error) {
-    if (error instanceof ApiError) return errorResponse(error)
-    log.error('Error deleting company:', { error })
-    return NextResponse.json({ error: 'Ошибка при удалении компании' }, { status: 500 })
+    return errorResponse(error)
   }
 }

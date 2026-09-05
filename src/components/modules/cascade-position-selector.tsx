@@ -101,9 +101,9 @@ export function CascadePositionSelector({
         fetch('/api/departments'),
         fetch('/api/positions'),
       ])
-      setCompanies(await cRes.json())
-      setDepartments(await dRes.json())
-      setPositions(await pRes.json())
+      if (cRes.ok) { const d = await cRes.json(); if (Array.isArray(d)) setCompanies(d) }
+      if (dRes.ok) { const d = await dRes.json(); if (Array.isArray(d)) setDepartments(d) }
+      if (pRes.ok) { const d = await pRes.json(); if (Array.isArray(d)) setPositions(d) }
     } catch {
       // silent — родитель покажет свою ошибку при необходимости
     } finally {

@@ -95,7 +95,12 @@ export function parseStaffingExcel(buffer: ArrayBuffer): ParseResult {
       columnMapping: {},
     }
   }
-  const workbook = XLSX.read(buffer, { type: 'array' })
+  let workbook: XLSX.WorkBook
+  try {
+    workbook = XLSX.read(buffer, { type: 'array' })
+  } catch {
+    return { rows: [], errors: [{ rowNumber: 0, message: 'Файл повреждён или не является валидной Excel-таблицей' }], detectedHeaders: [], columnMapping: {} }
+  }
   // Берём первый лист.
   const sheetName = workbook.SheetNames[0]
   if (!sheetName) {
@@ -171,10 +176,12 @@ export function parseStaffingExcel(buffer: ArrayBuffer): ParseResult {
     // Парсим headcount (может быть дробным, например 0.5 ставки).
     let headcount = 1
     if (mapping.headcount !== undefined) {
-      const raw = String(row[mapping.headcount] ?? '').trim().replace(',', '.')
-      const parsed = parseFloat(raw)
+      const cellValue = String(row[mapping.headcount] ?? '').trim().replace(',', '.')
+      const parsed = parseFloat(cellValue)
       if (!isNaN(parsed) && parsed > 0) {
         headcount = parsed
+      } else if (cellValue) {
+        errors.push({ rowNumber, message: `Некорректное количество ставок: «${cellValue}», использовано 1` })
       }
     }
 

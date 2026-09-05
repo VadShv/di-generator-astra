@@ -1564,7 +1564,7 @@ export function StaffScheduleModule() {
                 {uploading ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Парсинг...</> : <><FileSpreadsheet className="h-4 w-4 mr-1.5" /> Распознать</>}
               </Button>
             ) : (
-              <Button onClick={handleFileImport} disabled={importing || !previewRows.length} className="bg-emerald-600 hover:bg-emerald-700">
+              <Button onClick={handleFileImport} disabled={importing || !previewRows.length || (importResult?.success ?? false)} className="bg-emerald-600 hover:bg-emerald-700">
                 {importing ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Импорт...</> : <><Upload className="h-4 w-4 mr-1.5" /> Импортировать {previewRows.length} строк</>}
               </Button>
             )}
