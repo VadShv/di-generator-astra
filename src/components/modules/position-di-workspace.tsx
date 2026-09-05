@@ -158,6 +158,10 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
   const [compareV2, setCompareV2] = useState<string>('')
   const [diffResult, setDiffResult] = useState<string>('')
   const [comparing, setComparing] = useState(false)
+  const [compareMode, setCompareMode] = useState<'versions' | 'gen-vs-archive'>('versions')
+  const [compareGenId, setCompareGenId] = useState<string>('')
+  const [compareArchiveId, setCompareArchiveId] = useState<string>('')
+  const [correctionVersions, setCorrectionVersions] = useState<VersionRow[]>([])
 
   // Предпросмотр
   const [previewArchiveId, setPreviewArchiveId] = useState<string | null>(null)
@@ -499,12 +503,66 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
       invalidateDIData()
       await loadAll()
       onChanged?.()
+      // Предустановить DI для вкладки «Сравнение» и переключиться
+      setVersionsForDI(targetDI.id)
+      await loadVersions(targetDI.id)
       setTab('compare')
     } catch (e) {
       toast({ title: 'Ошибка', description: e instanceof Error ? e.message : '', variant: 'destructive' })
     } finally {
       setUploadingCorrections(false)
       e.target.value = ''
+    }
+  }
+
+  // ===== Загрузка версий для вкладки «Правки» =====
+  useEffect(() => {
+    if (tab === 'corrections' && generatedDIs.length > 0) {
+      const diId = generatedDIs[0].id
+      fetch(`/api/compare?generatedDIId=${diId}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data?.items) setCorrectionVersions(data.items as VersionRow[]) })
+        .catch(() => {})
+    }
+  }, [tab, generatedDIs])
+
+  // ===== Сравнение «Сгенерированная vs Архивная» через ai-text-diff =====
+  const handleCompareGenVsArchive = async () => {
+    if (!compareGenId || !compareArchiveId) {
+      toast({ title: 'Выберите обе ДИ', variant: 'destructive' })
+      return
+    }
+    const genDI = generatedDIs.find(d => d.id === compareGenId)
+    const archDI = archiveDIs.find(a => a.id === compareArchiveId)
+    if (!genDI || !archDI) {
+      toast({ title: 'ДИ не найдены', variant: 'destructive' })
+      return
+    }
+    setComparing(true)
+    setDiffResult('')
+    try {
+      // Сериализуем секции сгенерированной ДИ в JSON-формат для normalizeContent
+      const genContent = JSON.stringify({
+        title: genDI.title,
+        sections: genDI.sections.map(s => ({ title: s.sectionTitle, content: s.sectionContent })),
+      })
+      const res = await fetch('/api/compare/ai-text-diff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text1: genContent,
+          text2: archDI.content || '',
+          title1: `Сгенерированная: ${genDI.title}`,
+          title2: `Архивная: ${archDI.title}`,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Ошибка сравнения')
+      setDiffResult(data.aiSummary || 'Сравнение выполнено, но резюме пустое')
+    } catch (e) {
+      toast({ title: 'Ошибка сравнения', description: e instanceof Error ? e.message : '', variant: 'destructive' })
+    } finally {
+      setComparing(false)
     }
   }
 
@@ -857,73 +915,161 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
             ))}
           </div>
         )}
+
+        {correctionVersions.filter(v => !v.isOriginal).length > 0 && (
+          <div className="rounded-lg border p-3 space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Загруженные правки</p>
+            {correctionVersions.filter(v => !v.isOriginal).map(v => (
+              <div key={v.id} className="flex items-center gap-2 text-sm p-2 rounded hover:bg-muted/50">
+                <FileEdit className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="truncate font-medium">{v.fileName || `Версия v${v.version}`}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(v.createdAt)}</p>
+                </div>
+                <Badge variant="outline" className="text-xs h-5 bg-amber-50 text-amber-700 border-amber-300">v{v.version}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
       </TabsContent>
 
       {/* ===== Сравнение версий ===== */}
       <TabsContent value="compare" className="mt-3 space-y-3">
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">Сравнение версий ДИ через ИИ — выявление различий между версиями</p>
-          <Select value={versionsForDI} onValueChange={setVersionsForDI}>
-            <SelectTrigger className="text-xs"><SelectValue placeholder="Выберите ДИ для сравнения версий" /></SelectTrigger>
-            <SelectContent>
-              {generatedDIs.map(d => (
-                <SelectItem key={d.id} value={d.id} className="text-xs">{d.title}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Переключатель режима сравнения */}
+        <div className="flex gap-1 p-1 rounded-lg bg-muted/50">
+          <button
+            className={`flex-1 text-xs font-medium h-8 rounded-md transition-colors ${compareMode === 'versions' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
+            onClick={() => setCompareMode('versions')}
+          >
+            Версии одной ДИ
+          </button>
+          <button
+            className={`flex-1 text-xs font-medium h-8 rounded-md transition-colors ${compareMode === 'gen-vs-archive' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
+            onClick={() => setCompareMode('gen-vs-archive')}
+          >
+            Сгенерированная vs Архивная
+          </button>
         </div>
 
-        {versionsForDI && (
+        {/* Режим 1: Версии одной ДИ (сгенерированные / правки руководителя) */}
+        {compareMode === 'versions' && (
           <>
-            {versions.length === 0 ? (
-              <div className="text-center py-6 text-muted-foreground text-xs border rounded-lg border-dashed">
-                <AlertCircle className="h-6 w-6 mx-auto mb-2 opacity-40" />
-                Нет версий для сравнения
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">Версия 1</p>
-                  <Select value={compareV1} onValueChange={setCompareV1}>
-                    <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Выберите" /></SelectTrigger>
-                    <SelectContent>
-                      {versions.map(v => (
-                        <SelectItem key={v.id} value={v.id} className="text-xs">
-                          v{v.version}{v.isOriginal ? ' (оригинал)' : ''}{v.fileName ? ` · ${v.fileName}` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">Версия 2</p>
-                  <Select value={compareV2} onValueChange={setCompareV2}>
-                    <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Выберите" /></SelectTrigger>
-                    <SelectContent>
-                      {versions.map(v => (
-                        <SelectItem key={v.id} value={v.id} className="text-xs">
-                          v{v.version}{v.isOriginal ? ' (оригинал)' : ''}{v.fileName ? ` · ${v.fileName}` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">Сравнение версий ДИ через ИИ — оригинал, правки руководителя, промежуточные версии</p>
+              <Select value={versionsForDI} onValueChange={setVersionsForDI}>
+                <SelectTrigger className="text-xs"><SelectValue placeholder="Выберите ДИ для сравнения версий" /></SelectTrigger>
+                <SelectContent>
+                  {generatedDIs.map(d => (
+                    <SelectItem key={d.id} value={d.id} className="text-xs">{d.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            {compareV1 && compareV2 && (
-              <Button size="sm" className="w-full" onClick={handleCompare} disabled={comparing}>
+            {versionsForDI && (
+              <>
+                {versions.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground text-xs border rounded-lg border-dashed">
+                    <AlertCircle className="h-6 w-6 mx-auto mb-2 opacity-40" />
+                    Нет версий для сравнения
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Версия 1</p>
+                      <Select value={compareV1} onValueChange={setCompareV1}>
+                        <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Выберите" /></SelectTrigger>
+                        <SelectContent>
+                          {versions.map(v => (
+                            <SelectItem key={v.id} value={v.id} className="text-xs">
+                              v{v.version}{v.isOriginal ? ' (оригинал ИИ)' : v.fileName ? ` (правки · ${v.fileName})` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Версия 2</p>
+                      <Select value={compareV2} onValueChange={setCompareV2}>
+                        <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Выберите" /></SelectTrigger>
+                        <SelectContent>
+                          {versions.map(v => (
+                            <SelectItem key={v.id} value={v.id} className="text-xs">
+                              v{v.version}{v.isOriginal ? ' (оригинал ИИ)' : v.fileName ? ` (правки · ${v.fileName})` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {compareV1 && compareV2 && (
+                  <Button size="sm" className="w-full" onClick={handleCompare} disabled={comparing}>
+                    {comparing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <GitCompareArrows className="h-3.5 w-3.5 mr-1.5" />}
+                    {comparing ? 'Сравнение…' : 'Сравнить через ИИ'}
+                  </Button>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* Режим 2: Сгенерированная vs Архивная */}
+        {compareMode === 'gen-vs-archive' && (
+          <>
+            <p className="text-xs text-muted-foreground">Сравнение сгенерированной ДИ с архивной (старой) ДИ через ИИ</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Сгенерированная ДИ</p>
+                <Select value={compareGenId} onValueChange={setCompareGenId}>
+                  <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Выберите" /></SelectTrigger>
+                  <SelectContent>
+                    {generatedDIs.map(d => (
+                      <SelectItem key={d.id} value={d.id} className="text-xs">{d.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Архивная ДИ</p>
+                <Select value={compareArchiveId} onValueChange={setCompareArchiveId}>
+                  <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Выберите" /></SelectTrigger>
+                  <SelectContent>
+                    {archiveDIs.map(a => (
+                      <SelectItem key={a.id} value={a.id} className="text-xs">{a.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {compareGenId && compareArchiveId && (
+              <Button size="sm" className="w-full" onClick={handleCompareGenVsArchive} disabled={comparing}>
                 {comparing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <GitCompareArrows className="h-3.5 w-3.5 mr-1.5" />}
                 {comparing ? 'Сравнение…' : 'Сравнить через ИИ'}
               </Button>
             )}
 
-            {diffResult && (
-              <ScrollArea className="h-[240px] rounded-lg border bg-muted/30">
-                <pre className="p-3 text-xs whitespace-pre-wrap">{diffResult}</pre>
-              </ScrollArea>
+            {generatedDIs.length === 0 && (
+              <div className="text-center py-4 text-muted-foreground text-xs border rounded-lg border-dashed">
+                <Sparkles className="h-5 w-5 mx-auto mb-1 opacity-40" />
+                Сначала сгенерируйте ДИ
+              </div>
+            )}
+            {archiveDIs.length === 0 && (
+              <div className="text-center py-4 text-muted-foreground text-xs border rounded-lg border-dashed">
+                <Archive className="h-5 w-5 mx-auto mb-1 opacity-40" />
+                Нет архивных ДИ — загрузите во вкладке «Архив»
+              </div>
             )}
           </>
+        )}
+
+        {diffResult && (
+          <ScrollArea className="h-[240px] rounded-lg border bg-muted/30">
+            <pre className="p-3 text-xs whitespace-pre-wrap">{diffResult}</pre>
+          </ScrollArea>
         )}
       </TabsContent>
 
