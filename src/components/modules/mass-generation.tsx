@@ -596,7 +596,7 @@ export function MassGenerationModule() {
             }
             const job = await statusRes.json()
             if (job.total > 0) {
-              setProgress(Math.round((job.completed / job.total) * 100))
+              setProgress(Math.round(((job.completed + (job.failed || 0)) / job.total) * 100))
             }
             if (job.status === 'completed' || job.status === 'failed') {
               stopPolling()

@@ -199,20 +199,26 @@ export async function POST(request: NextRequest) {
               positionsCreated++
             }
 
-            // 3. Создаём запись штатного расписания.
-            await tx.staffingTable.create({
-              data: {
-                departmentId: dept.id,
-                positionTitle: row.positionTitle,
-                positionCode: row.positionCode,
-                positionId,
-                headcount: row.headcount,
-                category: row.category,
-                source: 'excel',
-                ...(companyId ? { companyId } : {}),
-              },
+            // 3. Создаём запись штатного расписания (с дедупликацией).
+            const existingStaffing = await tx.staffingTable.findFirst({
+              where: { departmentId: dept.id, positionId, source: 'excel' },
+              select: { id: true },
             })
-            staffingCreated++
+            if (!existingStaffing) {
+              await tx.staffingTable.create({
+                data: {
+                  departmentId: dept.id,
+                  positionTitle: row.positionTitle,
+                  positionCode: row.positionCode,
+                  positionId,
+                  headcount: row.headcount,
+                  category: row.category,
+                  source: 'excel',
+                  ...(companyId ? { companyId } : {}),
+                },
+              })
+              staffingCreated++
+            }
           } catch (e) {
             importErrors.push({
               rowNumber: row.rowNumber,
