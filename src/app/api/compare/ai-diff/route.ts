@@ -103,26 +103,36 @@ ${text2}
 
 Проведи детальный анализ различий между этими версиями.`
 
-    const client = await getProviderClient()
-    const result = await client.generate({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    })
-
-    const aiSummary = result.content || 'Не удалось сгенерировать сравнение'
+    // ИИ-сравнение с graceful-fallback: при сбое ИИ возвращаем пословный diff.
+    let aiSummary = 'ИИ-сравнение недоступно — показан пословный diff.'
+    try {
+      const client = await getProviderClient()
+      const result = await client.generate({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        timeoutMs: 180_000,
+      })
+      aiSummary = result.content || 'Не удалось сгенерировать сравнение'
+    } catch (aiError) {
+      log.error('AI-diff: ИИ-сравнение не удалось, fallback на пословный diff:', { error: aiError })
+    }
 
     // Also do a simple line-by-line diff
     const lines1 = text1.split('\n')
     const lines2 = text2.split('\n')
     const diff = computeSimpleDiff(lines1, lines2)
 
-    // Save diff summary to version2
-    await db.dIVersion.update({
-      where: { id: version2Id },
-      data: { diffSummary: aiSummary },
-    })
+    // Save diff summary to version2 (non-fatal on failure)
+    try {
+      await db.dIVersion.update({
+        where: { id: version2Id },
+        data: { diffSummary: aiSummary },
+      })
+    } catch (dbError) {
+      log.error('AI-diff: не удалось сохранить diffSummary:', { error: dbError })
+    }
 
     return NextResponse.json({
       aiSummary,

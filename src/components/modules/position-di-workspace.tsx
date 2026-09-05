@@ -353,11 +353,15 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
       const res = await fetch(`/api/compare?generatedDIId=${diId}`)
       if (res.ok) {
         setVersions((await res.json()).items as VersionRow[])
+      } else {
+        setVersions([])
+        toast({ title: 'Не удалось загрузить версии', description: `Ошибка ${res.status}`, variant: 'destructive' })
       }
     } catch {
       setVersions([])
+      toast({ title: 'Не удалось загрузить версии', description: 'Сетевая ошибка', variant: 'destructive' })
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     if (versionsForDI) loadVersions(versionsForDI)
@@ -382,7 +386,7 @@ export function PositionDIWorkspace({ position, onChanged }: PositionDIWorkspace
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Ошибка сравнения')
-      setDiffResult(data.diff || data.summary || JSON.stringify(data, null, 2))
+      setDiffResult(data.aiSummary || 'Сравнение выполнено, но резюме пустое')
     } catch (e) {
       toast({ title: 'Ошибка сравнения', description: e instanceof Error ? e.message : '', variant: 'destructive' })
     } finally {
