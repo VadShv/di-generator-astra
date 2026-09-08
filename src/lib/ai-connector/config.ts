@@ -9,7 +9,11 @@ import type { AIProviderConfig, AIProviderExtraConfig, AIProviderType } from './
 const DEFAULT_EXTRA_CONFIG: AIProviderExtraConfig = {
   temperature: 0.7,
   maxTokens: 2048,
-  timeoutMs: 60000,
+  // 180с: reasoning-модели (GLM-5.2 и т.п.) отвечают заметно дольше 60с,
+  // особенно на подробные секции ДИ. Старое значение 60000 приводило к
+  // AbortError/таймауту на каждой секции: генерация «крутилась», но не
+  // завершалась. См. диагностику в docs/AGENT_LOG.md.
+  timeoutMs: 180000,
 }
 
 /** Безопасно распарсить JSON-конфиг из поля AIProvider.config. */

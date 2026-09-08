@@ -36,6 +36,21 @@ export interface AIProviderExtraConfig {
   timeoutMs?: number
   /** Количество вариантов ответа (для OpenAI-compatible). */
   n?: number
+  /**
+   * Отключить «мышление» (reasoning) у reasoning-моделей (GLM-4.x/5.x, и т.п.).
+   * Reasoning-модели тратят бюджет max_tokens на скрытые размышления,
+   * из-за чего ответ приходит очень медленно, а поле content может остаться
+   * пустым. Флаг добавляет в запрос thinking:{type:"disabled"} и
+   * chat_template_kwargs:{enable_thinking:false}, что заставляет модель
+   * отдавать ответ сразу в content. По умолчанию true для reasoning-моделей.
+   */
+  disableThinking?: boolean
+  /**
+   * Уровень усилий на reasoning для моделей с поддержкой reasoning_effort
+   * (OpenAI o-серия, некоторые GLM). Значения: 'low' | 'medium' | 'high'.
+   * Игнорируется, если disableThinking=true.
+   */
+  reasoningEffort?: 'low' | 'medium' | 'high'
 }
 
 /** Сообщение в чате. Унифицированный формат (role: system|user|assistant). */

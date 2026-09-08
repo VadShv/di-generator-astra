@@ -39,8 +39,45 @@ function buildEndpoint(baseUrl: string): string {
   return `${normalizeBaseUrl(baseUrl)}/v1/chat/completions`
 }
 
+/**
+ * Эвристика: reasoning-модель семейства GLM/QwQ/DeepSeek/Qwen-thinking,
+ * которая по умолчанию тратит бюджет max_tokens на скрытые размышления
+ * (reasoning_content). У таких моделей размышления отключаются
+ * НЕСТАНДАРТНЫМИ полями тела запроса: thinking:{type:"disabled"} (Z.ai/GLM)
+ * и chat_template_kwargs:{enable_thinking:false} (vLLM/SGLang).
+ * Для них по умолчанию отключаем thinking, иначе content может прийти
+ * пустым, а ответ — очень медленным.
+ * Покрывает: GLM-4.5/4.6/5.x (Z.ai/Cloud.ru), QwQ, DeepSeek-R1/reasoner,
+ * *-thinking.
+ * ВАЖНО: сюда НЕ входит OpenAI o-серия — её строгий API отвергает
+ * неизвестные поля (HTTP 400). Для неё используется reasoning_effort
+ * (см. isReasoningEffortModel).
+ */
+function isThinkingToggleModel(modelName: string): boolean {
+  const m = modelName.toLowerCase()
+  return (
+    /(^|[^a-z0-9])glm-?[456]/.test(m) ||
+    /(^|[^a-z0-9])qwq/.test(m) ||
+    /deepseek-?r1/.test(m) ||
+    m.includes('deepseek-reasoner') ||
+    m.includes('thinking')
+  )
+}
+
+/**
+ * Эвристика: reasoning-модель со СТАНДАРТНЫМ параметром reasoning_effort
+ * (OpenAI o-серия: o1/o3/o4 и их варианты). Такие модели управляют
+ * размышлениями через поле reasoning_effort и НЕ принимают
+ * thinking/chat_template_kwargs. Якорный паттерн, чтобы не ловить имена
+ * вроде "llama-o2-custom".
+ */
+function isReasoningEffortModel(modelName: string): boolean {
+  const m = modelName.toLowerCase()
+  return /(^|[^a-z0-9])o[1-4](-[a-z0-9.]+)?$/.test(m)
+}
+
 interface OpenAIChoice {
-  message?: { role?: string; content?: string }
+  message?: { role?: string; content?: string; reasoning_content?: string }
   finish_reason?: string
 }
 interface OpenAIUsage {
@@ -97,7 +134,7 @@ export class OpenAICompatibleProvider implements AIProviderClient {
   }
 
   protected buildBody(request: GenerateRequest): Record<string, unknown> {
-    return {
+    const body: Record<string, unknown> = {
       model: this.config.modelName,
       messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
       temperature: request.temperature ?? this.config.config.temperature ?? 0.7,
@@ -105,6 +142,32 @@ export class OpenAICompatibleProvider implements AIProviderClient {
       ...(this.config.config.topP ? { top_p: this.config.config.topP } : {}),
       ...(this.config.config.n ? { n: this.config.config.n } : {}),
     }
+
+    // Reasoning-модели GLM/QwQ/DeepSeek (Z.ai/Cloud.ru/vLLM): по умолчанию
+    // отключаем «мышление», иначе бюджет max_tokens уходит в скрытый
+    // reasoning_content, ответ приходит очень медленно, а content может
+    // остаться пустым. Управляется НЕСТАНДАРТНЫМИ полями тела запроса,
+    // которые понимают только эти хостинги.
+    // Явное значение config.disableThinking переопределяет эвристику,
+    // НО применяем thinking-выключатели только для таких моделей, чтобы
+    // не отправлять неизвестные поля в строгие API (OpenAI отвергает их 400).
+    const disableThinking =
+      this.config.config.disableThinking ??
+      isThinkingToggleModel(this.config.modelName)
+
+    if (disableThinking && !isReasoningEffortModel(this.config.modelName)) {
+      // Оба варианта отправляются вместе для максимальной совместимости:
+      // - thinking:{type:"disabled"} — формат Z.ai/GLM (Cloud.ru foundation-models)
+      // - chat_template_kwargs.enable_thinking — формат vLLM/SGLang-хостинга
+      body.thinking = { type: 'disabled' }
+      body.chat_template_kwargs = { enable_thinking: false }
+    } else if (this.config.config.reasoningEffort) {
+      // Модель со стандартным reasoning_effort (OpenAI o-серия и совместимые):
+      // понижаем усилия по конфигу вместо нестандартных thinking-полей.
+      body.reasoning_effort = this.config.config.reasoningEffort
+    }
+
+    return body
   }
 
   /**
@@ -216,7 +279,23 @@ export class OpenAICompatibleProvider implements AIProviderClient {
     const timeoutMs = request.timeoutMs ?? this.config.config.timeoutMs ?? 60000
     const data = await this.doFetch(this.buildBody(request), timeoutMs, request.signal)
 
-    const content = data.choices?.[0]?.message?.content ?? ''
+    const message = data.choices?.[0]?.message
+    const finishReason = data.choices?.[0]?.finish_reason
+    let content = message?.content ?? ''
+    // Fallback для reasoning-моделей: если ответ оборвался по лимиту токенов
+    // (finish_reason='length') и весь бюджет ушёл в reasoning_content —
+    // используем его, чтобы не терять результат. Ограничиваем именно этим
+    // случаем: при обычном завершении пустой content означает реальную
+    // ошибку, а reasoning_content содержит лишь черновые размышления,
+    // которые не должны попадать в документ как финальный ответ.
+    if (!content && finishReason === 'length' && message?.reasoning_content) {
+      log.warn('Ответ оборван по лимиту токенов, используем reasoning_content как fallback', {
+        provider: this.name,
+        model: this.config.modelName,
+        finishReason,
+      })
+      content = message.reasoning_content
+    }
     if (!content) {
       throw new AIProviderError('Пустой ответ от модели (нет content в choices[0])', 'empty_response', undefined, false)
     }
